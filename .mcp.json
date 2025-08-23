@@ -1,0 +1,65 @@
+{
+  "mcpServers": {
+    "n8n-full": {
+      "command": "npx",
+      "args": [
+        "-y", 
+        "n8n-mcp@latest"
+      ],
+      "env": {
+        "N8N_API_URL": "https://n8n-1-pztp.onrender.com/api/v1",
+        "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmNzAwOWExYi1lNjg4LTQ0YmItYWE4OS1mZTQ2NGE2YjMwMjMiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzU1ODYzMjI2fQ.j-6aIvp9yzuKFVYb1TRjEk8BI-2XwADFrdgv-h9rcJ0"
+      }
+    },
+    "n8n-workflows Docs": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://gitmcp.io/Zie619/n8n-workflows"
+      ]
+    },
+    "context7 Docs": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://gitmcp.io/upstash/context7"
+      ]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/gianpierodifelice"
+      ]
+    },
+    "git": {
+      "command": "npx",
+      "args": [
+        "@cyanheads/git-mcp-server"
+      ]
+    },
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-postgres-server",
+        "--host", "localhost",
+        "--port", "5432",
+        "--database", "ophir_db",
+        "--username", "admin",
+        "--password", "ophir_db_password"
+      ]
+    },
+    "supabase-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--project-ref=qqalaelzfdiytrcdmbfw"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxYWxhZWx6ZmRpeXRyY2RtYmZ3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTA5NzQ4NSwiZXhwIjoyMDcwNjczNDg1fQ.gP0oksvvc71hBjfBjrC6GvEMm59-mqJ4eQZk4T7Fhu0"
+      }
+    }
+  }
+}
