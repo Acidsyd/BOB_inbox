@@ -400,20 +400,15 @@ function EmailAccountsContent() {
                     </Button>
                   ) : null}
                   
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => {
-                      addToast({
-                        title: 'Configure',
-                        description: 'Account configuration page coming soon',
-                        type: 'info'
-                      })
-                    }}
-                  >
-                    <Settings className="h-4 w-4 mr-2" />
-                    Configure
-                  </Button>
+                  <Link href={`/settings/email-accounts/${account.id}`}>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Configure
+                    </Button>
+                  </Link>
                   
                   <Button variant="ghost" size="sm">
                     <MoreHorizontal className="h-4 w-4" />
