@@ -1,0 +1,264 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [opened, synchronize, reopened]
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Lint and Type Check
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd backend && npm ci
+          cd ../frontend && npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run type checking
+        run: npm run typecheck
+
+      - name: Security audit
+        run: npm run security:audit
+
+  # Unit Tests
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd backend && npm ci
+          cd ../frontend && npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit -- --coverage
+
+      - name: Upload unit test coverage
+        uses: codecov/codecov-action@v3
+        with:
+          flags: unit-tests
+          name: pr-unit-coverage
+
+  # Integration Tests (simplified for PR)
+  integration-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mailsender_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd backend && npm ci
+
+      - name: Run integration tests (critical paths only)
+        working-directory: ./backend
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mailsender_test
+        run: |
+          npm run db:migrate
+          npm run test:integration -- --testNamePattern="(API|service|critical)"
+
+  # Quick E2E Tests (smoke tests only for PR)
+  smoke-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd backend && npm ci
+          cd ../frontend && npm ci
+
+      - name: Install Playwright
+        working-directory: ./frontend
+        run: npx playwright install chromium
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Run smoke tests
+        working-directory: ./frontend
+        env:
+          CI: true
+        run: |
+          npx playwright test --project=chromium --grep="smoke|critical|login|dashboard"
+
+  # LEADS System Tests (focused on PR changes)
+  leads-tests:
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.changed_files, 'leads') || contains(github.event.pull_request.title, 'leads') || contains(github.event.pull_request.title, 'LEADS')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd backend && npm ci
+          cd ../frontend && npm ci
+
+      - name: Run LEADS unit tests
+        run: npm run test:leads:unit
+
+      - name: Install Playwright for LEADS E2E
+        working-directory: ./frontend
+        run: npx playwright install chromium
+
+      - name: Run LEADS E2E tests
+        working-directory: ./frontend
+        run: npx playwright test leads-workflows.spec.ts
+
+  # Build Verification
+  build-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd backend && npm ci
+          cd ../frontend && npm ci
+
+      - name: Build backend
+        working-directory: ./backend
+        run: npm run build
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+
+  # PR Quality Gate
+  quality-gate:
+    runs-on: ubuntu-latest
+    needs: [code-quality, unit-tests, integration-tests, smoke-tests, build-check]
+    if: always()
+    steps:
+      - name: Check all jobs status
+        run: |
+          if [[ "${{ needs.code-quality.result }}" != "success" ]]; then
+            echo "❌ Code quality checks failed"
+            exit 1
+          fi
+          
+          if [[ "${{ needs.unit-tests.result }}" != "success" ]]; then
+            echo "❌ Unit tests failed"
+            exit 1
+          fi
+          
+          if [[ "${{ needs.integration-tests.result }}" != "success" ]]; then
+            echo "❌ Integration tests failed"
+            exit 1
+          fi
+          
+          if [[ "${{ needs.smoke-tests.result }}" != "success" ]]; then
+            echo "❌ Smoke tests failed"
+            exit 1
+          fi
+          
+          if [[ "${{ needs.build-check.result }}" != "success" ]]; then
+            echo "❌ Build verification failed"
+            exit 1
+          fi
+          
+          echo "✅ All PR validation checks passed!"
+
+      - name: Comment on PR
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const status = '${{ needs.quality-gate.result }}' === 'success' ? '✅ Passed' : '❌ Failed';
+            const body = `## PR Validation Results
+            
+            **Status**: ${status}
+            
+            ### Test Results
+            - Code Quality: ${{ needs.code-quality.result === 'success' && '✅' || '❌' }}
+            - Unit Tests: ${{ needs.unit-tests.result === 'success' && '✅' || '❌' }}
+            - Integration Tests: ${{ needs.integration-tests.result === 'success' && '✅' || '❌' }}
+            - Smoke Tests: ${{ needs.smoke-tests.result === 'success' && '✅' || '❌' }}
+            - Build Check: ${{ needs.build-check.result === 'success' && '✅' || '❌' }}
+            
+            ${status === '✅ Passed' ? 
+              '🎉 All validation checks passed! This PR is ready for review.' : 
+              '⚠️ Some validation checks failed. Please review the failed jobs and fix any issues.'}
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });

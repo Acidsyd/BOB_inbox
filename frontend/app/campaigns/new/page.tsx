@@ -20,22 +20,34 @@ import {
   Upload,
   Download,
   AlertCircle,
-  X
+  X,
+  Send,
+  CheckCircle
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { CSVParser, type LeadData, type ParseResult } from '@/lib/csvParser'
 import { useEmailAccountsSelection } from '@/hooks/useEmailAccountsSelection'
+import RichTextEditor from '@/components/ui/rich-text-editor'
+import EmailSequenceBuilder from '@/components/campaigns/EmailSequenceBuilder'
+import CSVFieldMapper from '@/components/campaigns/CSVFieldMapper'
+import EmailPreviewAndTest from '@/components/campaigns/EmailPreviewAndTest'
+import { api } from '@/lib/api'
+
+interface EmailSequence {
+  id: number
+  subject: string
+  content: string
+  delay: number // days after previous email
+}
 
 interface CampaignData {
   name: string
   description: string
-  type: 'outbound' | 'nurture' | 'follow_up'
-  goal: string
   emailSubject: string
   emailContent: string
   followUpEnabled: boolean
-  followUpDelay: number
+  emailSequence: EmailSequence[]
   selectedLeads: string[]
   emailAccounts: string[]
   scheduleType: 'immediate' | 'scheduled'
@@ -51,7 +63,24 @@ interface CampaignData {
     start: number         // ora di inizio (0-23)
     end: number          // ora di fine (0-23)
   }
+  timezone: string        // timezone per la campagna
   csvData: any[]          // dati del CSV caricato
+  csvHeaders: string[]    // intestazioni CSV
+  csvRawData: any[][]     // dati grezzi CSV per mapping
+  // Advanced Settings
+  stopOnReply: boolean
+  stopOnClick: boolean  
+  stopOnOpen: boolean
+  sendPlainText: boolean
+  trackOpens: boolean
+  trackClicks: boolean
+  companyLevelPause: boolean
+  domainLevelPause: boolean
+  aiEmailMatching: boolean
+  aiLeadCategorization: boolean
+  bounceProtection: boolean
+  domainRateLimit: boolean
+  includeUnsubscribe: boolean
 }
 
 const steps = [
@@ -87,8 +116,14 @@ const steps = [
   },
   {
     id: 6,
-    name: 'Review & Launch',
-    description: 'Final review and launch',
+    name: 'Advanced Settings',
+    description: 'Campaign optimization',
+    icon: Settings
+  },
+  {
+    id: 7,
+    name: 'Review & Test',
+    description: 'Final review and test email',
     icon: Play
   }
 ]
@@ -98,16 +133,19 @@ function CampaignBuilderContent() {
   const [currentStep, setCurrentStep] = useState(1)
   const [csvParseResult, setCsvParseResult] = useState<ParseResult | null>(null)
   const [csvUploading, setCsvUploading] = useState(false)
+  const [showFieldMapping, setShowFieldMapping] = useState(false)
+  const [testEmail, setTestEmail] = useState('')
+  const [testEmailSent, setTestEmailSent] = useState(false)
+  const [testEmailError, setTestEmailError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
   const { accounts: emailAccounts, loading: accountsLoading, error: accountsError, refresh: refreshAccounts } = useEmailAccountsSelection()
   const [campaignData, setCampaignData] = useState<CampaignData>({
     name: '',
     description: '',
-    type: 'outbound',
-    goal: '',
     emailSubject: '',
     emailContent: '',
     followUpEnabled: false,
-    followUpDelay: 3,
+    emailSequence: [],
     selectedLeads: [],
     emailAccounts: [],
     scheduleType: 'immediate',
@@ -122,11 +160,125 @@ function CampaignBuilderContent() {
       start: 9,   // 9:00 AM
       end: 17     // 5:00 PM
     },
-    csvData: []
+    timezone: 'UTC',
+    csvData: [],
+    csvHeaders: [],
+    csvRawData: [],
+    // Advanced Settings defaults
+    stopOnReply: true,
+    stopOnClick: false,  
+    stopOnOpen: false,
+    sendPlainText: false,
+    trackOpens: true,
+    trackClicks: true,
+    companyLevelPause: true,
+    domainLevelPause: false,
+    aiEmailMatching: true,
+    aiLeadCategorization: false,
+    bounceProtection: true,
+    domainRateLimit: false,
+    includeUnsubscribe: true
   })
 
   const updateCampaignData = (data: Partial<CampaignData>) => {
     setCampaignData(prev => ({ ...prev, ...data }))
+  }
+
+  // Send test email
+  const sendTestEmail = async () => {
+    if (!testEmail || !campaignData.emailSubject || !campaignData.emailContent) {
+      return
+    }
+
+    setIsLoading(true)
+    setTestEmailError('')
+    setTestEmailSent(false)
+
+    try {
+      // Use sample data from CSV for personalization
+      const sampleData = campaignData.csvData[0] || {}
+      
+      // Create personalized content
+      let personalizedSubject = campaignData.emailSubject
+      let personalizedContent = campaignData.emailContent
+      
+      // Replace placeholders with sample data
+      Object.entries(sampleData).forEach(([key, value]) => {
+        const placeholder = `{${key}}`
+        personalizedSubject = personalizedSubject.replace(new RegExp(placeholder, 'g'), String(value) || '[Sample Data]')
+        personalizedContent = personalizedContent.replace(new RegExp(placeholder, 'g'), String(value) || '[Sample Data]')
+      })
+
+      // Make API call to send test email
+      const response = await api.post('/campaigns/test-email', {
+        to: testEmail,
+        subject: personalizedSubject,
+        content: personalizedContent,
+        sampleData: sampleData
+      })
+
+      setTestEmailSent(true)
+      setTimeout(() => setTestEmailSent(false), 5000) // Reset after 5 seconds
+
+    } catch (error: any) {
+      console.error('Error sending test email:', error)
+      const errorMessage = error.response?.data?.error || error.message || 'Unknown error occurred'
+      setTestEmailError(errorMessage)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Parse CSV for field mapping
+  const parseCSVForMapping = async (file: File): Promise<{headers: string[], rawData: any[][]} | null> => {
+    try {
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => resolve(e.target?.result as string)
+        reader.onerror = () => reject(new Error('Failed to read file'))
+        reader.readAsText(file, 'UTF-8')
+      })
+
+      const lines = content.split('\n').filter(line => line.trim())
+      if (lines.length === 0) return null
+
+      // Parse CSV lines
+      const parseCSVLine = (line: string): string[] => {
+        const result: string[] = []
+        let current = ''
+        let inQuotes = false
+        let i = 0
+
+        while (i < line.length) {
+          const char = line[i]
+          if (char === '"' && !inQuotes) {
+            inQuotes = true
+          } else if (char === '"' && inQuotes) {
+            if (i + 1 < line.length && line[i + 1] === '"') {
+              current += '"'
+              i++
+            } else {
+              inQuotes = false
+            }
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim())
+            current = ''
+          } else {
+            current += char
+          }
+          i++
+        }
+        result.push(current.trim())
+        return result
+      }
+
+      const headers = parseCSVLine(lines[0])
+      const rawData = lines.slice(1).map(line => parseCSVLine(line))
+
+      return { headers, rawData }
+    } catch (error) {
+      return null
+    }
   }
 
   const handleCSVUpload = async (file: File) => {
@@ -134,15 +286,29 @@ function CampaignBuilderContent() {
     setCsvParseResult(null)
     
     try {
-      const result = await CSVParser.parseCSV(file)
-      setCsvParseResult(result)
-      
-      if (result.success) {
-        updateCampaignData({ 
-          csvData: result.data,
-          selectedLeads: [file.name]
-        })
+      // Parse CSV for field mapping first
+      const csvMapping = await parseCSVForMapping(file)
+      if (!csvMapping) {
+        throw new Error('Failed to parse CSV file')
       }
+
+      // Store headers and raw data for mapping
+      updateCampaignData({
+        csvHeaders: csvMapping.headers,
+        csvRawData: csvMapping.rawData,
+        selectedLeads: [file.name]
+      })
+
+      // Show field mapping interface
+      setShowFieldMapping(true)
+      setCsvParseResult({
+        success: true,
+        data: [],
+        errors: [],
+        warnings: [`CSV file loaded with ${csvMapping.headers.length} columns and ${csvMapping.rawData.length} rows`],
+        totalRows: csvMapping.rawData.length,
+        validRows: 0
+      })
     } catch (error) {
       setCsvParseResult({
         success: false,
@@ -155,6 +321,32 @@ function CampaignBuilderContent() {
     } finally {
       setCsvUploading(false)
     }
+  }
+
+  // Handle field mapping completion
+  const handleMappingComplete = (mapping: Record<string, number>, mappedData: any[]) => {
+    updateCampaignData({ csvData: mappedData })
+    setShowFieldMapping(false)
+    setCsvParseResult({
+      success: true,
+      data: mappedData,
+      errors: [],
+      warnings: [],
+      totalRows: mappedData.length,
+      validRows: mappedData.length
+    })
+  }
+
+  // Handle field mapping cancel
+  const handleMappingCancel = () => {
+    setShowFieldMapping(false)
+    setCsvParseResult(null)
+    updateCampaignData({ 
+      csvHeaders: [],
+      csvRawData: [],
+      csvData: [],
+      selectedLeads: []
+    })
   }
 
   const handleDownloadTemplate = () => {
@@ -176,9 +368,14 @@ function CampaignBuilderContent() {
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return campaignData.name.trim() !== '' && campaignData.goal.trim() !== ''
+        return campaignData.name.trim() !== ''
       case 2:
-        return campaignData.emailSubject.trim() !== '' && campaignData.emailContent.trim() !== ''
+        // Check initial email and all sequence emails are complete
+        const initialComplete = campaignData.emailSubject.trim() !== '' && campaignData.emailContent.trim() !== ''
+        const sequenceComplete = campaignData.emailSequence.every(email => 
+          email.subject.trim() !== '' && email.content.trim() !== ''
+        )
+        return initialComplete && sequenceComplete
       case 3:
         return campaignData.csvData.length > 0 || campaignData.selectedLeads.length > 0
       case 4:
@@ -317,7 +514,7 @@ function CampaignBuilderContent() {
                 />
               </div>
               <div>
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description">Description (optional)</Label>
                 <textarea
                   id="description"
                   value={campaignData.description}
@@ -327,86 +524,25 @@ function CampaignBuilderContent() {
                   rows={3}
                 />
               </div>
-              <div>
-                <Label htmlFor="type">Campaign Type</Label>
-                <select
-                  id="type"
-                  value={campaignData.type}
-                  onChange={(e) => updateCampaignData({ type: e.target.value as any })}
-                  className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500"
-                >
-                  <option value="outbound">Cold Outreach</option>
-                  <option value="nurture">Lead Nurturing</option>
-                  <option value="follow_up">Follow-up Campaign</option>
-                </select>
-              </div>
-              <div>
-                <Label htmlFor="goal">Campaign Goal *</Label>
-                <Input
-                  id="goal"
-                  value={campaignData.goal}
-                  onChange={(e) => updateCampaignData({ goal: e.target.value })}
-                  placeholder="e.g., Generate 50 qualified leads"
-                  className="mt-1"
-                />
-              </div>
             </div>
           )}
 
           {currentStep === 2 && (
-            <div className="space-y-6">
-              <div>
-                <Label htmlFor="subject">Email Subject Line *</Label>
-                <Input
-                  id="subject"
-                  value={campaignData.emailSubject}
-                  onChange={(e) => updateCampaignData({ emailSubject: e.target.value })}
-                  placeholder="e.g., Quick question about your marketing stack"
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="content">Email Content *</Label>
-                <textarea
-                  id="content"
-                  value={campaignData.emailContent}
-                  onChange={(e) => updateCampaignData({ emailContent: e.target.value })}
-                  placeholder="Hi {first_name},&#10;&#10;I noticed your company is..."
-                  className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500"
-                  rows={10}
-                />
-                <p className="mt-2 text-sm text-gray-500">
-                  Use {'{first_name}'}, {'{company}'}, and other variables to personalize your emails.
-                </p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <input
-                  type="checkbox"
-                  id="followUp"
-                  checked={campaignData.followUpEnabled}
-                  onChange={(e) => updateCampaignData({ followUpEnabled: e.target.checked })}
-                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                />
-                <Label htmlFor="followUp">Enable automatic follow-up sequence</Label>
-              </div>
-              {campaignData.followUpEnabled && (
-                <div>
-                  <Label htmlFor="delay">Follow-up delay (days)</Label>
-                  <Input
-                    id="delay"
-                    type="number"
-                    value={campaignData.followUpDelay}
-                    onChange={(e) => updateCampaignData({ followUpDelay: parseInt(e.target.value) })}
-                    className="mt-1 w-24"
-                    min="1"
-                    max="30"
-                  />
-                </div>
-              )}
-            </div>
+            <EmailSequenceBuilder 
+              campaignData={campaignData}
+              updateCampaignData={updateCampaignData}
+            />
           )}
 
           {currentStep === 3 && (
+            showFieldMapping ? (
+              <CSVFieldMapper
+                csvHeaders={campaignData.csvHeaders}
+                csvData={campaignData.csvRawData}
+                onMappingComplete={handleMappingComplete}
+                onCancel={handleMappingCancel}
+              />
+            ) : (
             <div className="space-y-6">
               {/* Upload Area */}
               <div className="text-center">
@@ -551,6 +687,7 @@ function CampaignBuilderContent() {
                 </div>
               )}
             </div>
+          )
           )}
 
           {currentStep === 4 && (
@@ -728,6 +865,35 @@ function CampaignBuilderContent() {
 
           {currentStep === 5 && (
             <div className="space-y-6">
+              {/* Timezone Selection */}
+              <div>
+                <Label className="text-base font-semibold">Timezone</Label>
+                <div className="mt-3">
+                  <select
+                    value={campaignData.timezone || 'UTC'}
+                    onChange={(e) => updateCampaignData({ timezone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500"
+                  >
+                    <option value="UTC">UTC (Coordinated Universal Time)</option>
+                    <option value="America/New_York">Eastern Time (ET)</option>
+                    <option value="America/Chicago">Central Time (CT)</option>
+                    <option value="America/Denver">Mountain Time (MT)</option>
+                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                    <option value="Europe/London">London (GMT/BST)</option>
+                    <option value="Europe/Paris">Paris (CET/CEST)</option>
+                    <option value="Europe/Berlin">Berlin (CET/CEST)</option>
+                    <option value="Europe/Rome">Rome (CET/CEST)</option>
+                    <option value="Asia/Tokyo">Tokyo (JST)</option>
+                    <option value="Asia/Shanghai">Shanghai (CST)</option>
+                    <option value="Asia/Mumbai">Mumbai (IST)</option>
+                    <option value="Australia/Sydney">Sydney (AEST/AEDT)</option>
+                  </select>
+                  <p className="mt-2 text-sm text-gray-500">
+                    All campaign timing will be based on this timezone.
+                  </p>
+                </div>
+              </div>
+
               {/* Frequenza invio */}
               <div>
                 <Label className="text-base font-semibold">Frequenza di Invio</Label>
@@ -859,136 +1025,344 @@ function CampaignBuilderContent() {
           )}
 
           {currentStep === 6 && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div>
-                <Label>Launch Options</Label>
-                <div className="mt-2 space-y-3">
-                  <div className="flex items-center space-x-3">
-                    <input
-                      type="radio"
-                      id="immediate"
-                      name="schedule"
-                      checked={campaignData.scheduleType === 'immediate'}
-                      onChange={() => updateCampaignData({ scheduleType: 'immediate' })}
-                      className="text-purple-600 focus:ring-purple-500"
-                    />
-                    <Label htmlFor="immediate">Launch immediately</Label>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <input
-                      type="radio"
-                      id="scheduled"
-                      name="schedule"
-                      checked={campaignData.scheduleType === 'scheduled'}
-                      onChange={() => updateCampaignData({ scheduleType: 'scheduled' })}
-                      className="text-purple-600 focus:ring-purple-500"
-                    />
-                    <Label htmlFor="scheduled">Schedule for later</Label>
-                  </div>
-                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Advanced Campaign Settings</h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  Configure advanced options to optimize your campaign performance and deliverability.
+                </p>
               </div>
+
+              {/* Stop Conditions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <span>Stop Conditions</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Automatically pause sending to leads when they engage with your emails
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="stopOnReply"
+                      checked={campaignData.stopOnReply}
+                      onChange={(e) => updateCampaignData({ stopOnReply: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="stopOnReply" className="flex-1">
+                      <div className="font-medium">Stop when lead replies</div>
+                      <div className="text-sm text-gray-500">Prevent sending follow-ups to engaged prospects</div>
+                    </Label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="stopOnClick"
+                      checked={campaignData.stopOnClick}
+                      onChange={(e) => updateCampaignData({ stopOnClick: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="stopOnClick" className="flex-1">
+                      <div className="font-medium">Stop when lead clicks links</div>
+                      <div className="text-sm text-gray-500">Pause sequence when leads show interest</div>
+                    </Label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="stopOnOpen"
+                      checked={campaignData.stopOnOpen}
+                      onChange={(e) => updateCampaignData({ stopOnOpen: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="stopOnOpen" className="flex-1">
+                      <div className="font-medium">Stop when lead opens email</div>
+                      <div className="text-sm text-gray-500">Less aggressive - stops on first open</div>
+                    </Label>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Email Delivery Optimization */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Email Delivery Optimization</CardTitle>
+                  <CardDescription>
+                    Improve deliverability and inbox placement rates
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="sendPlainText"
+                      checked={campaignData.sendPlainText}
+                      onChange={(e) => updateCampaignData({ sendPlainText: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="sendPlainText" className="flex-1">
+                      <div className="font-medium">Send emails in plain text</div>
+                      <div className="text-sm text-gray-500">Better deliverability but no HTML formatting</div>
+                    </Label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="aiEmailMatching"
+                      checked={campaignData.aiEmailMatching}
+                      onChange={(e) => updateCampaignData({ aiEmailMatching: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="aiEmailMatching" className="flex-1">
+                      <div className="font-medium">AI Email Provider Matching</div>
+                      <div className="text-sm text-gray-500">Gmail to Gmail, Outlook to Outlook for better delivery</div>
+                    </Label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="bounceProtection"
+                      checked={campaignData.bounceProtection}
+                      onChange={(e) => updateCampaignData({ bounceProtection: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="bounceProtection" className="flex-1">
+                      <div className="font-medium">High Bounce Rate Protection</div>
+                      <div className="text-sm text-gray-500">Auto-pause campaign if bounce rate exceeds 5%</div>
+                    </Label>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Tracking & Analytics */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Tracking & Analytics</CardTitle>
+                  <CardDescription>
+                    Configure what to track for campaign analytics
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="trackOpens"
+                      checked={campaignData.trackOpens}
+                      onChange={(e) => updateCampaignData({ trackOpens: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="trackOpens" className="flex-1">
+                      <div className="font-medium">Track email opens</div>
+                      <div className="text-sm text-gray-500">See when leads open your emails</div>
+                    </Label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="trackClicks"
+                      checked={campaignData.trackClicks}
+                      onChange={(e) => updateCampaignData({ trackClicks: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="trackClicks" className="flex-1">
+                      <div className="font-medium">Track link clicks</div>
+                      <div className="text-sm text-gray-500">Monitor which links leads click</div>
+                    </Label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="aiLeadCategorization"
+                      checked={campaignData.aiLeadCategorization}
+                      onChange={(e) => updateCampaignData({ aiLeadCategorization: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="aiLeadCategorization" className="flex-1">
+                      <div className="font-medium">AI Lead Response Categorization</div>
+                      <div className="text-sm text-gray-500">Automatically categorize replies as interested/not interested</div>
+                    </Label>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Company-Level Controls */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Company-Level Controls</CardTitle>
+                  <CardDescription>
+                    Advanced controls for better lead management
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="companyLevelPause"
+                      checked={campaignData.companyLevelPause}
+                      onChange={(e) => updateCampaignData({ companyLevelPause: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="companyLevelPause" className="flex-1">
+                      <div className="font-medium">Company-Level Auto-Pause</div>
+                      <div className="text-sm text-gray-500">Stop messaging everyone at a company when someone replies</div>
+                    </Label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="domainRateLimit"
+                      checked={campaignData.domainRateLimit}
+                      onChange={(e) => updateCampaignData({ domainRateLimit: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="domainRateLimit" className="flex-1">
+                      <div className="font-medium">Domain-Level Rate Limiting</div>
+                      <div className="text-sm text-gray-500">Control sending speed per domain for better delivery</div>
+                    </Label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="includeUnsubscribe"
+                      checked={campaignData.includeUnsubscribe}
+                      onChange={(e) => updateCampaignData({ includeUnsubscribe: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="includeUnsubscribe" className="flex-1">
+                      <div className="font-medium">Include Unsubscribe Link</div>
+                      <div className="text-sm text-gray-500">Add unsubscribe option to comply with regulations</div>
+                    </Label>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {currentStep === 7 && (
+            <div className="space-y-6">
+              {/* Email Preview and Test Component */}
+              <EmailPreviewAndTest 
+                campaignData={campaignData}
+                emailAccounts={emailAccounts}
+                onTestEmailSent={(success, message) => {
+                  setTestEmailSent(success)
+                  setTestEmailError(success ? '' : message)
+                }}
+              />
+
+              {/* Launch Options */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Launch Options</CardTitle>
+                  <CardDescription>Choose when to launch your campaign</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="radio"
+                        id="immediate"
+                        name="schedule"
+                        checked={campaignData.scheduleType === 'immediate'}
+                        onChange={() => updateCampaignData({ scheduleType: 'immediate' })}
+                        className="text-purple-600 focus:ring-purple-500"
+                      />
+                      <Label htmlFor="immediate">Launch immediately</Label>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="radio"
+                        id="scheduled"
+                        name="schedule"
+                        checked={campaignData.scheduleType === 'scheduled'}
+                        onChange={() => updateCampaignData({ scheduleType: 'scheduled' })}
+                        className="text-purple-600 focus:ring-purple-500"
+                      />
+                      <Label htmlFor="scheduled">Schedule for later</Label>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Campaign Summary */}
-              <div className="bg-gray-50 rounded-lg p-6">
-                <h3 className="font-medium text-gray-900 mb-4">Campaign Summary</h3>
-                
-                {/* Basic Info */}
-                <div className="mb-6">
-                  <h4 className="font-medium text-gray-800 mb-2">Basic Information</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Campaign Name:</span>
-                      <span className="font-medium">{campaignData.name || 'Untitled Campaign'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Type:</span>
-                      <span className="font-medium capitalize">{campaignData.type.replace('_', ' ')}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Email Subject:</span>
-                      <span className="font-medium truncate max-w-xs">{campaignData.emailSubject || 'Not set'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Leads Info */}
-                <div className="mb-6">
-                  <h4 className="font-medium text-gray-800 mb-2">Audience</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Total Leads:</span>
-                      <span className="font-medium">{campaignData.csvData.length} contacts</span>
-                    </div>
-                    {campaignData.selectedLeads.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Campaign Summary</CardTitle>
+                  <CardDescription>Review your campaign settings before launching</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Basic Info */}
+                  <div>
+                    <h4 className="font-medium text-gray-800 mb-2">Basic Information</h4>
+                    <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Source File:</span>
-                        <span className="font-medium text-xs truncate max-w-xs">{campaignData.selectedLeads[0]}</span>
+                        <span className="text-gray-600">Campaign Name:</span>
+                        <span className="font-medium">{campaignData.name || 'Untitled Campaign'}</span>
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Email Accounts */}
-                <div className="mb-6">
-                  <h4 className="font-medium text-gray-800 mb-2">Email Accounts</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Selected Accounts:</span>
-                      <span className="font-medium">{campaignData.emailAccounts.length} account(s)</span>
-                    </div>
-                    {campaignData.emailAccounts.length > 0 && (
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Combined Daily Limit:</span>
+                        <span className="text-gray-600">Email Sequence:</span>
                         <span className="font-medium">
-                          {emailAccounts
-                            .filter(acc => campaignData.emailAccounts.includes(acc.id))
-                            .reduce((sum, acc) => sum + acc.daily_limit, 0)} emails/day
+                          {1 + campaignData.emailSequence.length} email(s)
                         </span>
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Timing Configuration */}
-                <div className="mb-6">
-                  <h4 className="font-medium text-gray-800 mb-2">Timing Configuration</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Emails per Day:</span>
-                      <span className="font-medium">{campaignData.emailsPerDay}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Emails per Hour:</span>
-                      <span className="font-medium">{campaignData.emailsPerHour}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Send Interval:</span>
-                      <span className="font-medium">Every {campaignData.sendingInterval} minutes</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Send Hours:</span>
-                      <span className="font-medium">
-                        {String(campaignData.sendingHours.start).padStart(2, '0')}:00 - {String(campaignData.sendingHours.end).padStart(2, '0')}:00
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Active Days:</span>
-                      <span className="font-medium">{campaignData.activeDays.length} days/week</span>
+                  {/* Leads Info */}
+                  <div>
+                    <h4 className="font-medium text-gray-800 mb-2">Audience</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Total Leads:</span>
+                        <span className="font-medium">{campaignData.csvData.length} contacts</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* N8N Integration Preview */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-900 mb-2">🔄 Automation Settings</h4>
-                  <div className="text-sm text-blue-800 space-y-1">
-                    <div>✅ N8N workflow will trigger every {campaignData.sendingInterval} minutes</div>
-                    <div>✅ Emails will be personalized with lead data</div>
-                    <div>✅ Account rotation will be automatic for better deliverability</div>
-                    <div>✅ Real-time status tracking in Supabase</div>
+                  {/* Email Accounts */}
+                  <div>
+                    <h4 className="font-medium text-gray-800 mb-2">Email Accounts</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Selected Accounts:</span>
+                        <span className="font-medium">{campaignData.emailAccounts.length} account(s)</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+
+                  {/* Timing Configuration */}
+                  <div>
+                    <h4 className="font-medium text-gray-800 mb-2">Timing Configuration</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Emails per Day:</span>
+                        <span className="font-medium">{campaignData.emailsPerDay}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Send Hours:</span>
+                        <span className="font-medium">
+                          {String(campaignData.sendingHours.start).padStart(2, '0')}:00 - {String(campaignData.sendingHours.end).padStart(2, '0')}:00
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Active Days:</span>
+                        <span className="font-medium">{campaignData.activeDays.length} days/week</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
         </CardContent>

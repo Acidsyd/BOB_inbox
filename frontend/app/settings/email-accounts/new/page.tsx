@@ -27,8 +27,8 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-type SetupStep = 'provider-selection' | 'oauth2-setup' | 'smtp-setup'
-type Provider = 'oauth2' | 'smtp'
+type SetupStep = 'provider-selection' | 'gmail-oauth2-setup' | 'microsoft-oauth2-setup' | 'smtp-setup'
+type Provider = 'gmail-oauth2' | 'microsoft-oauth2' | 'smtp'
 type SMTPProvider = 'gmail' | 'outlook' | 'yahoo' | 'protonmail' | 'custom'
 
 interface SMTPConfig {
@@ -113,12 +113,14 @@ function AddEmailAccountContent() {
   useEffect(() => {
     const oauth2Success = searchParams.get('oauth2_success')
     const oauth2Error = searchParams.get('oauth2_error')
+    const provider = searchParams.get('provider')
     const email = searchParams.get('email')
 
     if (oauth2Success === 'true') {
+      const providerName = provider === 'microsoft' ? 'Microsoft Graph API' : 'Gmail API'
       addToast({
         title: 'OAuth2 Setup Complete!',
-        description: `Successfully connected ${email} via Gmail API`,
+        description: `Successfully connected ${email} via ${providerName}`,
         type: 'success'
       })
       setTimeout(() => {
@@ -135,8 +137,8 @@ function AddEmailAccountContent() {
     }
   }, [searchParams, addToast, router])
 
-  // OAuth2 Setup Handler
-  const handleOAuth2Setup = async () => {
+  // Gmail OAuth2 Setup Handler
+  const handleGmailOAuth2Setup = async () => {
     setIsLoading(true)
 
     try {
@@ -157,7 +159,7 @@ function AddEmailAccountContent() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to initialize OAuth2 setup')
+        throw new Error(result.error || 'Failed to initialize Gmail OAuth2 setup')
       }
 
       if (result.success && result.authUrl) {
@@ -169,16 +171,76 @@ function AddEmailAccountContent() {
         
         window.location.href = result.authUrl
       } else {
-        throw new Error('Failed to get authorization URL')
+        throw new Error('Failed to get Gmail authorization URL')
       }
 
     } catch (error: any) {
-      console.error('OAuth2 setup error:', error)
+      console.error('Gmail OAuth2 setup error:', error)
       addToast({
-        title: 'Setup Failed',
-        description: error.message || 'Failed to start OAuth2 setup process',
+        title: 'Gmail Setup Failed',
+        description: error.message || 'Failed to start Gmail OAuth2 setup process',
         type: 'error'
       })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Microsoft OAuth2 Setup Handler
+  const handleMicrosoftOAuth2Setup = async () => {
+    setIsLoading(true)
+
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        throw new Error('No authentication token found. Please log in again.')
+      }
+
+      const response = await fetch('/api/oauth2/microsoft/auth/init', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({})
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to initialize Microsoft OAuth2 setup')
+      }
+
+      if (result.success && result.authUrl) {
+        addToast({
+          title: 'Redirecting to Microsoft',
+          description: 'Opening Microsoft authorization page...',
+          type: 'info'
+        })
+        
+        window.location.href = result.authUrl
+      } else {
+        throw new Error('Failed to get Microsoft authorization URL')
+      }
+
+    } catch (error: any) {
+      console.error('Microsoft OAuth2 setup error:', error)
+      
+      // Check if it's a configuration issue
+      if (error.message.includes('Microsoft OAuth2 service is not available') || 
+          error.message.includes('not configured')) {
+        addToast({
+          title: 'Microsoft OAuth2 Not Configured',
+          description: 'Microsoft OAuth2 requires Azure App Registration setup. Please check your configuration.',
+          type: 'error'
+        })
+      } else {
+        addToast({
+          title: 'Microsoft Setup Failed',
+          description: error.message || 'Failed to start Microsoft OAuth2 setup process',
+          type: 'error'
+        })
+      }
     } finally {
       setIsLoading(false)
     }
@@ -304,8 +366,10 @@ function AddEmailAccountContent() {
   // Provider Selection Handler
   const handleProviderSelect = (provider: Provider) => {
     setSelectedProvider(provider)
-    if (provider === 'oauth2') {
-      setCurrentStep('oauth2-setup')
+    if (provider === 'gmail-oauth2') {
+      setCurrentStep('gmail-oauth2-setup')
+    } else if (provider === 'microsoft-oauth2') {
+      setCurrentStep('microsoft-oauth2-setup')
     } else {
       setCurrentStep('smtp-setup')
     }
@@ -343,14 +407,14 @@ function AddEmailAccountContent() {
         </div>
 
         {/* Provider Options */}
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* OAuth2 Option */}
+        <div className="grid lg:grid-cols-3 md:grid-cols-2 gap-6">
+          {/* Gmail OAuth2 Option */}
           <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-blue-500" 
-                onClick={() => handleProviderSelect('oauth2')}>
+                onClick={() => handleProviderSelect('gmail-oauth2')}>
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Shield className="h-6 w-6 mr-3 text-blue-600" />
-                OAuth2 Gmail (Recommended)
+                Gmail OAuth2
               </CardTitle>
               <CardDescription>
                 Secure Gmail API integration with Google OAuth2 authentication
@@ -364,7 +428,7 @@ function AddEmailAccountContent() {
                 </div>
                 <div className="flex items-center space-x-3">
                   <CheckCircle className="h-5 w-5 text-green-600" />
-                  <span className="text-sm">Enhanced security (no password storage)</span>
+                  <span className="text-sm">Enhanced security</span>
                 </div>
                 <div className="flex items-center space-x-3">
                   <CheckCircle className="h-5 w-5 text-green-600" />
@@ -376,7 +440,45 @@ function AddEmailAccountContent() {
                 </div>
               </div>
               <Button className="w-full mt-6" size="lg">
-                Connect with OAuth2
+                Connect Gmail
+                <ChevronRight className="h-4 w-4 ml-2" />
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Microsoft OAuth2 Option */}
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-orange-500" 
+                onClick={() => handleProviderSelect('microsoft-oauth2')}>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Shield className="h-6 w-6 mr-3 text-orange-600" />
+                Microsoft OAuth2
+              </CardTitle>
+              <CardDescription>
+                Secure Outlook integration with Microsoft Graph API
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center space-x-3">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <span className="text-sm">Microsoft Graph API</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <span className="text-sm">Enhanced security</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <span className="text-sm">Office 365 compatibility</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <span className="text-sm">Automatic token refresh</span>
+                </div>
+              </div>
+              <Button className="w-full mt-6" size="lg">
+                Connect Microsoft
                 <ChevronRight className="h-4 w-4 ml-2" />
               </Button>
             </CardContent>
@@ -406,11 +508,11 @@ function AddEmailAccountContent() {
                 </div>
                 <div className="flex items-center space-x-3">
                   <Shield className="h-5 w-5 text-purple-600" />
-                  <span className="text-sm">Encrypted credential storage</span>
+                  <span className="text-sm">Encrypted storage</span>
                 </div>
                 <div className="flex items-center space-x-3">
                   <TestTube className="h-5 w-5 text-purple-600" />
-                  <span className="text-sm">Connection testing included</span>
+                  <span className="text-sm">Connection testing</span>
                 </div>
               </div>
               <Button variant="outline" className="w-full mt-6" size="lg">
@@ -424,8 +526,8 @@ function AddEmailAccountContent() {
     )
   }
 
-  // OAuth2 Setup Step (existing logic)
-  if (currentStep === 'oauth2-setup') {
+  // Gmail OAuth2 Setup Step
+  if (currentStep === 'gmail-oauth2-setup') {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         {/* Header */}
@@ -441,7 +543,7 @@ function AddEmailAccountContent() {
           </div>
         </div>
 
-        {/* OAuth2 Setup Card */}
+        {/* Gmail OAuth2 Setup Card */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center">
@@ -466,7 +568,7 @@ function AddEmailAccountContent() {
             </div>
 
             <Button
-              onClick={handleOAuth2Setup}
+              onClick={handleGmailOAuth2Setup}
               disabled={isLoading}
               className="w-full"
               size="lg"
@@ -480,6 +582,71 @@ function AddEmailAccountContent() {
                 <>
                   <Shield className="h-4 w-4 mr-2" />
                   Connect with Google OAuth2
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Microsoft OAuth2 Setup Step
+  if (currentStep === 'microsoft-oauth2-setup') {
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center mb-8">
+          <Button variant="outline" size="sm" className="mr-4" 
+                  onClick={() => setCurrentStep('provider-selection')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Provider Selection
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Microsoft OAuth2 Setup</h1>
+            <p className="text-gray-600">Secure Outlook account connection</p>
+          </div>
+        </div>
+
+        {/* Microsoft OAuth2 Setup Card */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Shield className="h-5 w-5 mr-2 text-orange-600" />
+              Connect Your Microsoft Account
+            </CardTitle>
+            <CardDescription>
+              Securely connect using Microsoft's OAuth2 authentication for Outlook integration
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="text-center space-y-4">
+              <div className="mx-auto w-16 h-16 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center">
+                <Shield className="h-8 w-8 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Connect Your Microsoft Account</h3>
+                <p className="text-sm text-gray-600">
+                  Click the button below to securely connect your Microsoft/Outlook account. Supports personal and organizational accounts.
+                </p>
+              </div>
+            </div>
+
+            <Button
+              onClick={handleMicrosoftOAuth2Setup}
+              disabled={isLoading}
+              className="w-full bg-orange-600 hover:bg-orange-700"
+              size="lg"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Connecting to Microsoft...
+                </>
+              ) : (
+                <>
+                  <Shield className="h-4 w-4 mr-2" />
+                  Connect with Microsoft OAuth2
                 </>
               )}
             </Button>

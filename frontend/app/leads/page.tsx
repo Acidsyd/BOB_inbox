@@ -5,97 +5,112 @@ import AppLayout from '@/components/layout/AppLayout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Users, Upload, Search, Filter, Plus } from 'lucide-react'
+import ClayStyleSpreadsheet from '@/components/leads/ClayStyleSpreadsheet'
+import { 
+  Users, 
+  Upload, 
+  Search, 
+  Filter, 
+  Plus, 
+  FileSpreadsheet, 
+  Eye, 
+  MoreHorizontal,
+  Download,
+  TrendingUp,
+  UserCheck,
+  Mail,
+  Phone,
+  Building,
+  Calendar,
+  Tag,
+  Zap
+} from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
 
-function LeadsContent() {
-  const [searchTerm, setSearchTerm] = useState('')
+function ManageLeadsContent() {
+  const [viewMode, setViewMode] = useState<'table' | 'spreadsheet'>('spreadsheet')
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
 
+  // Organization ID would typically come from auth context
+  const organizationId = 'demo-org-id'
+
+  const handleSelectionChange = (selection: Set<string>) => {
+    setSelectedRows(selection)
+  }
+
+  const handleLeadUpdate = (lead: any) => {
+    console.log('Lead updated:', lead)
+  }
+
+  const handleBulkUpdate = (leadIds: string[], updates: any) => {
+    console.log('Bulk update:', leadIds, updates)
+  }
+
+  if (viewMode === 'spreadsheet') {
+    return (
+      <div className="h-screen w-full overflow-hidden">
+        <ClayStyleSpreadsheet
+          organizationId={organizationId}
+          onSelectionChange={handleSelectionChange}
+          onLeadUpdate={handleLeadUpdate}
+          onBulkUpdate={handleBulkUpdate}
+          enableRealTime={true}
+          maxRows={100000}
+        />
+      </div>
+    )
+  }
+
+  // Legacy table view (fallback)
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Leads</h1>
-          <p className="text-gray-600">Manage your prospect database and lead lists</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Manage Leads</h1>
+          <p className="text-gray-600">Organize, filter, and manage your prospect database</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/leads/import">
-            <Button variant="outline">
-              <Upload className="h-4 w-4 mr-2" />
-              Import
-            </Button>
-          </Link>
-          <Button className="btn-primary">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Lead
+          <Button
+            variant={viewMode === 'spreadsheet' ? 'default' : 'outline'}
+            onClick={() => setViewMode('spreadsheet')}
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Spreadsheet View
+          </Button>
+          <Button
+            variant={viewMode === 'table' ? 'default' : 'outline'}
+            onClick={() => setViewMode('table')}
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            Table View
           </Button>
         </div>
       </div>
 
-      {/* Search and Filters */}
-      <div className="flex gap-4 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Search leads by name, email, or company..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Button variant="outline">
-          <Filter className="h-4 w-4 mr-2" />
-          Filters
-        </Button>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Users className="h-8 w-8 text-purple-600" />
-              <div className="ml-3">
-                <p className="text-2xl font-bold">1,247</p>
-                <p className="text-sm text-gray-600">Total Leads</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        {/* Add more stat cards as needed */}
-      </div>
-
-      {/* Leads Table Placeholder */}
       <Card>
-        <CardHeader>
-          <CardTitle>Lead Database</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-12">
-            <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Lead management system</h3>
-            <p className="text-gray-500 mb-6">
-              Complete lead database with filtering, segmentation, and management tools will be implemented here
-            </p>
-            <Link href="/leads/import">
-              <Button className="btn-primary">
-                <Upload className="h-4 w-4 mr-2" />
-                Import Your First Leads
-              </Button>
-            </Link>
-          </div>
+        <CardContent className="p-12 text-center">
+          <FileSpreadsheet className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Clay.com-Style Spreadsheet</h3>
+          <p className="text-gray-600 mb-6">
+            Switch to spreadsheet view to access the full Clay.com-style interface with virtual scrolling,
+            inline editing, advanced filtering, and bulk operations.
+          </p>
+          <Button onClick={() => setViewMode('spreadsheet')}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Open Spreadsheet View
+          </Button>
         </CardContent>
       </Card>
     </div>
   )
 }
 
-export default function LeadsPage() {
+export default function ManageLeadsPage() {
   return (
     <ProtectedRoute>
       <AppLayout>
-        <LeadsContent />
+        <ManageLeadsContent />
       </AppLayout>
     </ProtectedRoute>
   )

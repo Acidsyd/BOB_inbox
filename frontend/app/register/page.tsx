@@ -1,40 +1,155 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Elements } from '@stripe/react-stripe-js'
+import { loadStripe } from '@stripe/stripe-js'
 import { useAuth } from '@/lib/auth/context'
-import { ArrowRight, Mail, Lock, User, Building, CheckCircle } from 'lucide-react'
+import { useBilling, usePromotionValidation } from '@/hooks/useBilling'
+import { ArrowRight, Mail, Lock, User, Building, CheckCircle, CreditCard, AlertCircle } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import PlanSelection from '@/components/billing/PlanSelection'
+import PaymentMethodForm from '@/components/billing/PaymentMethodForm'
 
-export default function RegisterPage() {
-  const [formData, setFormData] = useState({
+// Initialize Stripe
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
+
+interface RegisterFormData {
+  firstName: string
+  lastName: string
+  email: string
+  password: string
+  company: string
+}
+
+function RegisterContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { register } = useAuth()
+  const { plans, createSubscription, isLoading: billingLoading } = useBilling()
+  const { validatePromotion, validation, isValidating, clearValidation } = usePromotionValidation()
+  
+  // Form state
+  const [formData, setFormData] = useState<RegisterFormData>({
     firstName: '',
     lastName: '',
     email: '',
     password: '',
     company: ''
   })
+  
+  // Registration flow state
+  const [currentStep, setCurrentStep] = useState<'account' | 'payment' | 'processing' | 'success'>('account')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { register } = useAuth()
+  const [paymentMethodId, setPaymentMethodId] = useState<string | null>(null)
+  
+  // Plan and promotion state
+  const [selectedPlanCode, setSelectedPlanCode] = useState<string>('')
+  const [promotionCode, setPromotionCode] = useState<string>('')
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly')
+  
+  // Get plan from URL parameters and validate promotion
+  useEffect(() => {
+    const planParam = searchParams.get('plan')
+    const promoParam = searchParams.get('promo')
+    
+    if (planParam) {
+      setSelectedPlanCode(planParam)
+      setBillingCycle(planParam.includes('yearly') ? 'yearly' : 'monthly')
+    } else {
+      // Default to basic monthly if no plan specified
+      setSelectedPlanCode('basic_monthly')
+      setBillingCycle('monthly')
+    }
+    
+    if (promoParam) {
+      setPromotionCode(promoParam)
+    }
+  }, [searchParams])
+  
+  // Validate promotion when plan or promo changes
+  useEffect(() => {
+    if (promotionCode && selectedPlanCode && plans.length > 0) {
+      validatePromotion(promotionCode, selectedPlanCode)
+    } else {
+      clearValidation()
+    }
+  }, [promotionCode, selectedPlanCode, plans, validatePromotion, clearValidation])
+  
+  const selectedPlan = plans.find(plan => plan.plan_code === selectedPlanCode)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
+    
+    // Validate form
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password || !formData.company) {
+      setError('Please fill in all required fields')
+      return
+    }
+    
+    if (!selectedPlan) {
+      setError('Please select a plan to continue')
+      return
+    }
+    
+    // Move to payment step
+    setCurrentStep('payment')
+  }
+  
+  const handlePaymentMethodCreated = (pmId: string) => {
+    setPaymentMethodId(pmId)
+    handleCompleteRegistration(pmId)
+  }
+  
+  const handlePaymentError = (errorMessage: string) => {
+    setError(`Payment error: ${errorMessage}`)
+  }
+  
+  const handleCompleteRegistration = async (pmId: string) => {
+    setCurrentStep('processing')
     setError('')
     setLoading(true)
     
     try {
-      await register({
+      // 1. Register the user account
+      const userResult = await register({
         email: formData.email,
         password: formData.password,
         firstName: formData.firstName,
         lastName: formData.lastName,
         organizationName: formData.company
       })
+      
+      // 2. Create the subscription
+      const subscriptionData = {
+        planCode: selectedPlanCode,
+        paymentMethodId: pmId,
+        ...(promotionCode && validation?.valid && { promotionCode })
+      }
+      
+      await createSubscription(subscriptionData)
+      
+      // 3. Success - redirect to dashboard
+      setCurrentStep('success')
+      setTimeout(() => {
+        router.push('/dashboard')
+      }, 2000)
+      
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message || 'Failed to complete registration')
+      setCurrentStep('payment') // Go back to payment step
     } finally {
       setLoading(false)
     }
+  }
+  
+  const handleBackToAccount = () => {
+    setCurrentStep('account')
+    setPaymentMethodId(null)
+    setError('')
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,25 +159,103 @@ export default function RegisterPage() {
     }))
   }
 
+  const renderStepIndicator = () => (
+    <div className="flex items-center justify-center mb-8">
+      <div className="flex items-center space-x-4">
+        {/* Account Step */}
+        <div className={`flex items-center space-x-2 ${
+          currentStep === 'account' ? 'text-purple-600' : 
+          ['payment', 'processing', 'success'].includes(currentStep) ? 'text-green-600' : 'text-gray-400'
+        }`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
+            currentStep === 'account' ? 'border-purple-600 bg-purple-50' :
+            ['payment', 'processing', 'success'].includes(currentStep) ? 'border-green-600 bg-green-50' : 'border-gray-300'
+          }`}>
+            {['payment', 'processing', 'success'].includes(currentStep) ? (
+              <CheckCircle className="w-5 h-5" />
+            ) : (
+              <User className="w-4 h-4" />
+            )}
+          </div>
+          <span className="text-sm font-medium">Account</span>
+        </div>
+        
+        <div className={`h-px w-8 ${
+          ['payment', 'processing', 'success'].includes(currentStep) ? 'bg-green-300' : 'bg-gray-300'
+        }`} />
+        
+        {/* Payment Step */}
+        <div className={`flex items-center space-x-2 ${
+          currentStep === 'payment' ? 'text-purple-600' :
+          ['processing', 'success'].includes(currentStep) ? 'text-green-600' : 'text-gray-400'
+        }`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
+            currentStep === 'payment' ? 'border-purple-600 bg-purple-50' :
+            ['processing', 'success'].includes(currentStep) ? 'border-green-600 bg-green-50' : 'border-gray-300'
+          }`}>
+            {['processing', 'success'].includes(currentStep) ? (
+              <CheckCircle className="w-5 h-5" />
+            ) : (
+              <CreditCard className="w-4 h-4" />
+            )}
+          </div>
+          <span className="text-sm font-medium">Payment</span>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
       <div className="flex min-h-screen">
         {/* Left side - Form */}
         <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-          <div className="max-w-md w-full space-y-8">
+          <div className="max-w-2xl w-full space-y-8">
             <div className="text-center">
               <Link href="/" className="text-3xl font-bold gradient-text">
                 OPhir
               </Link>
               <h2 className="mt-6 text-3xl font-bold text-gray-900">
-                Start your free trial
+                {currentStep === 'account' && 'Start your free trial'}
+                {currentStep === 'payment' && 'Complete your subscription'}
+                {currentStep === 'processing' && 'Setting up your account'}
+                {currentStep === 'success' && 'Welcome to OPhir!'}
               </h2>
               <p className="mt-2 text-sm text-gray-600">
-                No credit card required • Setup in 5 minutes
+                {currentStep === 'account' && 'Create your account and choose your plan'}
+                {currentStep === 'payment' && 'Secure payment to activate your subscription'}
+                {currentStep === 'processing' && 'Please wait while we set up your account...'}
+                {currentStep === 'success' && 'Your account is ready! Redirecting to dashboard...'}
               </p>
             </div>
+            
+            {renderStepIndicator()}
 
-            <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+            {/* Error Display */}
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* Account Registration Form */}
+            {currentStep === 'account' && (
+              <div className="space-y-6">
+                {/* Plan Selection */}
+                {selectedPlan && (
+                  <div className="mb-6">
+                    <PlanSelection
+                      selectedPlanCode={selectedPlanCode}
+                      plan={selectedPlan}
+                      promotion={validation}
+                      billingCycle={billingCycle}
+                      isLoading={billingLoading}
+                    />
+                  </div>
+                )}
+                
+                <form className="space-y-6" onSubmit={handleAccountSubmit}>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -164,86 +357,160 @@ export default function RegisterPage() {
                 </div>
               )}
 
-              <div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn-primary w-full flex justify-center py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                      Creating Account...
-                    </>
-                  ) : (
-                    <>
-                      Start Free Trial
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </>
-                  )}
-                </button>
-              </div>
+                  <div>
+                    <button
+                      type="submit"
+                      disabled={loading || billingLoading}
+                      className="btn-primary w-full flex justify-center py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading || billingLoading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          Continue to Payment
+                          <ArrowRight className="ml-2 h-5 w-5" />
+                        </>
+                      )}
+                    </button>
+                  </div>
 
-              <div className="text-center">
-                <p className="text-sm text-gray-600">
-                  Already have an account?{' '}
-                  <Link href="/login" className="font-medium text-purple-600 hover:text-purple-500">
-                    Sign in
-                  </Link>
-                </p>
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600">
+                      Already have an account?{' '}
+                      <Link href="/login" className="font-medium text-purple-600 hover:text-purple-500">
+                        Sign in
+                      </Link>
+                    </p>
+                  </div>
+                </form>
               </div>
-            </form>
-          </div>
-        </div>
-
-        {/* Right side - Benefits */}
-        <div className="hidden lg:flex lg:flex-1 lg:items-center lg:justify-center bg-gradient-to-br from-purple-600 to-purple-800 text-white">
-          <div className="max-w-md px-8">
-            <h3 className="text-2xl font-bold mb-8">
-              Join 15,000+ sales teams scaling their outreach
-            </h3>
+            )}
             
-            <div className="space-y-6">
-              <div className="flex items-start">
-                <CheckCircle className="w-6 h-6 mr-3 mt-1 text-green-400" />
-                <div>
-                  <div className="font-semibold mb-1">Unlimited Email Accounts</div>
-                  <div className="text-purple-200 text-sm">Connect and rotate unlimited email accounts automatically</div>
+            {/* Payment Method Form */}
+            {currentStep === 'payment' && (
+              <div className="space-y-6">
+                {/* Show selected plan summary */}
+                {selectedPlan && (
+                  <div className="mb-6">
+                    <PlanSelection
+                      selectedPlanCode={selectedPlanCode}
+                      plan={selectedPlan}
+                      promotion={validation}
+                      billingCycle={billingCycle}
+                      isLoading={false}
+                    />
+                  </div>
+                )}
+                
+                <Elements stripe={stripePromise}>
+                  <PaymentMethodForm
+                    onPaymentMethodCreated={handlePaymentMethodCreated}
+                    onError={handlePaymentError}
+                    isLoading={loading}
+                    showBillingAddress={true}
+                  />
+                </Elements>
+                
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={handleBackToAccount}
+                    className="text-sm text-gray-600 hover:text-gray-800 underline"
+                  >
+                    ← Back to account details
+                  </button>
                 </div>
               </div>
-              
-              <div className="flex items-start">
-                <CheckCircle className="w-6 h-6 mr-3 mt-1 text-green-400" />
-                <div>
-                  <div className="font-semibold mb-1">AI-Powered Warmup</div>
-                  <div className="text-purple-200 text-sm">Intelligent warmup system ensures 95%+ inbox placement</div>
-                </div>
+            )}
+            
+            {/* Processing State */}
+            {currentStep === 'processing' && (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                <p className="text-lg font-medium text-gray-900">Setting up your account...</p>
+                <p className="text-sm text-gray-600 mt-2">This may take a few seconds</p>
               </div>
-              
-              <div className="flex items-start">
-                <CheckCircle className="w-6 h-6 mr-3 mt-1 text-green-400" />
-                <div>
-                  <div className="font-semibold mb-1">Advanced Analytics</div>
-                  <div className="text-purple-200 text-sm">Track everything with real-time campaign insights</div>
+            )}
+            
+            {/* Success State */}
+            {currentStep === 'success' && (
+              <div className="text-center py-12">
+                <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                  <CheckCircle className="w-10 h-10 text-green-600" />
                 </div>
+                <p className="text-lg font-medium text-gray-900 mb-2">Account created successfully!</p>
+                <p className="text-sm text-gray-600">Redirecting to your dashboard...</p>
               </div>
-              
-              <div className="flex items-start">
-                <CheckCircle className="w-6 h-6 mr-3 mt-1 text-green-400" />
-                <div>
-                  <div className="font-semibold mb-1">Scale to Millions</div>
-                  <div className="text-purple-200 text-sm">Send 1M+ emails per day with enterprise reliability</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8 p-4 bg-white/10 rounded-lg backdrop-blur-sm">
-              <div className="text-sm text-purple-200 mb-2">"Best investment we've made"</div>
-              <div className="font-semibold">- Sarah Chen, VP Sales at TechCorp</div>
-            </div>
+            )}
           </div>
         </div>
+
+        
+        {/* Right side - Benefits (only show on account step) */}
+        {currentStep === 'account' && (
+          <div className="hidden lg:flex lg:flex-1 lg:items-center lg:justify-center bg-gradient-to-br from-purple-600 to-purple-800 text-white">
+            <div className="max-w-md px-8">
+              <h3 className="text-2xl font-bold mb-8">
+                Join 15,000+ sales teams scaling their outreach
+              </h3>
+              
+              <div className="space-y-6">
+                <div className="flex items-start">
+                  <CheckCircle className="w-6 h-6 mr-3 mt-1 text-green-400" />
+                  <div>
+                    <div className="font-semibold mb-1">Unlimited Email Accounts</div>
+                    <div className="text-purple-200 text-sm">Connect and rotate unlimited email accounts automatically</div>
+                  </div>
+                </div>
+                
+                <div className="flex items-start">
+                  <CheckCircle className="w-6 h-6 mr-3 mt-1 text-green-400" />
+                  <div>
+                    <div className="font-semibold mb-1">AI-Powered Warmup</div>
+                    <div className="text-purple-200 text-sm">Intelligent warmup system ensures 95%+ inbox placement</div>
+                  </div>
+                </div>
+                
+                <div className="flex items-start">
+                  <CheckCircle className="w-6 h-6 mr-3 mt-1 text-green-400" />
+                  <div>
+                    <div className="font-semibold mb-1">Advanced Analytics</div>
+                    <div className="text-purple-200 text-sm">Track everything with real-time campaign insights</div>
+                  </div>
+                </div>
+                
+                <div className="flex items-start">
+                  <CheckCircle className="w-6 h-6 mr-3 mt-1 text-green-400" />
+                  <div>
+                    <div className="font-semibold mb-1">Scale to Millions</div>
+                    <div className="text-purple-200 text-sm">Send 1M+ emails per day with enterprise reliability</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 p-4 bg-white/10 rounded-lg backdrop-blur-sm">
+                <div className="text-sm text-purple-200 mb-2">"Best investment we've made"</div>
+                <div className="font-semibold">- Sarah Chen, VP Sales at TechCorp</div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+      </div>
+    }>
+      <RegisterContent />
+    </Suspense>
   )
 }

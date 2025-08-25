@@ -17,7 +17,7 @@
 
 1. In your Supabase dashboard, go to **SQL Editor**
 2. Click **New Query**
-3. Copy the entire contents of `/database/init.sql` EXCEPT the first line
+3. Copy the entire contents of `/config/database/init.sql` EXCEPT the first line
 4. **Remove this line:** `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";` (Supabase has this enabled by default)
 5. Paste the modified schema and click **Run**
 6. Verify tables are created in **Table Editor**

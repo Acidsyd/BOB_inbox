@@ -6,6 +6,7 @@ This directory contains all project documentation for the Mailsender cold email 
 - [SUPABASE_SETUP_GUIDE.md](./SUPABASE_SETUP_GUIDE.md) - Complete Supabase setup instructions
 - [OAUTH2_SETUP_GUIDE.md](./OAUTH2_SETUP_GUIDE.md) - Google OAuth2 integration setup
 - [DATABASE_SETUP_GUIDE.md](./DATABASE_SETUP_GUIDE.md) - Database schema and configuration
+- [PAYMENTS_SUBSCRIPTION_PLAN.md](./PAYMENTS_SUBSCRIPTION_PLAN.md) - **Comprehensive payment system implementation plan**
 - [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) - Production deployment instructions
 
 ## Architecture & Development

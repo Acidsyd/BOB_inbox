@@ -123,3 +123,77 @@
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
   transform: translateY(-1px) !important;
 }
+
+/* Pricing page specific styles */
+.pricing-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  will-change: transform, box-shadow !important;
+}
+
+.pricing-card:hover {
+  transform: translateY(-8px) scale(1.02) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+}
+
+.pricing-badge {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite !important;
+}
+
+.faq-item {
+  transition: all 0.2s ease !important;
+}
+
+.faq-item:hover {
+  transform: translateX(4px) !important;
+}
+
+.gradient-border {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  padding: 2px !important;
+  border-radius: 16px !important;
+}
+
+.gradient-border-content {
+  background: white !important;
+  border-radius: 14px !important;
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.feature-grid {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%) !important;
+}
+
+/* Smooth animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.6s ease-out !important;
+}
+
+/* Better focus states */
+.focus-ring:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.1) !important;
+  border-color: #9333ea !important;
+}
+
+/* Improved mobile responsiveness */
+@media (max-width: 768px) {
+  .pricing-card {
+    transform: none !important;
+  }
+  
+  .pricing-card:hover {
+    transform: translateY(-4px) !important;
+  }
+}

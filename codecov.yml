@@ -1,0 +1,111 @@
+# Codecov Configuration
+# https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...95"
+  
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 2%
+        base: auto
+      backend:
+        target: 85%
+        threshold: 2%
+        paths:
+          - "backend/src/"
+        flags:
+          - backend-unit
+          - backend-integration
+      frontend:
+        target: 75%
+        threshold: 3%
+        paths:
+          - "frontend/"
+        flags:
+          - frontend
+      leads-system:
+        target: 90%
+        threshold: 1%
+        paths:
+          - "backend/src/services/*Lead*"
+          - "backend/src/routes/*leads*"
+          - "frontend/components/leads/"
+          - "frontend/__tests__/components/leads/"
+        flags:
+          - backend-unit
+          - frontend
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+
+  ignore:
+    - "**/*.test.js"
+    - "**/*.spec.ts"
+    - "**/*.test.tsx"
+    - "**/*.spec.js"
+    - "**/tests/"
+    - "**/__tests__/"
+    - "**/node_modules/"
+    - "**/.next/"
+    - "**/dist/"
+    - "**/build/"
+    - "**/coverage/"
+    - "**/migrations/"
+    - "**/seeds/"
+    - "backend/src/index.js"
+    - "frontend/next.config.js"
+    - "frontend/tailwind.config.js"
+    - "jest.*.js"
+    - "playwright*.config.js"
+
+flags:
+  backend-unit:
+    paths:
+      - backend/
+    carryforward: true
+  backend-integration:
+    paths:
+      - backend/
+    carryforward: true
+  frontend:
+    paths:
+      - frontend/
+    carryforward: true
+  combined:
+    carryforward: true
+
+comment:
+  layout: "reach,diff,flags,tree,footer"
+  behavior: default
+  require_changes: false
+  require_base: no
+  require_head: yes
+  branches:
+    - main
+    - develop
+
+github_checks:
+  annotations: true
+
+slack:
+  notifications:
+    - url: "secret:SLACK_WEBHOOK_URL"
+      threshold: 1%
+      message: "Coverage changed for {{owner}}/{{repo}}"
+      only_pulls: false
+      branches:
+        - main
+        - develop
+
+parsers:
+  gcov:
+    branch_detection:
+      conditional: yes
+      loop: yes
+      method: no
+      macro: no

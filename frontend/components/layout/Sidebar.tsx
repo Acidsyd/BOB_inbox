@@ -13,15 +13,48 @@ import {
   Plus,
   LogOut,
   ChevronDown,
-  Target
+  Target,
+  Upload,
+  FileSpreadsheet,
+  Database,
+  Zap,
+  Layout,
+  History,
+  Filter,
+  BarChart3,
+  FileText,
+  HelpCircle
 } from 'lucide-react'
 import { useState } from 'react'
 
 const navigation = [
   {
-    name: 'Dashboard',
+    name: 'Dashboard', 
     href: '/dashboard',
     icon: LayoutDashboard,
+  },
+  {
+    name: 'Import Leads',
+    href: '/import-leads',
+    icon: Upload,
+    isPrimary: true,
+    children: [
+      { name: 'Upload Files', href: '/import-leads' },
+      { name: 'Field Mapping', href: '/import-leads/mapping' },
+      { name: 'Import History', href: '/import-leads/history' },
+      { name: 'Templates', href: '/import-leads/templates' },
+    ]
+  },
+  {
+    name: 'Manage Leads',
+    href: '/leads',
+    icon: Users,
+    children: [
+      { name: 'All Leads', href: '/leads' },
+      { name: 'List Views', href: '/leads/views' },
+      { name: 'Enrichment', href: '/leads/enrichment' },
+      { name: 'Formula Columns', href: '/leads/formulas' },
+    ]
   },
   {
     name: 'Campaigns',
@@ -33,23 +66,19 @@ const navigation = [
     ]
   },
   {
-    name: 'Leads',
-    href: '/leads',
-    icon: Users,
-    children: [
-      { name: 'All Leads', href: '/leads' },
-      { name: 'Import Leads', href: '/leads/import' },
-    ]
-  },
-  {
-    name: 'Inbox',
-    href: '/inbox',
-    icon: Inbox,
-  },
-  {
     name: 'Analytics',
     href: '/analytics',
-    icon: TrendingUp,
+    icon: BarChart3,
+  },
+  {
+    name: 'Activity Logs',
+    href: '/logs',
+    icon: FileText,
+  },
+  {
+    name: 'Support',
+    href: '/support',
+    icon: HelpCircle,
   },
   {
     name: 'Settings',
@@ -57,9 +86,10 @@ const navigation = [
     icon: Settings,
     children: [
       { name: 'Email Accounts', href: '/settings/email-accounts' },
+      { name: 'API Integrations', href: '/settings/api-integrations' },
+      { name: 'Column Templates', href: '/settings/column-templates' },
       { name: 'Organization', href: '/settings/organization' },
       { name: 'Billing', href: '/settings/billing' },
-      { name: 'Integrations', href: '/settings/integrations' },
     ]
   },
 ]
@@ -67,7 +97,7 @@ const navigation = [
 export default function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Campaigns', 'Settings'])
+  const [expandedItems, setExpandedItems] = useState<string[]>(['Import Leads', 'Manage Leads'])
 
   const toggleExpanded = (itemName: string) => {
     setExpandedItems(prev => 
@@ -83,7 +113,7 @@ export default function Sidebar() {
         {/* Logo */}
         <div className="flex items-center flex-shrink-0 px-4">
           <Link href="/dashboard" className="text-2xl font-bold gradient-text">
-            OPhir
+            Mailsender
           </Link>
         </div>
 
@@ -102,6 +132,7 @@ export default function Sidebar() {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
             const isExpanded = expandedItems.includes(item.name)
             const hasChildren = item.children && item.children.length > 0
+            const isPrimary = (item as any).isPrimary
 
             return (
               <div key={item.name}>
@@ -109,13 +140,22 @@ export default function Sidebar() {
                   {hasChildren ? (
                     <button
                       onClick={() => toggleExpanded(item.name)}
-                      className={`w-full flex items-center justify-between px-2 py-2 text-sm font-medium rounded-md hover:bg-gray-100 ${
-                        isActive ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:text-gray-900'
+                      className={`w-full flex items-center justify-between px-2 py-2 text-sm font-medium rounded-md hover:bg-gray-100 transition-colors ${
+                        isActive 
+                          ? 'bg-purple-50 text-purple-700' 
+                          : isPrimary
+                            ? 'text-purple-600 hover:text-purple-700 hover:bg-purple-50'
+                            : 'text-gray-600 hover:text-gray-900'
                       }`}
                     >
                       <div className="flex items-center">
-                        <Icon className="mr-3 h-5 w-5" />
-                        {item.name}
+                        <Icon className={`mr-3 h-5 w-5 ${isPrimary ? 'text-purple-600' : ''}`} />
+                        <span className={isPrimary ? 'font-semibold' : ''}>{item.name}</span>
+                        {isPrimary && (
+                          <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full">
+                            NEW
+                          </span>
+                        )}
                       </div>
                       <ChevronDown 
                         className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
@@ -124,14 +164,21 @@ export default function Sidebar() {
                   ) : (
                     <Link
                       href={item.href}
-                      className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                      className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors ${
                         isActive
                           ? 'bg-purple-50 text-purple-700'
-                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                          : isPrimary
+                            ? 'text-purple-600 hover:text-purple-700 hover:bg-purple-50'
+                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                       }`}
                     >
-                      <Icon className="mr-3 h-5 w-5" />
-                      {item.name}
+                      <Icon className={`mr-3 h-5 w-5 ${isPrimary ? 'text-purple-600' : ''}`} />
+                      <span className={isPrimary ? 'font-semibold' : ''}>{item.name}</span>
+                      {isPrimary && (
+                        <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full">
+                          NEW
+                        </span>
+                      )}
                     </Link>
                   )}
                 </div>
@@ -159,10 +206,16 @@ export default function Sidebar() {
           })}
         </nav>
 
-        {/* Quick Action Button */}
-        <div className="px-4 pb-4">
-          <Link href="/campaigns/new">
+        {/* Quick Action Buttons */}
+        <div className="px-4 pb-4 space-y-2">
+          <Link href="/import-leads">
             <button className="btn-primary w-full flex items-center justify-center">
+              <Upload className="h-4 w-4 mr-2" />
+              Import Leads
+            </button>
+          </Link>
+          <Link href="/campaigns/new">
+            <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors">
               <Plus className="h-4 w-4 mr-2" />
               New Campaign
             </button>

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import AppLayout from '@/components/layout/AppLayout'
+import { api } from '@/lib/api'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -101,6 +102,19 @@ function AccountConfigurationContent() {
   const router = useRouter()
   const { addToast } = useToast()
   
+  // Helper function to safely parse account settings
+  const getAccountSettings = (account: EmailAccount | null) => {
+    if (!account) return {}
+    if (typeof account.settings === 'string') {
+      try {
+        return JSON.parse(account.settings || '{}')
+      } catch {
+        return {}
+      }
+    }
+    return account.settings || {}
+  }
+  
   const [account, setAccount] = useState<EmailAccount | null>(null)
   const [stats, setStats] = useState<AccountStats | null>(null)
   const [health, setHealth] = useState<AccountHealth | null>(null)
@@ -118,25 +132,28 @@ function AccountConfigurationContent() {
         setLoading(true)
         
         // Load account details, stats, and health in parallel
-        const [accountRes, statsRes, healthRes] = await Promise.all([
-          fetch(`/api/email-accounts/${params.id}`),
-          fetch(`/api/email-accounts/${params.id}/stats?timeframe=7d`),
-          fetch(`/api/email-accounts/${params.id}/health`)
+        const [accountRes, statsRes, healthRes] = await Promise.allSettled([
+          api.get(`/email-accounts/${params.id}`),
+          api.get(`/email-accounts/${params.id}/stats?timeframe=7d`),
+          api.get(`/email-accounts/${params.id}/health`)
         ])
         
-        if (accountRes.ok) {
-          const accountData = await accountRes.json()
-          setAccount(accountData)
+        if (accountRes.status === 'fulfilled') {
+          setAccount(accountRes.value.data)
+        } else {
+          console.error('Failed to load account:', accountRes.reason)
         }
         
-        if (statsRes.ok) {
-          const statsData = await statsRes.json()
-          setStats(statsData)
+        if (statsRes.status === 'fulfilled') {
+          setStats(statsRes.value.data)
+        } else {
+          console.error('Failed to load stats:', statsRes.reason)
         }
         
-        if (healthRes.ok) {
-          const healthData = await healthRes.json()
-          setHealth(healthData)
+        if (healthRes.status === 'fulfilled') {
+          setHealth(healthRes.value.data)
+        } else {
+          console.error('Failed to load health:', healthRes.reason)
         }
         
       } catch (error) {
@@ -161,25 +178,14 @@ function AccountConfigurationContent() {
     try {
       setSaving(true)
       
-      const response = await fetch(`/api/email-accounts/${account.id}/settings`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(newSettings)
-      })
+      const response = await api.put(`/email-accounts/${account.id}/settings`, newSettings)
       
-      if (response.ok) {
-        const updatedAccount = await response.json()
-        setAccount(updatedAccount)
-        addToast({
-          title: 'Settings saved',
-          description: 'Account settings updated successfully',
-          type: 'success'
-        })
-      } else {
-        throw new Error('Failed to save settings')
-      }
+      setAccount(response.data)
+      addToast({
+        title: 'Settings saved',
+        description: 'Account settings updated successfully',
+        type: 'success'
+      })
     } catch (error) {
       addToast({
         title: 'Save failed',
@@ -198,18 +204,14 @@ function AccountConfigurationContent() {
     try {
       setTesting(true)
       
-      const response = await fetch(`/api/email-accounts/${account.id}/test-connection`, {
-        method: 'POST'
-      })
+      const response = await api.post(`/email-accounts/${account.id}/test-connection`)
       
-      if (response.ok) {
-        const testResults = await response.json()
-        addToast({
-          title: testResults.success ? 'Connection successful' : 'Connection issues detected',
-          description: testResults.overall,
-          type: testResults.success ? 'success' : 'error'
-        })
-      }
+      const testResults = response.data
+      addToast({
+        title: testResults.success ? 'Connection successful' : 'Connection issues detected',
+        description: testResults.overall,
+        type: testResults.success ? 'success' : 'error'
+      })
     } catch (error) {
       addToast({
         title: 'Test failed',
@@ -279,7 +281,7 @@ function AccountConfigurationContent() {
                   type="number"
                   min="1"
                   max="500"
-                  defaultValue={JSON.parse(account.settings || '{}').dailyLimit || 50}
+                  defaultValue={getAccountSettings(account).dailyLimit || 50}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                   onChange={(e) => {
                     // Update on blur or implement real-time saving
@@ -311,7 +313,7 @@ function AccountConfigurationContent() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Start Time</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-md">
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-md" defaultValue={9}>
                   {Array.from({ length: 24 }, (_, i) => (
                     <option key={i} value={i}>
                       {i.toString().padStart(2, '0')}:00
@@ -321,9 +323,9 @@ function AccountConfigurationContent() {
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">End Time</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-md">
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-md" defaultValue={17}>
                   {Array.from({ length: 24 }, (_, i) => (
-                    <option key={i} value={i} selected={i === 17}>
+                    <option key={i} value={i}>
                       {i.toString().padStart(2, '0')}:00
                     </option>
                   ))}
@@ -341,7 +343,7 @@ function AccountConfigurationContent() {
               rows={4}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
               placeholder="Enter your email signature..."
-              defaultValue={JSON.parse(account.settings || '{}').signature || ''}
+              defaultValue={getAccountSettings(account).signature || ''}
             />
           </div>
 

@@ -322,16 +322,21 @@ function EmailAccountsContent() {
                         <span className="text-xs text-gray-500 uppercase">
                           {account.provider}
                         </span>
-                        {account.provider === 'gmail' && account.credentials_encrypted === 'oauth2_token_reference' && (
+                        {account.provider === 'gmail' && (
                           <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                             OAuth2
                           </span>
                         )}
-                        {account.provider !== 'gmail' || account.credentials_encrypted === 'smtp_credentials_reference' ? (
+                        {account.provider === 'outlook' && (
+                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                            Microsoft OAuth2
+                          </span>
+                        )}
+                        {account.provider === 'smtp' && (
                           <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
                             SMTP
                           </span>
-                        ) : null}
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center space-x-4 mt-2 text-sm text-gray-600">

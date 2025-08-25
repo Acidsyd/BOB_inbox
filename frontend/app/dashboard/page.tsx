@@ -9,6 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Mail, Users, TrendingUp, Activity, Plus, Target, Inbox } from 'lucide-react'
 import Link from 'next/link'
+import { DashboardErrorBoundary } from '@/components/ui/error-boundary'
+import { DashboardSkeleton } from '@/components/ui/skeletons'
+import { useOffline } from '@/hooks/useOffline'
+import { useGlobalKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 
 interface DashboardStats {
   campaigns: { total: number; active: number }
@@ -20,26 +24,59 @@ interface DashboardStats {
 
 function DashboardContent() {
   const { user } = useAuth()
+  const { isOnline, queuedActions } = useOffline()
+  useGlobalKeyboardShortcuts()
 
-  const { data: stats, isLoading } = useQuery<DashboardStats>({
+  const { data: stats, isLoading, error, refetch } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
     queryFn: () => api.get('/analytics/dashboard').then(res => res.data),
     refetchInterval: 30000, // Refresh every 30 seconds
+    retry: (failureCount, error) => {
+      // Don't retry if offline
+      if (!isOnline) return false
+      return failureCount < 3
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
   })
 
   if (isLoading) {
+    return <DashboardSkeleton />
+  }
+
+  if (error) {
     return (
-      <div className="flex items-center justify-center min-h-full">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading dashboard...</p>
+      <div className="p-6">
+        <div className="text-center py-12">
+          <div className="text-red-600 mb-4">
+            <Activity className="h-12 w-12 mx-auto mb-2" />
+            <p className="text-lg font-semibold">Unable to load dashboard</p>
+            <p className="text-sm text-gray-600">
+              {isOnline ? 'There was a problem loading your dashboard data.' : 'You are currently offline.'}
+            </p>
+          </div>
+          <Button onClick={() => refetch()} variant="outline">
+            Try Again
+          </Button>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 animate-fade-in">
+      {/* Offline indicator */}
+      {!isOnline && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center">
+            <div className="h-2 w-2 bg-yellow-500 rounded-full mr-2" />
+            <p className="text-sm text-yellow-800">
+              You're offline. Some features may be limited.
+              {queuedActions.length > 0 && ` ${queuedActions.length} actions queued for sync.`}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
@@ -245,7 +282,9 @@ export default function DashboardPage() {
   return (
     <ProtectedRoute>
       <AppLayout>
-        <DashboardContent />
+        <DashboardErrorBoundary>
+          <DashboardContent />
+        </DashboardErrorBoundary>
       </AppLayout>
     </ProtectedRoute>
   )

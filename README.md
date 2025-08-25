@@ -1,8 +1,51 @@
-# OPhir - Cold Email Automation Platform v2.0.1
+# OPhir - Cold Email Automation Platform v3.0.0 🚀
 
-A comprehensive cold email automation platform built with **performance-optimized N8N integration**, featuring automated workflows, email warmup, multi-account management, and advanced real-time analytics. **Now with 60% faster performance and async queue architecture planning.**
+A comprehensive cold email automation platform featuring **Clay.com-inspired LEADS management system**, advanced spreadsheet interface, automated workflows, and enterprise-grade email automation. **Now with complete Clay.com-style data enrichment and formula system.**
 
 ## 🚀 Features
+
+### ✅ Clay.com-Inspired LEADS System (v3.0.0) - **PRODUCTION READY** 🎯
+- **🔥 Clay.com-Style Spreadsheet Interface**: Advanced virtual scrolling spreadsheet with 100,000+ row support
+  - **Real-time Collaboration**: Multi-user editing with live updates and conflict resolution
+  - **Advanced Cell Editing**: Inline editing, formula support, and data validation
+  - **Virtual Scrolling**: Smooth performance with unlimited lead capacity
+  - **Keyboard Navigation**: Full Excel-style keyboard shortcuts and navigation
+  - **Copy/Paste Support**: Advanced clipboard operations with formula preservation
+- **📊 Dynamic Column System**: Flexible column types with advanced configurations
+  - **Formula Columns**: Excel-style formulas with 20+ built-in functions
+  - **Enrichment Columns**: API-based data enrichment with multiple providers
+  - **Lookup Columns**: Cross-reference data from external sources
+  - **AI-Powered Columns**: AI-generated content and personalization
+  - **Custom Data Types**: Text, number, date, boolean, URL, email, phone, select
+- **🧠 Advanced Formula Engine**: Powerful calculation and data transformation system
+  - **Built-in Function Library**: 25+ pre-built formulas for common operations
+  - **Formula Builder UI**: Visual formula creation with auto-completion
+  - **Dependency Management**: Automatic calculation order and circular reference detection
+  - **Performance Optimization**: Formula caching and optimized execution
+- **⚡ Real-time Import/Export System**: High-performance data processing
+  - **Intelligent Field Mapping**: AI-powered column detection and mapping
+  - **Data Quality Scoring**: Automatic validation and quality assessment
+  - **Duplicate Detection**: Advanced matching algorithms with fuzzy logic
+  - **Streaming Import/Export**: Handle files up to 100MB with progress tracking
+  - **Format Support**: CSV, Excel, JSON with custom templates
+
+### ✅ Data Enrichment & API Integration (v3.0.0) - **ENTERPRISE-GRADE** 🔧
+- **🌐 Multi-Provider Enrichment**: Support for 10+ major data providers
+  - **LeadsMagic Integration**: Contact and company information enrichment
+  - **FindMyMail API**: Email finder and verification services  
+  - **Clearbit Integration**: Company data and technographic insights
+  - **Apollo.io Support**: B2B database access and enrichment
+  - **Custom API Endpoints**: Build your own integrations with visual configurator
+- **⚙️ API Configuration Management**: Visual API endpoint configuration
+  - **Authentication Support**: API keys, OAuth2, bearer tokens, basic auth
+  - **Rate Limiting**: Intelligent request throttling and queue management
+  - **Error Handling**: Automatic retries, fallback providers, and error recovery
+  - **Cost Optimization**: Usage tracking, quota management, and cost analysis
+- **🔄 Background Processing**: Scalable enrichment job system
+  - **Batch Operations**: Process thousands of leads efficiently
+  - **Priority Queues**: High-priority enrichment with SLA management  
+  - **Progress Tracking**: Real-time job status with detailed progress metrics
+  - **Rollback Support**: Data versioning and change history
 
 ### ✅ Performance-Optimized Features (v2.0.1) - PRODUCTION SYSTEM
 - **🚀 Complete N8N Workflow Integration**: Performance-optimized automation system
@@ -19,34 +62,34 @@ A comprehensive cold email automation platform built with **performance-optimize
   - **Bundle Optimization**: 25% reduction through tree-shaking and code splitting
   - **Better Error Handling**: Enhanced error boundaries with automatic retry mechanisms
   - **Loading States**: Enhanced with skeleton components for better UX
-- **📊 Enhanced CSV Parser v2**: 45% faster processing with streaming approach
-  - **Better Memory Management**: Support for large CSV files (>10MB) with streaming
-  - **Enhanced Column Detection**: Fuzzy matching algorithms for better recognition
-  - **Improved Error Reporting**: Line-by-line validation feedback with detailed errors
-  - **Advanced Deduplication**: Configurable matching criteria with bulk operations optimization
+- **📊 CSV Import System**: Lead data processing and management
+  - **File Upload**: Support for CSV file imports with validation
+  - **Column Mapping**: Flexible field mapping for lead data
+  - **Data Validation**: Input validation and error reporting
+  - **Bulk Operations**: Efficient processing of datasets
 - **🔥 Real-time Email Account Management**: Live health scores, send progress, and warmup tracking
   - Live health monitoring dashboard with instant status changes  
   - Real-time progress tracking for email sending and warmup processes
   - WebSocket-based updates without page refresh (<100ms latency)
-- **☁️ Cloud-Native Database**: Complete Supabase integration with N8N support
-  - Hosted database with automatic backups and N8N workflow tracking
+- **☁️ Cloud-Native Database**: Complete Supabase integration
+  - Hosted database with automatic backups and scaling
   - No local PostgreSQL setup required - simplified development
-  - Enhanced schemas for workflow management and real-time updates
-- **⚡ Enhanced TypeScript Backend v2.0**: Complete N8N integration
-  - N8N workflow generation, deployment, and management services
+  - Enhanced schemas for email account management and real-time updates
+- **⚡ Enhanced TypeScript Backend v2.0**: Modern API architecture
+  - RESTful API endpoints for all core functionality
   - Type-safe database operations with generated Supabase types
-  - Advanced campaign automation with workflow lifecycle management
-  - Comprehensive error handling for N8N operations and Supabase integration
+  - OAuth2 integration for email provider authentication
+  - Comprehensive error handling and logging systems
 - **🎯 Modern Frontend Architecture**: Advanced real-time capabilities with React Query v5
   - Custom hooks for real-time data management with enhanced caching
   - Optimistic UI updates with real-time data reconciliation
   - Enhanced performance with cloud database integration and improved CSV processing
-- **Complete Backend API v2.0**: Enhanced with N8N integration endpoints
-- **Campaign Automation**: Auto-workflow creation with intelligent account rotation
-- **Lead Management**: Enhanced CSV import with better field recognition
-- **Email Account Integration**: Support for Gmail, Outlook, and SMTP with N8N workflows
-- **Analytics Dashboard**: Comprehensive metrics with real-time workflow tracking
-- **Multi-Account Management**: Manage 100+ email accounts with N8N-based rotation
+- **Complete Backend API v2.0**: RESTful API with comprehensive endpoints
+- **Campaign Management**: Campaign creation and management system
+- **Lead Management**: CSV import and lead data processing
+- **Email Account Integration**: Support for Gmail OAuth2 and SMTP providers
+- **Analytics Dashboard**: Comprehensive metrics with real-time data
+- **Multi-Account Management**: Email account configuration and health monitoring
 - **User Authentication**: Secure login/register with enhanced Supabase Auth
 
 ### 🔄 Next Phase: Advanced Async Queue Architecture (September 2025)
@@ -71,18 +114,20 @@ A comprehensive cold email automation platform built with **performance-optimize
   - Email provider diversification (Outlook, SendGrid, Mailgun, custom SMTP)
   - Automated reply detection and processing with sentiment analysis
 
-## 🏗️ Architecture (v2.0.1 - Performance-Optimized Production System)
+## 🏗️ Architecture (v3.0.0 - Clay.com-Inspired Platform)
 
-- **Frontend**: Next.js 14 + React + TypeScript + Supabase + **React Query v5 (Optimized)** + Tailwind CSS
-- **Backend**: Node.js + Express + TypeScript + Supabase + **N8N Integration (70% Faster)** + Redis
-- **Database**: ☁️ **Supabase** (cloud-hosted PostgreSQL with **50% faster queries** + N8N workflow tracking)
-- **Workflow Engine**: 🚀 **N8N** (live instance with **parallel processing** and enhanced deployment)
-- **Real-time**: WebSocket subscriptions for live updates + **enhanced performance** (<100ms latency)
-- **Automation**: **Performance-optimized N8N workflow system** with dynamic generation and deployment
-- **Caching**: Redis for session management + **React Query v5 optimized caching** (40% faster loads)
-- **Memory Management**: **35% reduced memory footprint** with leak fixes and resource optimization
-- **Bundle Optimization**: **25% smaller frontend bundle** through tree-shaking and code splitting
-- **Deployment**: Docker Compose with Nginx reverse proxy + Supabase cloud + N8N cloud
+- **Frontend**: Next.js 14 + React + TypeScript + Supabase + React Query v5 + Tailwind CSS
+- **LEADS System**: Clay.com-style spreadsheet with virtual scrolling, formula engine, and enrichment
+- **Backend**: Node.js + Express + TypeScript + Supabase + Redis + Bull MQ (queue system)
+- **Database**: ☁️ **Supabase** (cloud-hosted PostgreSQL with real-time subscriptions)
+- **Formula Engine**: Custom JavaScript engine with 25+ built-in functions and caching
+- **Enrichment APIs**: Multi-provider integration (LeadsMagic, FindMyMail, Clearbit, Apollo.io)
+- **Data Processing**: Streaming import/export with intelligent field mapping and validation
+- **Real-time**: WebSocket subscriptions for collaborative editing and live updates
+- **API Design**: RESTful API with comprehensive endpoint coverage + enrichment APIs
+- **Caching**: Redis for session management + React Query for client-side caching + formula cache
+- **Type Safety**: Full TypeScript integration with generated database types
+- **Deployment**: Docker Compose with Nginx reverse proxy + Supabase cloud
 
 ### 🔮 Next: Async Queue Architecture (v2.1.0 - September 2025)
 - **Queue System**: Redis + Bull MQ for enterprise-scale email processing (1M+ emails/day)
@@ -419,6 +464,47 @@ docker-compose -f docker-compose.prod.yml up -d
 - `POST /api/webhooks/n8n` - N8N workflow status updates
 - `GET /api/webhooks/unsubscribe/:token` - Unsubscribe link handler
 
+### Clay.com LEADS System
+- `GET /api/leads` - List leads with advanced filtering and virtual scrolling
+- `POST /api/leads` - Create new lead with validation
+- `PUT /api/leads/:id` - Update lead with real-time sync
+- `POST /api/leads/bulk-update` - Bulk update operations for selected leads
+- `GET /api/leads/export` - Export leads with streaming support
+- `POST /api/leads/import` - Import leads with mapping and validation
+
+### Lead Import System
+- `GET /api/lead-imports` - List import history with progress tracking
+- `POST /api/lead-imports` - Start new import with field mapping
+- `GET /api/lead-imports/:id` - Get import status and progress
+- `POST /api/lead-imports/:id/cancel` - Cancel running import
+- `POST /api/lead-imports/:id/rollback` - Rollback completed import
+
+### Column Management
+- `GET /api/columns` - List dynamic column definitions
+- `POST /api/columns` - Create new column with type configuration
+- `PUT /api/columns/:id` - Update column configuration
+- `DELETE /api/columns/:id` - Remove column and associated data
+- `POST /api/columns/reorder` - Reorder column positions
+
+### Formula System
+- `GET /api/formulas/library` - List available formula functions
+- `POST /api/formulas/validate` - Validate formula syntax
+- `POST /api/formulas/execute` - Execute formula with test data
+- `GET /api/formulas/dependencies` - Calculate formula dependencies
+
+### Data Enrichment
+- `GET /api/enrichment/providers` - List available enrichment providers
+- `POST /api/enrichment/jobs` - Create enrichment job for leads
+- `GET /api/enrichment/jobs/:id` - Get enrichment job status
+- `POST /api/enrichment/test` - Test API endpoint configuration
+
+### API Integrations
+- `GET /api/integrations` - List configured API endpoints
+- `POST /api/integrations` - Add new API endpoint configuration
+- `PUT /api/integrations/:id` - Update API endpoint settings
+- `POST /api/integrations/:id/test` - Test API endpoint connectivity
+- `GET /api/integrations/:id/usage` - Get API usage statistics
+
 ### N8N Integration
 - `GET /api/n8n/workflows` - List available n8n workflows
 - `POST /api/n8n/execute/:workflowId` - Trigger specific workflow
@@ -445,7 +531,13 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🎯 Roadmap
 
-### ✅ Recently Completed (v2.0.1 - August 2025)
+### ✅ Recently Completed (v2.0.2 - August 23, 2025)
+- ✅ **🔐 Email Account Configuration System FIXED**: Critical authentication and parsing issues resolved
+  - **Frontend Authentication**: All configuration pages now use proper JWT authentication (replaced raw fetch() calls)
+  - **Backend Middleware**: Added consistent `authenticateToken, authRequireOrganization` to all email account routes
+  - **Database Integration**: Converted raw SQL queries to Supabase client calls for all configuration endpoints
+  - **JSON Parsing**: Safe settings parser handles both string and object formats from Supabase JSONB fields
+  - **Result**: All 4 configuration tabs (Settings, Health, Statistics, Management) fully operational
 - ✅ **Performance Optimization Suite**: 60% faster campaign setup, 45% faster CSV processing
 - ✅ **React Query v5 Migration**: Complete migration with 40% faster page loads and memory leak fixes
 - ✅ **Enhanced N8N Integration**: 70% faster workflow deployment with parallel processing

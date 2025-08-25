@@ -1,8 +1,9 @@
 'use client'
 
 import { useAuth } from '@/lib/auth/context'
-import { Menu, X, Bell, Search } from 'lucide-react'
-import { useState } from 'react'
+import { Menu, X, Bell, Search, ChevronRight, Home } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { usePathname } from 'next/navigation'
 import Sidebar from './Sidebar'
 import Link from 'next/link'
 
@@ -10,9 +11,64 @@ interface AppLayoutProps {
   children: React.ReactNode
 }
 
+interface BreadcrumbItem {
+  label: string
+  href?: string
+}
+
+const getBreadcrumbs = (pathname: string): BreadcrumbItem[] => {
+  const segments = pathname.split('/').filter(Boolean)
+  
+  const breadcrumbs: BreadcrumbItem[] = [
+    { label: 'Dashboard', href: '/dashboard' }
+  ]
+  
+  if (segments.length === 0 || segments[0] === 'dashboard') {
+    return [{ label: 'Dashboard' }]
+  }
+  
+  // Define route mappings
+  const routeMap: Record<string, string> = {
+    'import-leads': 'Import Leads',
+    'leads': 'Manage Leads',
+    'campaigns': 'Campaigns',
+    'analytics': 'Analytics',
+    'settings': 'Settings',
+    'mapping': 'Field Mapping',
+    'history': 'Import History',
+    'templates': 'Templates',
+    'views': 'List Views',
+    'enrichment': 'Enrichment',
+    'formulas': 'Formula Columns',
+    'new': 'Create New',
+    'email-accounts': 'Email Accounts',
+    'api-integrations': 'API Integrations',
+    'column-templates': 'Column Templates',
+    'billing': 'Billing',
+    'organization': 'Organization'
+  }
+  
+  let currentPath = ''
+  segments.forEach((segment, index) => {
+    currentPath += `/${segment}`
+    const label = routeMap[segment] || segment.charAt(0).toUpperCase() + segment.slice(1)
+    
+    if (index === segments.length - 1) {
+      breadcrumbs.push({ label })
+    } else {
+      breadcrumbs.push({ label, href: currentPath })
+    }
+  })
+  
+  return breadcrumbs
+}
+
 export default function AppLayout({ children }: AppLayoutProps) {
   const { user } = useAuth()
+  const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  
+  const breadcrumbs = useMemo(() => getBreadcrumbs(pathname), [pathname])
 
   return (
     <div className="h-screen bg-gray-50 flex overflow-hidden">
@@ -22,7 +78,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <nav className="fixed top-0 left-0 bottom-0 flex flex-col w-5/6 max-w-sm bg-white border-r border-gray-200">
           <div className="flex items-center justify-between flex-shrink-0 px-4 py-4 border-b border-gray-200">
             <Link href="/dashboard" className="text-2xl font-bold gradient-text">
-              OPhir
+              Mailsender
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -53,16 +109,43 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <Menu className="h-6 w-6" />
             </button>
 
-            {/* Search bar */}
+            {/* Breadcrumbs */}
             <div className="hidden sm:flex items-center">
+              <nav className="flex" aria-label="Breadcrumb">
+                <ol className="flex items-center space-x-2">
+                  {breadcrumbs.map((breadcrumb, index) => (
+                    <li key={index} className="flex items-center">
+                      {index > 0 && (
+                        <ChevronRight className="flex-shrink-0 h-4 w-4 text-gray-400 mx-2" />
+                      )}
+                      {breadcrumb.href ? (
+                        <Link
+                          href={breadcrumb.href}
+                          className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+                        >
+                          {breadcrumb.label}
+                        </Link>
+                      ) : (
+                        <span className="text-sm font-medium text-gray-900">
+                          {breadcrumb.label}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </nav>
+            </div>
+            
+            {/* Search bar */}
+            <div className="hidden lg:flex items-center ml-6">
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Search className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
                   type="text"
-                  placeholder="Search campaigns, leads..."
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                  placeholder="Search leads, campaigns..."
+                  className="block w-80 pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm transition-all"
                 />
               </div>
             </div>

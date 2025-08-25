@@ -1,13 +1,31 @@
 import './globals.css'
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { Providers } from './providers'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'OPhir - Cold Email Automation Platform',
+  title: 'Mailsender - Cold Email Automation Platform',
   description: 'Scale your cold email outreach with intelligent automation and superior deliverability',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Mailsender',
+  },
+  other: {
+    'mobile-web-app-capable': 'yes',
+    'apple-mobile-web-app-status-bar-style': 'default',
+    'apple-touch-fullscreen': 'yes',
+  }
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: '#9333ea',
 }
 
 export default function RootLayout({
@@ -19,6 +37,9 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/icon-192.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/icon-192.png" />
         <style dangerouslySetInnerHTML={{
           __html: `
             /* Ensure gradient text works */
@@ -47,6 +68,76 @@ export default function RootLayout({
               transform: translateY(-1px) !important;
               box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1) !important;
             }
+
+            /* Additional animation utilities */
+            @keyframes slide-in-right {
+              from {
+                transform: translateX(100%);
+                opacity: 0;
+              }
+              to {
+                transform: translateX(0);
+                opacity: 1;
+              }
+            }
+            
+            @keyframes slide-out-right {
+              from {
+                transform: translateX(0);
+                opacity: 1;
+              }
+              to {
+                transform: translateX(100%);
+                opacity: 0;
+              }
+            }
+            
+            @keyframes progress-bar {
+              from {
+                width: 100%;
+              }
+              to {
+                width: 0%;
+              }
+            }
+            
+            .animate-slide-in-right {
+              animation: slide-in-right 0.3s ease-out;
+            }
+            
+            .animate-slide-out-right {
+              animation: slide-out-right 0.15s ease-in;
+            }
+            
+            .animate-progress-bar {
+              animation: progress-bar 5s linear;
+              animation-fill-mode: forwards;
+            }
+          `
+        }} />
+        <script dangerouslySetInnerHTML={{
+          __html: `
+            // Register service worker
+            if ('serviceWorker' in navigator) {
+              window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js')
+                  .then(function(registration) {
+                    console.log('Service Worker registered successfully:', registration.scope);
+                  })
+                  .catch(function(error) {
+                    console.log('Service Worker registration failed:', error);
+                  });
+              });
+            }
+            
+            // Handle offline/online events
+            window.addEventListener('online', function() {
+              document.body.classList.remove('offline');
+            });
+            
+            window.addEventListener('offline', function() {
+              document.body.classList.add('offline');
+            });
           `
         }} />
       </head>
