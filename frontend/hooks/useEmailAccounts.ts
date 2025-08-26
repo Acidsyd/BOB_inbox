@@ -90,29 +90,38 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
   const [isLoading, setIsLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { user } = useAuth()
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth()
 
   const fetchAccounts = useCallback(async () => {
-    if (!user?.organizationId) {
+    // Wait for auth to finish loading before making API calls
+    if (authLoading) {
+      console.log('📊 useEmailAccounts: Waiting for auth to finish loading...')
+      return
+    }
+
+    if (!isAuthenticated || !user?.organizationId) {
+      console.log('📊 useEmailAccounts: Not authenticated or missing organizationId', { isAuthenticated, orgId: user?.organizationId })
       setIsLoading(false)
       return
     }
 
     try {
       setError(null)
+      console.log('📊 useEmailAccounts: Fetching accounts for org:', user.organizationId)
       const response = await api.get('/email-accounts')
       const { accounts } = response.data
 
       const mappedAccounts = (accounts || []).map(mapApiResponseToUI)
       setAccounts(mappedAccounts)
+      console.log('📊 useEmailAccounts: Successfully fetched', mappedAccounts.length, 'accounts')
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || err.message || 'Failed to load email accounts'
       setError(errorMessage)
-      console.error('Error fetching email accounts:', err)
+      console.error('❌ useEmailAccounts: Error fetching email accounts:', err)
     } finally {
       setIsLoading(false)
     }
-  }, [user?.organizationId])
+  }, [user?.organizationId, isAuthenticated, authLoading])
 
   const refetch = useCallback(async () => {
     setIsLoading(true)
@@ -123,7 +132,10 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
     accountId: string, 
     status: 'active' | 'paused'
   ) => {
-    if (!user?.organizationId) return
+    if (!isAuthenticated || !user?.organizationId) {
+      console.log('📊 useEmailAccounts: Cannot update status - not authenticated')
+      return
+    }
 
     setIsUpdating(true)
     try {
@@ -142,11 +154,11 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || err.message || 'Failed to update account status'
       setError(errorMessage)
-      console.error('Error updating account status:', err)
+      console.error('❌ useEmailAccounts: Error updating account status:', err)
     } finally {
       setIsUpdating(false)
     }
-  }, [user?.organizationId])
+  }, [user?.organizationId, isAuthenticated])
 
   // Note: Real-time updates removed - using API polling instead
 

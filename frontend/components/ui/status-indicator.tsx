@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Wifi, WifiOff, Sync, Clock, CheckCircle, AlertCircle, XCircle, Loader2 } from 'lucide-react'
+import { Wifi, WifiOff, RefreshCw as Sync, Clock, CheckCircle, AlertCircle, XCircle, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useOfflineQueue } from '@/hooks/useOffline'
 

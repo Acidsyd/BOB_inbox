@@ -461,8 +461,8 @@ function RegisterContent() {
                 <div className="flex items-start">
                   <CheckCircle className="w-6 h-6 mr-3 mt-1 text-green-400" />
                   <div>
-                    <div className="font-semibold mb-1">Unlimited Email Accounts</div>
-                    <div className="text-purple-200 text-sm">Connect and rotate unlimited email accounts automatically</div>
+                    <div className="font-semibold mb-1">Professional Email Account Management</div>
+                    <div className="text-purple-200 text-sm">Connect and manage multiple email accounts with automatic rotation</div>
                   </div>
                 </div>
                 

@@ -22,17 +22,23 @@ import {
   AlertCircle,
   X,
   Send,
-  CheckCircle
+  CheckCircle,
+  BarChart
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { CSVParser, type LeadData, type ParseResult } from '@/lib/csvParser'
+import { useWorkflowNavigation } from '@/lib/navigation/context'
 import { useEmailAccountsSelection } from '@/hooks/useEmailAccountsSelection'
 import RichTextEditor from '@/components/ui/rich-text-editor'
 import EmailSequenceBuilder from '@/components/campaigns/EmailSequenceBuilder'
 import CSVFieldMapper from '@/components/campaigns/CSVFieldMapper'
 import EmailPreviewAndTest from '@/components/campaigns/EmailPreviewAndTest'
+import TrackingConfigurationPanel from '@/components/campaigns/TrackingConfigurationPanel'
+import LeadListSelector from '@/components/campaigns/LeadListSelector'
 import { api } from '@/lib/api'
+import { useTrackingConfiguration } from '@/hooks/useTrackingConfiguration'
+import type { TrackingConfiguration } from '@/hooks/useTrackingConfiguration'
 
 interface EmailSequence {
   id: number
@@ -49,6 +55,9 @@ interface CampaignData {
   followUpEnabled: boolean
   emailSequence: EmailSequence[]
   selectedLeads: string[]
+  selectedLeadListId?: string
+  selectedLeadListName?: string
+  selectedLeadListCount?: number
   emailAccounts: string[]
   scheduleType: 'immediate' | 'scheduled'
   scheduledDate?: Date
@@ -81,6 +90,8 @@ interface CampaignData {
   bounceProtection: boolean
   domainRateLimit: boolean
   includeUnsubscribe: boolean
+  // Tracking Configuration
+  trackingConfiguration: TrackingConfiguration | null
 }
 
 const steps = [
@@ -98,8 +109,8 @@ const steps = [
   },
   {
     id: 3,
-    name: 'Select Leads',
-    description: 'Choose your audience',
+    name: 'Lead List Selection',
+    description: 'Choose your lead list',
     icon: Users
   },
   {
@@ -116,12 +127,18 @@ const steps = [
   },
   {
     id: 6,
+    name: 'Tracking Settings',
+    description: 'Configure email tracking',
+    icon: BarChart
+  },
+  {
+    id: 7,
     name: 'Advanced Settings',
     description: 'Campaign optimization',
     icon: Settings
   },
   {
-    id: 7,
+    id: 8,
     name: 'Review & Test',
     description: 'Final review and test email',
     icon: Play
@@ -130,6 +147,7 @@ const steps = [
 
 function CampaignBuilderContent() {
   const router = useRouter()
+  const workflowNavigation = useWorkflowNavigation()
   const [currentStep, setCurrentStep] = useState(1)
   const [csvParseResult, setCsvParseResult] = useState<ParseResult | null>(null)
   const [csvUploading, setCsvUploading] = useState(false)
@@ -139,6 +157,12 @@ function CampaignBuilderContent() {
   const [testEmailError, setTestEmailError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const { accounts: emailAccounts, loading: accountsLoading, error: accountsError, refresh: refreshAccounts } = useEmailAccountsSelection()
+  const { 
+    configuration: trackingConfig, 
+    accountTrackingHealths, 
+    refreshAccountHealth,
+    testTrackingSetup 
+  } = useTrackingConfiguration()
   const [campaignData, setCampaignData] = useState<CampaignData>({
     name: '',
     description: '',
@@ -177,7 +201,9 @@ function CampaignBuilderContent() {
     aiLeadCategorization: false,
     bounceProtection: true,
     domainRateLimit: false,
-    includeUnsubscribe: true
+    includeUnsubscribe: true,
+    // Tracking Configuration
+    trackingConfiguration: null as TrackingConfiguration | null
   })
 
   const updateCampaignData = (data: Partial<CampaignData>) => {
@@ -377,12 +403,14 @@ function CampaignBuilderContent() {
         )
         return initialComplete && sequenceComplete
       case 3:
-        return campaignData.csvData.length > 0 || campaignData.selectedLeads.length > 0
+        return !!campaignData.selectedLeadListId
       case 4:
         return campaignData.emailAccounts.length > 0
       case 5:
         return campaignData.emailsPerDay > 0 && campaignData.sendingInterval > 0
       case 6:
+        return true // Tracking settings are optional
+      case 7:
         return true
       default:
         return false
@@ -393,6 +421,19 @@ function CampaignBuilderContent() {
     try {
       console.log('Creating campaign:', campaignData)
       
+      // Prepare campaign data for API - replace CSV data with lead list ID
+      const apiCampaignData = {
+        ...campaignData,
+        leadListId: campaignData.selectedLeadListId,
+        // Remove unnecessary fields for API
+        csvData: undefined,
+        csvHeaders: undefined,
+        csvRawData: undefined,
+        selectedLeadListId: undefined,
+        selectedLeadListName: undefined,
+        selectedLeadListCount: undefined
+      }
+      
       // Create campaign via API
       const response = await fetch('/api/campaigns', {
         method: 'POST',
@@ -400,7 +441,7 @@ function CampaignBuilderContent() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}` // Assuming token-based auth
         },
-        body: JSON.stringify(campaignData)
+        body: JSON.stringify(apiCampaignData)
       })
 
       if (!response.ok) {
@@ -426,6 +467,9 @@ function CampaignBuilderContent() {
         }
       }
 
+      // Preserve workflow by preventing auth redirects during campaign creation  
+      workflowNavigation.preserveWorkflow('/campaigns')
+      
       // Redirect to campaigns page
       router.push('/campaigns')
       
@@ -535,159 +579,23 @@ function CampaignBuilderContent() {
           )}
 
           {currentStep === 3 && (
-            showFieldMapping ? (
-              <CSVFieldMapper
-                csvHeaders={campaignData.csvHeaders}
-                csvData={campaignData.csvRawData}
-                onMappingComplete={handleMappingComplete}
-                onCancel={handleMappingCancel}
-              />
-            ) : (
-            <div className="space-y-6">
-              {/* Upload Area */}
-              <div className="text-center">
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
-                  <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Upload Your Leads</h3>
-                  <p className="text-gray-500 mb-6">
-                    Upload a CSV file with your leads data. Maximum file size: 5MB
-                  </p>
-                  
-                  <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                    <div className="relative">
-                      <input
-                        type="file"
-                        accept=".csv"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            handleCSVUpload(file);
-                          }
-                        }}
-                        className="hidden"
-                        disabled={csvUploading}
-                        id="csv-file-input"
-                      />
-                      <Button 
-                        variant="outline" 
-                        disabled={csvUploading}
-                        className="flex items-center cursor-pointer"
-                        onClick={() => {
-                          const input = document.getElementById('csv-file-input') as HTMLInputElement;
-                          input?.click();
-                        }}
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        {csvUploading ? 'Processing...' : 'Choose CSV File'}
-                      </Button>
-                    </div>
-                    
-                    <Button 
-                      variant="ghost" 
-                      onClick={handleDownloadTemplate}
-                      className="flex items-center text-sm"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download Template
-                    </Button>
-                  </div>
-                  
-                  <div className="mt-4 text-sm text-gray-500">
-                    <div className="font-medium mb-1">Required column: email</div>
-                    <div>Optional columns: firstName, lastName, company, or any custom fields</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Processing Indicator */}
-              {csvUploading && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-center">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-3"></div>
-                    <span className="text-blue-800 font-medium">Processing CSV file...</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Parse Results */}
-              {csvParseResult && !csvUploading && (
-                <div>
-                  {csvParseResult.success ? (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <div className="flex items-center mb-3">
-                        <Check className="h-5 w-5 text-green-600 mr-2" />
-                        <span className="text-green-800 font-medium">
-                          {csvParseResult.validRows} leads imported successfully
-                        </span>
-                      </div>
-                      
-                      <div className="text-sm text-green-700 space-y-1">
-                        <div>File: {campaignData.selectedLeads[0]}</div>
-                        <div>Total rows processed: {csvParseResult.totalRows}</div>
-                        <div>Valid leads: {csvParseResult.validRows}</div>
-                      </div>
-
-                      {csvParseResult.warnings.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-green-200">
-                          <div className="flex items-center mb-2">
-                            <AlertCircle className="h-4 w-4 text-orange-500 mr-2" />
-                            <span className="text-sm font-medium text-orange-800">Warnings:</span>
-                          </div>
-                          <div className="text-sm text-orange-700 space-y-1">
-                            {csvParseResult.warnings.slice(0, 5).map((warning, index) => (
-                              <div key={index}>• {warning}</div>
-                            ))}
-                            {csvParseResult.warnings.length > 5 && (
-                              <div className="text-orange-600">
-                                ... and {csvParseResult.warnings.length - 5} more warnings
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Preview first few leads */}
-                      <div className="mt-4 pt-4 border-t border-green-200">
-                        <div className="text-sm font-medium text-green-800 mb-2">Preview (first 3 leads):</div>
-                        <div className="text-xs text-green-700 space-y-1">
-                          {csvParseResult.data.slice(0, 3).map((lead, index) => (
-                            <div key={index} className="flex items-center space-x-4">
-                              <span className="font-medium">{lead.email}</span>
-                              {lead.firstName && <span>{lead.firstName}</span>}
-                              {lead.lastName && <span>{lead.lastName}</span>}
-                              {lead.company && <span>({lead.company})</span>}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center">
-                          <X className="h-5 w-5 text-red-600 mr-2" />
-                          <span className="text-red-800 font-medium">Failed to process CSV</span>
-                        </div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => setCsvParseResult(null)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      
-                      <div className="text-sm text-red-700 space-y-1">
-                        {csvParseResult.errors.map((error, index) => (
-                          <div key={index}>• {error}</div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )
+            <LeadListSelector
+              selectedListId={campaignData.selectedLeadListId}
+              onListSelect={(listId, list) => {
+                updateCampaignData({
+                  selectedLeadListId: listId,
+                  selectedLeadListName: list.name,
+                  selectedLeadListCount: list.activeLeads
+                })
+              }}
+              onClearSelection={() => {
+                updateCampaignData({
+                  selectedLeadListId: undefined,
+                  selectedLeadListName: undefined,
+                  selectedLeadListCount: undefined
+                })
+              }}
+            />
           )}
 
           {currentStep === 4 && (
@@ -853,11 +761,15 @@ function CampaignBuilderContent() {
                   <p className="text-gray-500 mb-4">
                     You need to configure at least one email account before creating campaigns.
                   </p>
-                  <Link href="/settings/email-accounts">
-                    <Button>
-                      Add Email Account
-                    </Button>
-                  </Link>
+                  <Button
+                    onClick={() => {
+                      // Preserve the campaign creation workflow
+                      workflowNavigation.preserveWorkflow('/campaigns/new')
+                      router.push('/settings/email-accounts')
+                    }}
+                  >
+                    Add Email Account
+                  </Button>
                 </div>
               )}
             </div>
@@ -1025,6 +937,16 @@ function CampaignBuilderContent() {
           )}
 
           {currentStep === 6 && (
+            <TrackingConfigurationPanel
+              campaignData={campaignData}
+              onTrackingChange={(trackingConfig) => {
+                updateCampaignData({ trackingConfiguration: { ...campaignData.trackingConfiguration, ...trackingConfig } })
+              }}
+              showAdvancedOptions={true}
+            />
+          )}
+
+          {currentStep === 7 && (
             <div className="space-y-8">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Advanced Campaign Settings</h3>
@@ -1249,7 +1171,7 @@ function CampaignBuilderContent() {
             </div>
           )}
 
-          {currentStep === 7 && (
+          {currentStep === 8 && (
             <div className="space-y-6">
               {/* Email Preview and Test Component */}
               <EmailPreviewAndTest 
@@ -1324,8 +1246,12 @@ function CampaignBuilderContent() {
                     <h4 className="font-medium text-gray-800 mb-2">Audience</h4>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
+                        <span className="text-gray-600">Lead List:</span>
+                        <span className="font-medium">{campaignData.selectedLeadListName || 'Not selected'}</span>
+                      </div>
+                      <div className="flex justify-between">
                         <span className="text-gray-600">Total Leads:</span>
-                        <span className="font-medium">{campaignData.csvData.length} contacts</span>
+                        <span className="font-medium">{campaignData.selectedLeadListCount || 0} contacts</span>
                       </div>
                     </div>
                   </div>

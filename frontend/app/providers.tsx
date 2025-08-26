@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
 import { AuthProvider } from '../lib/auth/context'
+import { NavigationProvider } from '../lib/navigation/context'
 import { ToastProvider } from '../components/ui/toast'
 import { EnhancedToastProvider } from '../components/ui/enhanced-toast'
 import { ConfirmationProvider } from '../components/ui/confirmation-dialog'
@@ -21,15 +22,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ErrorBoundary section="Application Root">
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <EnhancedToastProvider>
-            <ConfirmationProvider>
-              <ToastProvider>
-                {children}
-              </ToastProvider>
-            </ConfirmationProvider>
-          </EnhancedToastProvider>
-        </AuthProvider>
+        <NavigationProvider>
+          <AuthProvider>
+            <EnhancedToastProvider>
+              <ConfirmationProvider>
+                <ToastProvider>
+                  {children}
+                </ToastProvider>
+              </ConfirmationProvider>
+            </EnhancedToastProvider>
+          </AuthProvider>
+        </NavigationProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   )

@@ -1,6 +1,6 @@
-# OPhir - Cold Email Automation Platform v3.0.0 🚀
+# Mailsender - B2B Email Marketing Automation Platform v3.0.0 🚀
 
-A comprehensive cold email automation platform featuring **Clay.com-inspired LEADS management system**, advanced spreadsheet interface, automated workflows, and enterprise-grade email automation. **Now with complete Clay.com-style data enrichment and formula system.**
+A comprehensive B2B email marketing automation platform featuring **advanced LEADS management system**, intelligent spreadsheet interface, automated workflows, and enterprise-grade email automation. **Now with complete data enrichment and formula system.**
 
 ## 🚀 Features
 

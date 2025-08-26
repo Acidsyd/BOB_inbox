@@ -1,5 +1,5 @@
-const CACHE_NAME = 'mailsender-v1'
-const API_CACHE_NAME = 'mailsender-api-v1'
+const CACHE_NAME = 'mailsender-v2'
+const API_CACHE_NAME = 'mailsender-api-v2'
 
 // Static assets to cache
 const STATIC_ASSETS = [

@@ -2,8 +2,8 @@ import Link from 'next/link'
 import { ArrowRight, Mail, Zap, Shield, Users, BarChart3, Globe, Sparkles, TrendingUp, CheckCircle, Clock, Target } from 'lucide-react'
 
 export const metadata = {
-  title: 'Features - OPhir Cold Email Platform',
-  description: 'Discover all the powerful features of OPhir - unlimited email accounts, AI warmup, advanced analytics, personalization, and more for cold email success.',
+  title: 'Features - OPhir B2B Email Marketing Platform',
+  description: 'Discover all the powerful features of OPhir - professional email account management, AI-powered deliverability optimization, advanced analytics, personalization, and more for B2B email marketing success.',
 }
 
 export default function FeaturesPage() {
@@ -36,7 +36,7 @@ export default function FeaturesPage() {
             <span className="gradient-text"> Dominate Outreach</span>
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            From email warmup to AI personalization, OPhir provides all the tools you need to scale your cold email campaigns while maintaining exceptional deliverability.
+            From deliverability optimization to AI personalization, OPhir provides all the tools you need to scale your B2B email marketing campaigns while maintaining exceptional deliverability.
           </p>
         </div>
       </section>

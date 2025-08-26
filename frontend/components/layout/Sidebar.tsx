@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 import { 
   LayoutDashboard, 
-  Mail, 
   Users, 
   TrendingUp, 
   Settings, 
@@ -14,14 +13,6 @@ import {
   LogOut,
   ChevronDown,
   Target,
-  Upload,
-  FileSpreadsheet,
-  Database,
-  Zap,
-  Layout,
-  History,
-  Filter,
-  BarChart3,
   FileText,
   HelpCircle
 } from 'lucide-react'
@@ -34,29 +25,6 @@ const navigation = [
     icon: LayoutDashboard,
   },
   {
-    name: 'Import Leads',
-    href: '/import-leads',
-    icon: Upload,
-    isPrimary: true,
-    children: [
-      { name: 'Upload Files', href: '/import-leads' },
-      { name: 'Field Mapping', href: '/import-leads/mapping' },
-      { name: 'Import History', href: '/import-leads/history' },
-      { name: 'Templates', href: '/import-leads/templates' },
-    ]
-  },
-  {
-    name: 'Manage Leads',
-    href: '/leads',
-    icon: Users,
-    children: [
-      { name: 'All Leads', href: '/leads' },
-      { name: 'List Views', href: '/leads/views' },
-      { name: 'Enrichment', href: '/leads/enrichment' },
-      { name: 'Formula Columns', href: '/leads/formulas' },
-    ]
-  },
-  {
     name: 'Campaigns',
     href: '/campaigns',
     icon: Target,
@@ -66,9 +34,19 @@ const navigation = [
     ]
   },
   {
+    name: 'Leads',
+    href: '/leads/lists',
+    icon: Users,
+  },
+  {
+    name: 'Inbox',
+    href: '/inbox',
+    icon: Inbox,
+  },
+  {
     name: 'Analytics',
     href: '/analytics',
-    icon: BarChart3,
+    icon: TrendingUp,
   },
   {
     name: 'Activity Logs',
@@ -86,10 +64,9 @@ const navigation = [
     icon: Settings,
     children: [
       { name: 'Email Accounts', href: '/settings/email-accounts' },
-      { name: 'API Integrations', href: '/settings/api-integrations' },
-      { name: 'Column Templates', href: '/settings/column-templates' },
       { name: 'Organization', href: '/settings/organization' },
       { name: 'Billing', href: '/settings/billing' },
+      { name: 'Integrations', href: '/settings/integrations' },
     ]
   },
 ]
@@ -97,7 +74,7 @@ const navigation = [
 export default function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Import Leads', 'Manage Leads'])
+  const [expandedItems, setExpandedItems] = useState<string[]>(['Campaigns', 'Settings'])
 
   const toggleExpanded = (itemName: string) => {
     setExpandedItems(prev => 
@@ -208,14 +185,8 @@ export default function Sidebar() {
 
         {/* Quick Action Buttons */}
         <div className="px-4 pb-4 space-y-2">
-          <Link href="/import-leads">
-            <button className="btn-primary w-full flex items-center justify-center">
-              <Upload className="h-4 w-4 mr-2" />
-              Import Leads
-            </button>
-          </Link>
           <Link href="/campaigns/new">
-            <button className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+            <button className="btn-primary w-full flex items-center justify-center">
               <Plus className="h-4 w-4 mr-2" />
               New Campaign
             </button>

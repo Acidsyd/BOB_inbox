@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '../api'
+import { useNavigation } from '../navigation/context'
 
 interface User {
   id: string
@@ -19,6 +20,7 @@ interface AuthContextType {
   register: (data: RegisterData) => Promise<void>
   logout: () => void
   isLoading: boolean
+  isAuthenticated: boolean
 }
 
 interface RegisterData {
@@ -34,7 +36,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const router = useRouter()
+  const navigation = useNavigation()
 
   useEffect(() => {
     const initAuth = async () => {
@@ -42,11 +46,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (token) {
         try {
           const response = await api.get('/auth/me')
-          setUser(response.data)
+          const userData = response.data
+          setUser(userData)
+          setIsAuthenticated(true)
+          console.log('🔐 Auth initialized with user:', userData.email, 'org:', userData.organizationId)
         } catch (error) {
+          console.warn('🔑 Token invalid, clearing auth state')
           localStorage.removeItem('token')
           localStorage.removeItem('refreshToken')
+          setUser(null)
+          setIsAuthenticated(false)
         }
+      } else {
+        setUser(null)
+        setIsAuthenticated(false)
       }
       setIsLoading(false)
     }
@@ -65,7 +78,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('refreshToken', refreshToken)
       
       setUser(user)
-      router.push('/dashboard')
+      setIsAuthenticated(true)
+      
+      // Use navigation context to determine redirect destination
+      if (navigation.shouldRedirectAfterAuth) {
+        const redirectPath = navigation.getDefaultRedirect()
+        console.log('🔐 Auth: Redirecting after login to:', redirectPath)
+        router.push(redirectPath)
+        navigation.clearNavigationState()
+      } else {
+        console.log('🔐 Auth: Skipping redirect after login (workflow preserved)')
+      }
     } catch (error: any) {
       console.error('❌ Login error:', error)
       console.error('❌ Error response:', error.response?.data)
@@ -82,7 +105,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('refreshToken', refreshToken)
       
       setUser(user)
-      router.push('/dashboard')
+      setIsAuthenticated(true)
+      
+      // Use navigation context to determine redirect destination
+      if (navigation.shouldRedirectAfterAuth) {
+        const redirectPath = navigation.getDefaultRedirect()
+        console.log('🔐 Auth: Redirecting after registration to:', redirectPath)
+        router.push(redirectPath)
+        navigation.clearNavigationState()
+      } else {
+        console.log('🔐 Auth: Skipping redirect after registration (workflow preserved)')
+      }
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Registration failed')
     }
@@ -92,11 +125,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('token')
     localStorage.removeItem('refreshToken')
     setUser(null)
+    setIsAuthenticated(false)
     router.push('/login')
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   )

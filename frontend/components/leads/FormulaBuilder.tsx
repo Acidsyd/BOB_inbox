@@ -25,7 +25,7 @@ import {
   Play,
   AlertCircle,
   CheckCircle,
-  Function,
+  Calculator,
   Database,
   Type,
   Hash,
@@ -93,7 +93,7 @@ const OPERATORS = [
 const CATEGORY_ICONS = {
   text: Type,
   math: Hash,
-  logic: Function,
+  logic: Calculator,
   date: Calendar,
   lookup: Database,
   validation: CheckCircle,
@@ -134,7 +134,7 @@ const FormulaBuilder: React.FC<FormulaBuilderProps> = ({
 
     return Object.entries(groupedFunctions).map(([category, functions]) => ({
       category,
-      icon: CATEGORY_ICONS[category as keyof typeof CATEGORY_ICONS] || Function,
+      icon: CATEGORY_ICONS[category as keyof typeof CATEGORY_ICONS] || Calculator,
       functions: functions.sort((a, b) => a.name.localeCompare(b.name))
     }));
   }, []);
@@ -357,7 +357,7 @@ const FormulaBuilder: React.FC<FormulaBuilderProps> = ({
                 {/* Functions */}
                 <div className="p-4">
                   <h4 className="font-medium mb-3 flex items-center">
-                    <Function className="h-4 w-4 mr-2" />
+                    <Calculator className="h-4 w-4 mr-2" />
                     Functions
                   </h4>
                   <div className="space-y-2">

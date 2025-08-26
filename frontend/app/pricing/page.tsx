@@ -124,7 +124,7 @@ export default function PricingPage() {
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">Email warm-up included</span>
+                    <span className="text-gray-700">Deliverability optimization included</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
@@ -187,11 +187,11 @@ export default function PricingPage() {
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">Unlimited warm-up</span>
+                    <span className="text-gray-700">Advanced deliverability optimization</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">LinkedIn automation</span>
+                    <span className="text-gray-700">Professional prospecting tools</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
@@ -247,7 +247,7 @@ export default function PricingPage() {
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">Multi-client management</span>
+                    <span className="text-gray-700">White-label multi-client management</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
@@ -343,7 +343,7 @@ export default function PricingPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              The Real Cost of Cold Email Tools
+              The Real Cost of B2B Email Marketing Tools
             </h2>
             <p className="text-xl text-gray-600">
               Compare actual prices and hidden fees vs our transparent pricing
@@ -463,12 +463,12 @@ export default function PricingPage() {
           <div className="space-y-8">
             <div className="bg-white rounded-2xl p-8">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Why do you offer 8,000 emails for €15 when Smartlead charges $39 for 6,000?</h3>
-              <p className="text-gray-600">Our Gmail API integration eliminates per-email sending costs (typically $0.70-0.90 per 1,000 emails). While competitors rely on expensive SMTP services, we pass the savings directly to you - more emails, lower price, no catch.</p>
+              <p className="text-gray-600">Our professional email automation platform uses advanced API integration to eliminate per-email sending costs (typically $0.70-0.90 per 1,000 emails). While competitors rely on expensive SMTP services, we pass the savings directly to you - more emails, lower price, no catch.</p>
             </div>
 
             <div className="bg-white rounded-2xl p-8">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Do you charge extra for email warm-up like other platforms?</h3>
-              <p className="text-gray-600">No! Email warm-up is included free in all plans. Lemlist charges an extra $29/month for warm-up, while we include it at no additional cost. Our warm-up ensures your emails land in inboxes, not spam folders.</p>
+              <p className="text-gray-600">No! Professional email deliverability optimization is included free in all plans. Lemlist charges an extra $29/month for deliverability features, while we include it at no additional cost. Our system ensures your emails land in inboxes with optimal delivery rates.</p>
             </div>
 
             <div className="bg-white rounded-2xl p-8">
@@ -504,7 +504,7 @@ export default function PricingPage() {
             </div>
             
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Stop Overpaying for Cold Email
+              Stop Overpaying for B2B Email Marketing
             </h2>
             <p className="text-xl text-gray-600 mb-8">
               Get enterprise-level results at startup prices. Join the smart businesses who've already made the switch.

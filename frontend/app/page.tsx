@@ -32,7 +32,7 @@ export default function LandingPage() {
           <div className="text-center">
             <div className="inline-flex items-center px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm font-medium mb-6">
               <Sparkles className="w-4 h-4 mr-2" />
-              #1 Cold Email Platform for 2025
+              #1 B2B Email Marketing Platform for 2025
             </div>
             <h1 className="text-6xl font-bold text-gray-900 mb-6 leading-tight">
               Scale Your Outreach to
@@ -41,7 +41,7 @@ export default function LandingPage() {
               With AI-Powered Automation
             </h1>
             <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-              The only cold email platform that combines unlimited email accounts, 
+              The only B2B email marketing automation platform that combines professional email account management, 
               advanced AI personalization, and enterprise-grade deliverability 
               to help you book more meetings.
             </p>
@@ -116,9 +116,9 @@ export default function LandingPage() {
               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-6">
                 <Mail className="w-6 h-6 text-purple-600" />
               </div>
-              <h3 className="text-xl font-bold mb-3">Unlimited Email Accounts</h3>
+              <h3 className="text-xl font-bold mb-3">Professional Email Account Management</h3>
               <p className="text-gray-600 mb-4">
-                Connect unlimited email accounts and rotate them automatically to maximize deliverability
+                Connect multiple email accounts and manage them automatically with advanced rotation to maximize deliverability
               </p>
               <Link href="/features" className="text-purple-600 font-medium flex items-center">
                 Learn more <ArrowRight className="w-4 h-4 ml-1" />
@@ -129,9 +129,9 @@ export default function LandingPage() {
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-6">
                 <Zap className="w-6 h-6 text-blue-600" />
               </div>
-              <h3 className="text-xl font-bold mb-3">AI-Powered Warmup</h3>
+              <h3 className="text-xl font-bold mb-3">AI-Powered Deliverability Optimization</h3>
               <p className="text-gray-600 mb-4">
-                Our intelligent warmup system builds your sender reputation to ensure inbox placement
+                Our intelligent system builds your sender reputation through gradual engagement to ensure inbox placement
               </p>
               <Link href="/features" className="text-purple-600 font-medium flex items-center">
                 Learn more <ArrowRight className="w-4 h-4 ml-1" />
@@ -295,7 +295,7 @@ export default function LandingPage() {
             <div className="col-span-2">
               <div className="text-2xl font-bold mb-4">OPhir</div>
               <p className="text-gray-400 mb-4">
-                The most powerful cold email platform for modern sales teams.
+                The most powerful B2B email marketing automation platform for modern sales teams.
               </p>
               <div className="flex space-x-4">
                 <div className="w-10 h-10 bg-gray-800 rounded-lg flex items-center justify-center hover:bg-gray-700 cursor-pointer">

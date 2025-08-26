@@ -11,7 +11,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useWebSocket } from './useWebSocket';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../lib/auth/context';
 
 export interface UsageUpdate {
   organizationId: string;

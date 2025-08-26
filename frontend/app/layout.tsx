@@ -6,8 +6,8 @@ import { Providers } from './providers'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Mailsender - Cold Email Automation Platform',
-  description: 'Scale your cold email outreach with intelligent automation and superior deliverability',
+  title: 'Mailsender - B2B Email Marketing Automation Platform',
+  description: 'Scale your B2B email marketing with intelligent automation, professional account management, and superior deliverability',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

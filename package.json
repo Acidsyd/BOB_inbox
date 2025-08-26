@@ -1,96 +1,78 @@
 {
   "name": "mailsender-test-suite",
   "version": "1.0.0",
-  "description": "Comprehensive test suite for Mailsender cold email automation platform",
+  "description": "Comprehensive test suite for B2B email marketing automation platform",
   "type": "module",
   "scripts": {
     "start": "node backend/src/index.js",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
-    
     "build": "npm run build:backend && npm run build:frontend",
     "build:backend": "cd backend && npm run build",
     "build:frontend": "cd frontend && npm run build",
-    
     "test": "jest",
     "test:unit": "jest --selectProjects=\"Backend Unit Tests\" \"Frontend Components\"",
-    "test:integration": "jest --selectProjects=\"Backend Integration Tests\"", 
+    "test:integration": "jest --selectProjects=\"Backend Integration Tests\"",
     "test:frontend": "jest --selectProjects=\"Frontend Components\"",
     "test:backend": "jest --selectProjects=\"Backend Unit Tests\" \"Backend Integration Tests\"",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
     "test:ci": "jest --ci --coverage --watchAll=false --maxWorkers=2",
-    
     "test:e2e": "cd frontend && npx playwright test",
     "test:e2e:ui": "cd frontend && npx playwright test --ui",
     "test:e2e:debug": "cd frontend && npx playwright test --debug",
     "test:e2e:headed": "cd frontend && npx playwright test --headed",
     "test:e2e:ci": "cd frontend && npx playwright test --reporter=github",
-    
     "test:performance": "cd frontend && npx playwright test --config=playwright-performance.config.js",
-    "test:security": "cd frontend && npx playwright test --config=playwright-security.config.js", 
+    "test:security": "cd frontend && npx playwright test --config=playwright-security.config.js",
     "test:accessibility": "cd frontend && npx playwright test --config=playwright-accessibility.config.js",
-    
     "test:leads": "jest --testPathPattern=leads",
     "test:leads:unit": "jest --testPathPattern=leads --selectProjects=\"Backend Unit Tests\" \"Frontend Components\"",
     "test:leads:e2e": "cd frontend && npx playwright test leads-workflows.spec.ts",
     "test:leads:performance": "cd frontend && npx playwright test leads-performance.spec.ts",
     "test:leads:security": "cd frontend && npx playwright test leads-security.spec.ts",
     "test:leads:accessibility": "cd frontend && npx playwright test leads-accessibility.spec.ts",
-    
     "test:all": "npm run test && npm run test:e2e && npm run test:performance && npm run test:security && npm run test:accessibility",
     "test:quality-gate": "npm run test:ci && npm run test:e2e && npm run test:performance",
-    
     "lint": "npm run lint:backend && npm run lint:frontend",
     "lint:backend": "cd backend && npm run lint",
     "lint:frontend": "cd frontend && npm run lint",
     "lint:fix": "npm run lint:backend -- --fix && npm run lint:frontend -- --fix",
-    
     "typecheck": "npm run typecheck:backend && npm run typecheck:frontend",
     "typecheck:backend": "cd backend && npm run typecheck",
     "typecheck:frontend": "cd frontend && npm run type-check",
-    
     "db:migrate": "cd backend && npm run db:migrate",
     "db:seed": "cd backend && npm run db:seed",
     "db:seed:performance": "cd backend && npm run db:seed:performance",
     "db:reset": "cd backend && npm run db:reset",
-    
     "worker": "cd backend && npm run worker",
     "worker:dev": "cd backend && npm run worker:dev",
     "worker:cluster": "cd backend && npm run worker:cluster",
-    
     "setup": "npm install && cd backend && npm install && cd ../frontend && npm install",
     "setup:test": "npm run db:migrate && npm run db:seed",
     "setup:test-env": "node test-utils/setup-test-environment.js",
     "cleanup:test": "node test-utils/cleanup-test-environment.js",
-    
     "report:coverage": "open coverage/lcov-report/index.html",
     "report:test": "open test-reports/html/test-report.html",
     "report:e2e": "cd frontend && npx playwright show-report",
     "report:performance": "cd frontend && open performance-reports/html/index.html",
-    
     "clean": "npm run clean:coverage && npm run clean:reports && npm run clean:build",
     "clean:coverage": "rm -rf coverage coverage-combined",
     "clean:reports": "rm -rf test-reports performance-reports security-reports accessibility-reports",
     "clean:build": "rm -rf backend/dist frontend/.next",
     "clean:all": "npm run clean && rm -rf node_modules backend/node_modules frontend/node_modules",
-    
     "docker:build": "docker-compose build",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
-    
     "security:audit": "npm audit && cd backend && npm audit && cd ../frontend && npm audit",
     "security:fix": "npm audit fix && cd backend && npm audit fix && cd ../frontend && npm audit fix",
-    
     "validate": "npm run typecheck && npm run lint && npm run test:quality-gate",
     "precommit": "npm run lint:fix && npm run typecheck && npm run test:unit",
     "prepush": "npm run test:quality-gate",
-    
     "deploy:staging": "echo 'Deploying to staging...' && npm run build && npm run test:quality-gate",
     "deploy:production": "echo 'Deploying to production...' && npm run validate && npm run build",
-    
     "prepare": "husky install"
   },
   "devDependencies": {
@@ -98,7 +80,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",
-    "concurrently": "^9.1.0",
+    "concurrently": "^9.2.0",
     "husky": "^9.1.7",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",

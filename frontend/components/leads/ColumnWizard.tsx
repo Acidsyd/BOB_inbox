@@ -816,10 +816,10 @@ const ColumnWizard: React.FC<ColumnWizardProps> = ({
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center space-x-2">
-                      {column.type && (
-                        <COLUMN_TYPE_CONFIG[column.type as keyof typeof COLUMN_TYPE_CONFIG]?.icon 
-                          className="h-5 w-5" />
-                      )}
+                      {column.type && (() => {
+                        const IconComponent = COLUMN_TYPE_CONFIG[column.type as keyof typeof COLUMN_TYPE_CONFIG]?.icon;
+                        return IconComponent ? <IconComponent className="h-5 w-5" /> : null;
+                      })()}
                       <span>{column.name}</span>
                       <Badge variant="outline">{column.type}</Badge>
                     </CardTitle>

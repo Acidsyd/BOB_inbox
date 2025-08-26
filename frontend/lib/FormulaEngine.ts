@@ -26,11 +26,23 @@ export interface FormulaContext {
   externalData?: Record<string, any>; // For external references
 }
 
-export interface FormulaError {
-  type: 'syntax' | 'reference' | 'circular' | 'type' | 'division_by_zero' | 'function_not_found';
-  message: string;
-  position?: { start: number; end: number };
-  column?: string;
+export class FormulaError extends Error {
+  public type: 'syntax' | 'reference' | 'circular' | 'type' | 'division_by_zero' | 'function_not_found';
+  public position?: { start: number; end: number };
+  public column?: string;
+
+  constructor(config: {
+    type: 'syntax' | 'reference' | 'circular' | 'type' | 'division_by_zero' | 'function_not_found';
+    message: string;
+    position?: { start: number; end: number };
+    column?: string;
+  }) {
+    super(config.message);
+    this.name = 'FormulaError';
+    this.type = config.type;
+    this.position = config.position;
+    this.column = config.column;
+  }
 }
 
 export interface FormulaDependency {

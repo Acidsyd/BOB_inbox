@@ -26,6 +26,7 @@ import {
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useWorkflowNavigation } from '@/lib/navigation/context'
 
 type SetupStep = 'provider-selection' | 'gmail-oauth2-setup' | 'microsoft-oauth2-setup' | 'smtp-setup'
 type Provider = 'gmail-oauth2' | 'microsoft-oauth2' | 'smtp'
@@ -89,6 +90,7 @@ function AddEmailAccountContent() {
   const { addToast } = useToast()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const workflowNavigation = useWorkflowNavigation()
   
   // State management
   const [currentStep, setCurrentStep] = useState<SetupStep>('provider-selection')
@@ -123,8 +125,16 @@ function AddEmailAccountContent() {
         description: `Successfully connected ${email} via ${providerName}`,
         type: 'success'
       })
+      
       setTimeout(() => {
-        router.push('/settings/email-accounts')
+        // Check if we have a return path from navigation context
+        if (workflowNavigation.returnPath) {
+          console.log('🧭 OAuth2 success: Returning to workflow path:', workflowNavigation.returnPath)
+          router.push(workflowNavigation.returnPath)
+          workflowNavigation.clearNavigationState()
+        } else {
+          router.push('/settings/email-accounts')
+        }
       }, 2000)
     }
 
@@ -153,7 +163,12 @@ function AddEmailAccountContent() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({})
+        body: JSON.stringify({
+          navigationContext: {
+            returnPath: workflowNavigation.returnPath,
+            workflowName: 'email-account-setup'
+          }
+        })
       })
 
       const result = await response.json()
@@ -202,7 +217,12 @@ function AddEmailAccountContent() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({})
+        body: JSON.stringify({
+          navigationContext: {
+            returnPath: workflowNavigation.returnPath,
+            workflowName: 'email-account-setup'
+          }
+        })
       })
 
       const result = await response.json()

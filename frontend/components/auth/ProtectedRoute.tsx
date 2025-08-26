@@ -9,14 +9,15 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, isAuthenticated } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (!isLoading && !isAuthenticated) {
+      console.log('🔒 ProtectedRoute: Redirecting to login - not authenticated')
       router.push('/login')
     }
-  }, [user, isLoading, router])
+  }, [isAuthenticated, isLoading, router])
 
   if (isLoading) {
     return (
@@ -29,7 +30,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     )
   }
 
-  if (!user) {
+  if (!isAuthenticated || !user) {
     return null
   }
 

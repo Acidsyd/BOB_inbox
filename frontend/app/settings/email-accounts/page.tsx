@@ -3,6 +3,7 @@
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import AppLayout from '@/components/layout/AppLayout'
 import { useEmailAccounts } from '@/hooks/useEmailAccounts'
+import { useTrackingConfiguration } from '@/hooks/useTrackingConfiguration'
 import { useToast } from '@/components/ui/toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,10 +23,14 @@ import {
   Pause,
   WifiIcon,
   WifiOff,
-  RefreshCw
+  RefreshCw,
+  Activity,
+  Eye,
+  MousePointer,
+  Target
 } from 'lucide-react'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 // Email account interface is now imported from the hook
 
@@ -81,8 +86,24 @@ function StatusIndicator({ isConnected }: { isConnected: boolean }) {
 
 function EmailAccountsContent() {
   const { accounts, isLoading, error, refetch, updateAccountStatus, isUpdating } = useEmailAccounts()
+  const { 
+    accountTrackingHealths, 
+    refreshAccountHealth, 
+    testTrackingSetup,
+    getAccountTrackingHealth 
+  } = useTrackingConfiguration()
   const { addToast } = useToast()
   const [actionLoadingStates, setActionLoadingStates] = useState<Record<string, boolean>>({})
+  const [trackingTestStates, setTrackingTestStates] = useState<Record<string, boolean>>({})
+
+  // Load tracking health data for all accounts when they change
+  useEffect(() => {
+    if (accounts.length > 0) {
+      accounts.forEach(account => {
+        getAccountTrackingHealth(account.id).catch(console.error)
+      })
+    }
+  }, [accounts, getAccountTrackingHealth])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -104,6 +125,59 @@ function EmailAccountsContent() {
     if (health >= 90) return <CheckCircle className="h-4 w-4 text-green-600" />
     if (health >= 70) return <AlertTriangle className="h-4 w-4 text-yellow-600" />
     return <XCircle className="h-4 w-4 text-red-600" />
+  }
+
+  // Get tracking health for an account
+  const getTrackingHealth = (accountId: string) => {
+    return accountTrackingHealths[accountId]
+  }
+
+  const getTrackingHealthColor = (reliability: string) => {
+    switch (reliability) {
+      case 'excellent': return 'text-green-600 bg-green-100'
+      case 'good': return 'text-blue-600 bg-blue-100' 
+      case 'poor': return 'text-yellow-600 bg-yellow-100'
+      case 'critical': return 'text-red-600 bg-red-100'
+      default: return 'text-gray-600 bg-gray-100'
+    }
+  }
+
+  const getTrackingIcon = (reliability: string) => {
+    switch (reliability) {
+      case 'excellent': return <Activity className="h-4 w-4 text-green-600" />
+      case 'good': return <Activity className="h-4 w-4 text-blue-600" />
+      case 'poor': return <Activity className="h-4 w-4 text-yellow-600" />
+      case 'critical': return <Activity className="h-4 w-4 text-red-600" />
+      default: return <Activity className="h-4 w-4 text-gray-400" />
+    }
+  }
+
+  // Test tracking setup for an account
+  const handleTrackingTest = async (accountId: string) => {
+    setTrackingTestStates(prev => ({ ...prev, [accountId]: true }))
+    
+    try {
+      const result = await testTrackingSetup(accountId)
+      
+      addToast({
+        title: result ? 'Tracking Test Passed' : 'Tracking Test Failed',
+        description: result 
+          ? 'Tracking pixel and links are working correctly' 
+          : 'There are issues with tracking setup',
+        type: result ? 'success' : 'error'
+      })
+      
+      // Refresh tracking health after test
+      await refreshAccountHealth(accountId)
+    } catch (error: any) {
+      addToast({
+        title: 'Test failed',
+        description: 'Unable to test tracking setup',
+        type: 'error'
+      })
+    } finally {
+      setTrackingTestStates(prev => ({ ...prev, [accountId]: false }))
+    }
   }
 
   // Handle account status changes with user feedback
@@ -290,12 +364,14 @@ function EmailAccountsContent() {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
-              <AlertTriangle className="h-8 w-8 text-orange-600" />
+              <Activity className="h-8 w-8 text-purple-600" />
               <div className="ml-3">
                 <p className="text-2xl font-bold">
-                  {accounts.reduce((sum, a) => sum + a.sentToday, 0)}
+                  {Object.values(accountTrackingHealths).filter(h => 
+                    h.trackingReliability === 'excellent' || h.trackingReliability === 'good'
+                  ).length}
                 </p>
-                <p className="text-sm text-gray-600">Emails Today</p>
+                <p className="text-sm text-gray-600">Tracking Healthy</p>
               </div>
             </div>
           </CardContent>
@@ -346,6 +422,27 @@ function EmailAccountsContent() {
                           {account.health}% Health
                         </span>
                       </div>
+                      
+                      {/* Tracking Health Indicator */}
+                      {(() => {
+                        const trackingHealth = getTrackingHealth(account.id)
+                        return trackingHealth ? (
+                          <div className="flex items-center">
+                            {getTrackingIcon(trackingHealth.trackingReliability)}
+                            <span className={`ml-1 px-2 py-1 text-xs font-medium rounded-full ${
+                              getTrackingHealthColor(trackingHealth.trackingReliability)
+                            }`}>
+                              Tracking: {trackingHealth.trackingScore}%
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center">
+                            <Activity className="h-4 w-4 text-gray-400" />
+                            <span className="ml-1 text-gray-500 text-xs">Testing...</span>
+                          </div>
+                        )
+                      })()} 
+                      
                       <div>
                         Sent: {account.sentToday}/{account.dailyLimit} today
                       </div>
@@ -359,6 +456,22 @@ function EmailAccountsContent() {
                 </div>
 
                 <div className="flex items-center space-x-2">
+                  {/* Tracking Test Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleTrackingTest(account.id)}
+                    disabled={trackingTestStates[account.id]}
+                    className="text-purple-600 border-purple-200 hover:bg-purple-50"
+                  >
+                    {trackingTestStates[account.id] ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Target className="h-4 w-4 mr-2" />
+                    )}
+                    Test Tracking
+                  </Button>
+                  
                   {account.status === 'active' ? (
                     <Button 
                       variant="outline" 
@@ -438,6 +551,61 @@ function EmailAccountsContent() {
                     ></div>
                   </div>
                 </div>
+
+                {/* Tracking Health Progress */}
+                {(() => {
+                  const trackingHealth = getTrackingHealth(account.id)
+                  return trackingHealth && (
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-500 mb-1">
+                        <span className="flex items-center">
+                          <Eye className="h-3 w-3 mr-1" />
+                          Tracking Performance
+                        </span>
+                        <span>{trackingHealth.trackingScore}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full ${
+                            trackingHealth.trackingScore >= 90 ? 'bg-green-500' :
+                            trackingHealth.trackingScore >= 70 ? 'bg-blue-500' :
+                            trackingHealth.trackingScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${trackingHealth.trackingScore}%` }}
+                        ></div>
+                      </div>
+                      
+                      {/* Tracking details */}
+                      <div className="flex justify-between text-xs text-gray-400 mt-1">
+                        <span className="flex items-center">
+                          <MousePointer className="h-3 w-3 mr-1" />
+                          Pixel: {Math.round(trackingHealth.pixelDeliveryRate)}%
+                        </span>
+                        <span>Links: {Math.round(trackingHealth.linkClickabilityRate)}%</span>
+                      </div>
+                      
+                      {/* Tracking issues warning */}
+                      {trackingHealth.trackingIssues.length > 0 && (
+                        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+                          <div className="flex items-center text-yellow-800 mb-1">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            <span className="font-medium">Tracking Issues ({trackingHealth.trackingIssues.length})</span>
+                          </div>
+                          <div className="text-yellow-700">
+                            {trackingHealth.trackingIssues.slice(0, 2).map((issue, index) => (
+                              <div key={index}>• {issue}</div>
+                            ))}
+                            {trackingHealth.trackingIssues.length > 2 && (
+                              <div className="text-yellow-600 font-medium">
+                                +{trackingHealth.trackingIssues.length - 2} more issues
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Warmup progress (if warming) */}
                 {account.status === 'warming' && (

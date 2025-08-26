@@ -1,7 +1,7 @@
 {
-  "name": "Mailsender - Cold Email Automation Platform",
+  "name": "Mailsender - B2B Email Marketing Automation Platform",
   "short_name": "Mailsender",
-  "description": "Scale your cold email outreach with intelligent automation and superior deliverability",
+  "description": "Scale your B2B email marketing with professional automation, account management, and superior deliverability",
   "start_url": "/dashboard",
   "display": "standalone",
   "orientation": "portrait-primary",
