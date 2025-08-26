@@ -5,7 +5,11 @@
 
 export { default as LeadsTable } from './LeadsTable';
 export { default as LeadsImportPicker } from './LeadsImportPicker';
-export { default as LeadSegmentationDashboard } from './LeadSegmentationDashboard';
+export { default as CSVUploader } from './CSVUploader';
+export { default as SimpleLeadTable } from './SimpleLeadTable';
+export { default as LeadListCard } from './LeadListCard';
+export { default as ColumnWizard } from './ColumnWizard';
+export { default as FormulaBuilder } from './FormulaBuilder';
 
 // Re-export optimized lead types
 export type {

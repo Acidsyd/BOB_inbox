@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { DashboardErrorBoundary } from '@/components/ui/error-boundary'
 import { DashboardSkeleton } from '@/components/ui/skeletons'
 import { useOffline } from '@/hooks/useOffline'
-import { useGlobalKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+// Removed keyboard shortcuts for simplification
 
 interface DashboardStats {
   campaigns: { total: number; active: number }
@@ -25,7 +25,7 @@ interface DashboardStats {
 function DashboardContent() {
   const { user } = useAuth()
   const { isOnline, queuedActions } = useOffline()
-  useGlobalKeyboardShortcuts()
+  // Keyboard shortcuts removed for simplification
 
   const { data: stats, isLoading, error, refetch } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],

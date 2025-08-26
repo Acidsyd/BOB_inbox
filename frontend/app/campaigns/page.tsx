@@ -5,8 +5,7 @@ import AppLayout from '@/components/layout/AppLayout'
 import { useAuth } from '@/lib/auth/context'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import { useTrackingConfiguration } from '@/hooks/useTrackingConfiguration'
-import CampaignTrackingDashboard from '@/components/campaigns/CampaignTrackingDashboard'
+// Removed tracking components for simplification
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -57,11 +56,6 @@ function CampaignsContent() {
   const { user } = useAuth()
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState('all')
-  const { 
-    getCampaignTrackingStatus, 
-    campaignTrackingStatuses, 
-    getRealtimeMetrics 
-  } = useTrackingConfiguration()
 
   const { data: campaignsResponse, isLoading } = useQuery({
     queryKey: ['campaigns'],
@@ -90,32 +84,7 @@ function CampaignsContent() {
     }
   }
 
-  const getTrackingHealthIcon = (health?: string) => {
-    switch (health) {
-      case 'healthy': return <CheckCircle className="h-4 w-4 text-green-600" />
-      case 'warning': return <AlertTriangle className="h-4 w-4 text-yellow-600" />
-      case 'error': return <Activity className="h-4 w-4 text-red-600" />
-      default: return <Activity className="h-4 w-4 text-gray-400" />
-    }
-  }
-
-  const getTrackingHealthColor = (health?: string) => {
-    switch (health) {
-      case 'healthy': return 'bg-green-100 text-green-800'
-      case 'warning': return 'bg-yellow-100 text-yellow-800'
-      case 'error': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  // Load tracking status for campaigns
-  const loadTrackingStatus = async (campaignId: string) => {
-    try {
-      await getCampaignTrackingStatus(campaignId)
-    } catch (error) {
-      console.error(`Failed to load tracking status for campaign ${campaignId}:`, error)
-    }
-  }
+  // Tracking functions removed for simplification
 
   if (isLoading) {
     return (
@@ -195,12 +164,7 @@ function CampaignsContent() {
         </div>
       </div>
 
-      {/* Global Tracking Dashboard */}
-      {campaigns.length > 0 && (
-        <div className="mb-8">
-          <CampaignTrackingDashboard showGlobalMetrics={true} />
-        </div>
-      )}
+      {/* Tracking dashboard removed for simplification */}
 
       {/* Campaigns Grid */}
       {filteredCampaigns.length === 0 ? (
@@ -240,11 +204,7 @@ function CampaignsContent() {
             const replied = campaign.replies || 0;
             const lastActivity = campaign.updated_at || campaign.created_at;
             
-            // Load tracking status if not already loaded
-            const trackingStatus = campaignTrackingStatuses[campaign.id]
-            if (!trackingStatus && campaign.status === 'active') {
-              loadTrackingStatus(campaign.id)
-            }
+            // Tracking status removed for simplification
             
             // Calculate rates
             const openRate = sent > 0 ? Math.round((opened / sent) * 100) : 0
@@ -256,21 +216,9 @@ function CampaignsContent() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg truncate">{campaign.name || 'Untitled Campaign'}</CardTitle>
-                    <div className="flex items-center space-x-2">
-                      {/* Tracking Health Badge */}
-                      {trackingStatus && (
-                        <Badge 
-                          className={`${getTrackingHealthColor(trackingStatus.trackingHealth)} flex items-center space-x-1`}
-                          title="Tracking Health"
-                        >
-                          {getTrackingHealthIcon(trackingStatus.trackingHealth)}
-                          <span>Tracking</span>
-                        </Badge>
-                      )}
-                      <Badge className={getStatusColor(campaign.status || 'draft')}>
-                        {campaign.status || 'draft'}
-                      </Badge>
-                    </div>
+                    <Badge className={getStatusColor(campaign.status || 'draft')}>
+                      {campaign.status || 'draft'}
+                    </Badge>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -295,61 +243,7 @@ function CampaignsContent() {
                       </div>
                     </div>
                     
-                    {/* Real-time Tracking Metrics */}
-                    {trackingStatus && campaign.status === 'active' && (
-                      <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-medium text-gray-700 flex items-center">
-                            <Activity className="h-3 w-3 mr-1" />
-                            Live Tracking Metrics
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {trackingStatus.lastTrackingEvent ? 
-                              `Updated ${new Date(trackingStatus.lastTrackingEvent).toLocaleTimeString()}` : 
-                              'No recent activity'
-                            }
-                          </span>
-                        </div>
-                        
-                        <div className="grid grid-cols-3 gap-3 text-xs">
-                          <div className="flex items-center">
-                            <Eye className="h-3 w-3 text-blue-500 mr-1" />
-                            <span className="text-gray-600">
-                              Opens: {Math.round(trackingStatus.openRate)}%
-                            </span>
-                          </div>
-                          <div className="flex items-center">
-                            <MousePointer className="h-3 w-3 text-green-500 mr-1" />
-                            <span className="text-gray-600">
-                              Clicks: {Math.round(trackingStatus.clickRate)}%
-                            </span>
-                          </div>
-                          <div className="flex items-center">
-                            <TrendingUp className="h-3 w-3 text-purple-500 mr-1" />
-                            <span className="text-gray-600">
-                              Events: {trackingStatus.totalEvents}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        {/* Tracking Issues */}
-                        {trackingStatus.trackingErrors.length > 0 && (
-                          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs">
-                            <div className="flex items-center text-red-800 mb-1">
-                              <AlertTriangle className="h-3 w-3 mr-1" />
-                              <span className="font-medium">
-                                {trackingStatus.trackingErrors.length} tracking issue(s)
-                              </span>
-                            </div>
-                            <div className="text-red-700">
-                              {trackingStatus.trackingErrors.slice(0, 2).map((error, index) => (
-                                <div key={index}>• {error}</div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {/* Tracking metrics removed for simplification */}
 
                     {/* Progress Bar */}
                     <div className="w-full bg-gray-200 rounded-full h-2">
@@ -382,19 +276,6 @@ function CampaignsContent() {
                         <Button size="sm" variant="outline" title="Analytics">
                           <BarChart3 className="h-4 w-4" />
                         </Button>
-                        {trackingStatus && (
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="text-purple-600 border-purple-200 hover:bg-purple-50"
-                            title="Tracking details"
-                            onClick={() => {
-                              console.log('Show tracking details for', campaign.id)
-                            }}
-                          >
-                            <Activity className="h-4 w-4" />
-                          </Button>
-                        )}
                       </div>
                       {campaign.id ? (
                         <Link href={`/campaigns/${campaign.id}`}>

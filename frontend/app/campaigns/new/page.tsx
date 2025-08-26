@@ -30,15 +30,12 @@ import { useRouter } from 'next/navigation'
 import { CSVParser, type LeadData, type ParseResult } from '@/lib/csvParser'
 import { useWorkflowNavigation } from '@/lib/navigation/context'
 import { useEmailAccountsSelection } from '@/hooks/useEmailAccountsSelection'
-import RichTextEditor from '@/components/ui/rich-text-editor'
 import EmailSequenceBuilder from '@/components/campaigns/EmailSequenceBuilder'
 import CSVFieldMapper from '@/components/campaigns/CSVFieldMapper'
 import EmailPreviewAndTest from '@/components/campaigns/EmailPreviewAndTest'
-import TrackingConfigurationPanel from '@/components/campaigns/TrackingConfigurationPanel'
 import LeadListSelector from '@/components/campaigns/LeadListSelector'
 import { api } from '@/lib/api'
-import { useTrackingConfiguration } from '@/hooks/useTrackingConfiguration'
-import type { TrackingConfiguration } from '@/hooks/useTrackingConfiguration'
+// Removed rich text editor and tracking components for simplification
 
 interface EmailSequence {
   id: number
@@ -937,13 +934,11 @@ function CampaignBuilderContent() {
           )}
 
           {currentStep === 6 && (
-            <TrackingConfigurationPanel
-              campaignData={campaignData}
-              onTrackingChange={(trackingConfig) => {
-                updateCampaignData({ trackingConfiguration: { ...campaignData.trackingConfiguration, ...trackingConfig } })
-              }}
-              showAdvancedOptions={true}
-            />
+            <div className="text-center p-12 bg-gray-50 rounded-lg">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Tracking Configuration</h3>
+              <p className="text-gray-600 mb-4">Advanced tracking configuration has been simplified for better stability.</p>
+              <p className="text-sm text-gray-500">Basic email tracking will be enabled automatically.</p>
+            </div>
           )}
 
           {currentStep === 7 && (

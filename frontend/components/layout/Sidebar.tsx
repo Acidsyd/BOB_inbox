@@ -35,28 +35,12 @@ const navigation = [
   },
   {
     name: 'Leads',
-    href: '/leads/lists',
+    href: '/leads',
     icon: Users,
-  },
-  {
-    name: 'Inbox',
-    href: '/inbox',
-    icon: Inbox,
-  },
-  {
-    name: 'Analytics',
-    href: '/analytics',
-    icon: TrendingUp,
-  },
-  {
-    name: 'Activity Logs',
-    href: '/logs',
-    icon: FileText,
-  },
-  {
-    name: 'Support',
-    href: '/support',
-    icon: HelpCircle,
+    children: [
+      { name: 'All Leads', href: '/leads' },
+      { name: 'Lead Lists', href: '/leads/lists' },
+    ]
   },
   {
     name: 'Settings',
@@ -64,9 +48,7 @@ const navigation = [
     icon: Settings,
     children: [
       { name: 'Email Accounts', href: '/settings/email-accounts' },
-      { name: 'Organization', href: '/settings/organization' },
       { name: 'Billing', href: '/settings/billing' },
-      { name: 'Integrations', href: '/settings/integrations' },
     ]
   },
 ]
@@ -74,7 +56,7 @@ const navigation = [
 export default function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Campaigns', 'Settings'])
+  const [expandedItems, setExpandedItems] = useState<string[]>(['Campaigns', 'Leads', 'Settings'])
 
   const toggleExpanded = (itemName: string) => {
     setExpandedItems(prev => 

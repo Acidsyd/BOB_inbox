@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import RichTextEditor from '@/components/ui/rich-text-editor'
+import { Textarea } from '@/components/ui/textarea'
 import { 
   Plus, 
   Trash2, 
@@ -326,21 +326,21 @@ export default function EmailSequenceBuilder({ campaignData, updateCampaignData 
                       Email Content *
                     </Label>
                     <div className="mt-1">
-                      <RichTextEditor
+                      <Textarea
+                        id={`content-${email.id}`}
                         value={email.content}
-                        onChange={(value) => {
+                        onChange={(e) => {
                           if (isInitial) {
-                            updateCampaignData({ emailContent: value })
+                            updateCampaignData({ emailContent: e.target.value })
                           } else {
-                            updateSequenceEmail(email.id, 'content', value)
+                            updateSequenceEmail(email.id, 'content', e.target.value)
                           }
                         }}
                         placeholder={isInitial ? 
                           "Hi {first_name},\n\nI hope this email finds you well..." :
                           "Hi {first_name},\n\nI wanted to follow up on my previous email..."
                         }
-                        height="250px"
-                        showSnippets={true}
+                        className="min-h-[250px] resize-y"
                       />
                     </div>
                     {isInitial && (

@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { AuthProvider } from '../lib/auth/context'
 import { NavigationProvider } from '../lib/navigation/context'
 import { ToastProvider } from '../components/ui/toast'
-import { EnhancedToastProvider } from '../components/ui/enhanced-toast'
+// Removed enhanced toast provider for simplification
 import { ConfirmationProvider } from '../components/ui/confirmation-dialog'
 import { ErrorBoundary } from '../components/ui/error-boundary'
 
@@ -24,13 +24,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <NavigationProvider>
           <AuthProvider>
-            <EnhancedToastProvider>
-              <ConfirmationProvider>
-                <ToastProvider>
-                  {children}
-                </ToastProvider>
-              </ConfirmationProvider>
-            </EnhancedToastProvider>
+            <ConfirmationProvider>
+              <ToastProvider>
+                {children}
+              </ToastProvider>
+            </ConfirmationProvider>
           </AuthProvider>
         </NavigationProvider>
       </QueryClientProvider>

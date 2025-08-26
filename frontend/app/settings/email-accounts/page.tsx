@@ -3,7 +3,7 @@
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import AppLayout from '@/components/layout/AppLayout'
 import { useEmailAccounts } from '@/hooks/useEmailAccounts'
-import { useTrackingConfiguration } from '@/hooks/useTrackingConfiguration'
+// Removed tracking configuration hook for simplification
 import { useToast } from '@/components/ui/toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'

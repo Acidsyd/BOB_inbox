@@ -24,7 +24,7 @@ import InvoiceHistory from '@/components/billing/InvoiceHistory'
 import BillingPortal from '@/components/billing/BillingPortal'
 import UpgradePrompts from '@/components/billing/UpgradePrompts'
 import UsageAnalytics from '@/components/billing/UsageAnalytics'
-import EnterpriseBillingDashboard from '@/components/billing/EnterpriseBillingDashboard'
+// Removed enterprise billing dashboard for simplification
 
 // Hooks
 import { useBilling, useSubscriptionStatus } from '@/hooks/useBilling'
