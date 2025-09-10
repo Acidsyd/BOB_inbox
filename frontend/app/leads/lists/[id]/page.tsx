@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Download, Trash2, Upload, Users } from 'lucide-react'
 import Link from 'next/link'
+import { format } from 'date-fns'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import AppLayout from '@/components/layout/AppLayout'
 import SimpleLeadTable from '@/components/leads/SimpleLeadTable'
@@ -68,6 +69,7 @@ function LeadListViewContent() {
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
+  const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null)
 
   // Fetch lead list and leads
   const fetchData = async (page = 1, limit = 50, search = '') => {
@@ -126,6 +128,42 @@ function LeadListViewContent() {
       alert('Failed to delete lead list')
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  // Delete individual lead
+  const handleDeleteLead = async (leadId: string) => {
+    setDeletingLeadId(leadId)
+    try {
+      const response = await fetch(`/api/leads/lists/${listId}/leads/${leadId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete lead')
+      }
+
+      // Optimistically remove the lead from the current list
+      setLeads(prevLeads => prevLeads.filter(lead => lead.id !== leadId))
+      
+      // Update pagination count
+      setPagination(prev => ({
+        ...prev,
+        total: prev.total - 1,
+        totalPages: Math.ceil((prev.total - 1) / prev.limit)
+      }))
+
+      console.log('✅ Lead deleted successfully')
+    } catch (error) {
+      console.error('Error deleting lead:', error)
+      alert('Failed to delete lead')
+      // Refresh data to ensure consistency
+      fetchData(pagination.page, pagination.limit, searchTerm)
+    } finally {
+      setDeletingLeadId(null)
     }
   }
 
@@ -212,7 +250,7 @@ function LeadListViewContent() {
           </Button>
           
           <AlertDialog>
-            <AlertDialogTrigger asChild>
+            <AlertDialogTrigger>
               <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete List
@@ -289,6 +327,8 @@ function LeadListViewContent() {
         onSearchChange={handleSearchChange}
         onPageChange={handlePageChange}
         onLimitChange={handleLimitChange}
+        onDeleteLead={handleDeleteLead}
+        deletingLeadId={deletingLeadId}
       />
     </div>
   )

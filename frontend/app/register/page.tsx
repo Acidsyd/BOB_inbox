@@ -3,17 +3,9 @@
 import Link from 'next/link'
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Elements } from '@stripe/react-stripe-js'
-import { loadStripe } from '@stripe/stripe-js'
 import { useAuth } from '@/lib/auth/context'
-import { useBilling, usePromotionValidation } from '@/hooks/useBilling'
-import { ArrowRight, Mail, Lock, User, Building, CheckCircle, CreditCard, AlertCircle } from 'lucide-react'
+import { ArrowRight, Mail, Lock, User, Building, CheckCircle, AlertCircle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import PlanSelection from '@/components/billing/PlanSelection'
-import PaymentMethodForm from '@/components/billing/PaymentMethodForm'
-
-// Initialize Stripe
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 interface RegisterFormData {
   firstName: string
@@ -27,8 +19,34 @@ function RegisterContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { register } = useAuth()
-  const { plans, createSubscription, isLoading: billingLoading } = useBilling()
-  const { validatePromotion, validation, isValidating, clearValidation } = usePromotionValidation()
+  
+  // Static beta plans (no billing API needed)
+  const staticPlans = [
+    { 
+      plan_code: 'basic', 
+      name: 'Basic', 
+      price: 29, 
+      interval: 'month',
+      description: 'Perfect for small teams getting started',
+      features: ['Up to 1,000 leads', '10 campaigns', '200 emails/day', '3 email accounts']
+    },
+    { 
+      plan_code: 'pro', 
+      name: 'Pro', 
+      price: 79, 
+      interval: 'month',
+      description: 'Most popular - great for growing businesses',
+      features: ['Up to 10,000 leads', '50 campaigns', '1,000 emails/day', '10 email accounts']
+    },
+    { 
+      plan_code: 'enterprise', 
+      name: 'Enterprise', 
+      price: 199, 
+      interval: 'month',
+      description: 'For large teams with advanced needs',
+      features: ['Unlimited leads', 'Unlimited campaigns', '5,000 emails/day', 'Unlimited accounts']
+    }
+  ]
   
   // Form state
   const [formData, setFormData] = useState<RegisterFormData>({
@@ -40,45 +58,22 @@ function RegisterContent() {
   })
   
   // Registration flow state
-  const [currentStep, setCurrentStep] = useState<'account' | 'payment' | 'processing' | 'success'>('account')
+  const [currentStep, setCurrentStep] = useState<'account' | 'processing' | 'success'>('account')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [paymentMethodId, setPaymentMethodId] = useState<string | null>(null)
   
-  // Plan and promotion state
-  const [selectedPlanCode, setSelectedPlanCode] = useState<string>('')
-  const [promotionCode, setPromotionCode] = useState<string>('')
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly')
+  // Plan state - simplified for beta
+  const [selectedPlanCode, setSelectedPlanCode] = useState<string>('basic')
   
-  // Get plan from URL parameters and validate promotion
+  // Get plan from URL parameters
   useEffect(() => {
     const planParam = searchParams.get('plan')
-    const promoParam = searchParams.get('promo')
-    
-    if (planParam) {
+    if (planParam && staticPlans.find(p => p.plan_code === planParam)) {
       setSelectedPlanCode(planParam)
-      setBillingCycle(planParam.includes('yearly') ? 'yearly' : 'monthly')
-    } else {
-      // Default to basic monthly if no plan specified
-      setSelectedPlanCode('basic_monthly')
-      setBillingCycle('monthly')
-    }
-    
-    if (promoParam) {
-      setPromotionCode(promoParam)
     }
   }, [searchParams])
   
-  // Validate promotion when plan or promo changes
-  useEffect(() => {
-    if (promotionCode && selectedPlanCode && plans.length > 0) {
-      validatePromotion(promotionCode, selectedPlanCode)
-    } else {
-      clearValidation()
-    }
-  }, [promotionCode, selectedPlanCode, plans, validatePromotion, clearValidation])
-  
-  const selectedPlan = plans.find(plan => plan.plan_code === selectedPlanCode)
+  const selectedPlan = staticPlans.find(plan => plan.plan_code === selectedPlanCode)
 
   const handleAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -86,7 +81,7 @@ function RegisterContent() {
     
     // Validate form
     if (!formData.firstName || !formData.lastName || !formData.email || !formData.password || !formData.company) {
-      setError('Please fill in all required fields')
+      setError('Please fill in all required fields: first name, last name, email, password, and company name')
       return
     }
     
@@ -95,8 +90,8 @@ function RegisterContent() {
       return
     }
     
-    // Move to payment step
-    setCurrentStep('payment')
+    // Skip payment step for beta - go directly to registration
+    handleCompleteRegistration()
   }
   
   const handlePaymentMethodCreated = (pmId: string) => {
@@ -108,29 +103,24 @@ function RegisterContent() {
     setError(`Payment error: ${errorMessage}`)
   }
   
-  const handleCompleteRegistration = async (pmId: string) => {
+  const handleCompleteRegistration = async (pmId?: string) => {
     setCurrentStep('processing')
     setError('')
     setLoading(true)
     
     try {
-      // 1. Register the user account
-      const userResult = await register({
+      // 1. Register the user account with beta access
+      await register({
         email: formData.email,
         password: formData.password,
         firstName: formData.firstName,
         lastName: formData.lastName,
-        organizationName: formData.company
+        organizationName: formData.company,
+        planType: selectedPlanCode || 'basic'
       })
       
-      // 2. Create the subscription
-      const subscriptionData = {
-        planCode: selectedPlanCode,
-        paymentMethodId: pmId,
-        ...(promotionCode && validation?.valid && { promotionCode })
-      }
-      
-      await createSubscription(subscriptionData)
+      // 2. Skip subscription creation for beta users
+      // TODO: Add subscription creation when payment is enabled
       
       // 3. Success - redirect to dashboard
       setCurrentStep('success')
@@ -140,7 +130,7 @@ function RegisterContent() {
       
     } catch (err: any) {
       setError(err.message || 'Failed to complete registration')
-      setCurrentStep('payment') // Go back to payment step
+      setCurrentStep('account') // Go back to account step
     } finally {
       setLoading(false)
     }
@@ -165,41 +155,35 @@ function RegisterContent() {
         {/* Account Step */}
         <div className={`flex items-center space-x-2 ${
           currentStep === 'account' ? 'text-purple-600' : 
-          ['payment', 'processing', 'success'].includes(currentStep) ? 'text-green-600' : 'text-gray-400'
-        }`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
-            currentStep === 'account' ? 'border-purple-600 bg-purple-50' :
-            ['payment', 'processing', 'success'].includes(currentStep) ? 'border-green-600 bg-green-50' : 'border-gray-300'
-          }`}>
-            {['payment', 'processing', 'success'].includes(currentStep) ? (
-              <CheckCircle className="w-5 h-5" />
-            ) : (
-              <User className="w-4 h-4" />
-            )}
-          </div>
-          <span className="text-sm font-medium">Account</span>
-        </div>
-        
-        <div className={`h-px w-8 ${
-          ['payment', 'processing', 'success'].includes(currentStep) ? 'bg-green-300' : 'bg-gray-300'
-        }`} />
-        
-        {/* Payment Step */}
-        <div className={`flex items-center space-x-2 ${
-          currentStep === 'payment' ? 'text-purple-600' :
           ['processing', 'success'].includes(currentStep) ? 'text-green-600' : 'text-gray-400'
         }`}>
           <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
-            currentStep === 'payment' ? 'border-purple-600 bg-purple-50' :
+            currentStep === 'account' ? 'border-purple-600 bg-purple-50' :
             ['processing', 'success'].includes(currentStep) ? 'border-green-600 bg-green-50' : 'border-gray-300'
           }`}>
             {['processing', 'success'].includes(currentStep) ? (
               <CheckCircle className="w-5 h-5" />
             ) : (
-              <CreditCard className="w-4 h-4" />
+              <User className="w-4 h-4" />
             )}
           </div>
-          <span className="text-sm font-medium">Payment</span>
+          <span className="text-sm font-medium">Account Setup</span>
+        </div>
+        
+        <div className={`h-px w-8 ${
+          ['processing', 'success'].includes(currentStep) ? 'bg-green-300' : 'bg-gray-300'
+        }`} />
+        
+        {/* Success Step */}
+        <div className={`flex items-center space-x-2 ${
+          currentStep === 'success' ? 'text-green-600' : 'text-gray-400'
+        }`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
+            currentStep === 'success' ? 'border-green-600 bg-green-50' : 'border-gray-300'
+          }`}>
+            <CheckCircle className="w-5 h-5" />
+          </div>
+          <span className="text-sm font-medium">Complete</span>
         </div>
       </div>
     </div>
@@ -213,17 +197,15 @@ function RegisterContent() {
           <div className="max-w-2xl w-full space-y-8">
             <div className="text-center">
               <Link href="/" className="text-3xl font-bold gradient-text">
-                OPhir
+                BOBinbox
               </Link>
               <h2 className="mt-6 text-3xl font-bold text-gray-900">
-                {currentStep === 'account' && 'Start your free trial'}
-                {currentStep === 'payment' && 'Complete your subscription'}
+                {currentStep === 'account' && 'Join the BOBinbox Beta'}
                 {currentStep === 'processing' && 'Setting up your account'}
-                {currentStep === 'success' && 'Welcome to OPhir!'}
+                {currentStep === 'success' && 'Welcome to BOBinbox!'}
               </h2>
               <p className="mt-2 text-sm text-gray-600">
-                {currentStep === 'account' && 'Create your account and choose your plan'}
-                {currentStep === 'payment' && 'Secure payment to activate your subscription'}
+                {currentStep === 'account' && 'Get 90 days of free access to all features'}
                 {currentStep === 'processing' && 'Please wait while we set up your account...'}
                 {currentStep === 'success' && 'Your account is ready! Redirecting to dashboard...'}
               </p>
@@ -242,18 +224,55 @@ function RegisterContent() {
             {/* Account Registration Form */}
             {currentStep === 'account' && (
               <div className="space-y-6">
-                {/* Plan Selection */}
-                {selectedPlan && (
-                  <div className="mb-6">
-                    <PlanSelection
-                      selectedPlanCode={selectedPlanCode}
-                      plan={selectedPlan}
-                      promotion={validation}
-                      billingCycle={billingCycle}
-                      isLoading={billingLoading}
-                    />
+                {/* Beta Access Banner */}
+                <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                    <div>
+                      <h3 className="text-sm font-medium text-green-800">Free Beta Access</h3>
+                      <p className="text-xs text-green-700 mt-1">
+                        Get 90 days of full access to all features. No payment required during beta.
+                      </p>
+                    </div>
                   </div>
-                )}
+                </div>
+                
+                {/* Plan Selection */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Choose your plan (Free during beta)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {staticPlans.map((plan) => (
+                      <div
+                        key={plan.plan_code}
+                        className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                          selectedPlanCode === plan.plan_code
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        onClick={() => setSelectedPlanCode(plan.plan_code)}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-semibold text-gray-900">{plan.name}</h4>
+                          <div className="text-sm text-gray-500">
+                            <span className="line-through">${plan.price}/mo</span>
+                            <span className="ml-2 text-green-600 font-medium">FREE</span>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-3">{plan.description}</p>
+                        <ul className="text-xs text-gray-500 space-y-1">
+                          {plan.features.map((feature, idx) => (
+                            <li key={idx}>• {feature}</li>
+                          ))}
+                        </ul>
+                        {selectedPlanCode === plan.plan_code && (
+                          <div className="mt-2 text-purple-600 text-sm font-medium">
+                            ✓ Selected
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 
                 <form className="space-y-6" onSubmit={handleAccountSubmit}>
               <div className="space-y-4">
@@ -360,17 +379,17 @@ function RegisterContent() {
                   <div>
                     <button
                       type="submit"
-                      disabled={loading || billingLoading}
+                      disabled={loading}
                       className="btn-primary w-full flex justify-center py-3 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {loading || billingLoading ? (
+                      {loading ? (
                         <>
                           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                          Loading...
+                          Creating Account...
                         </>
                       ) : (
                         <>
-                          Continue to Payment
+                          Start Beta Trial (Free)
                           <ArrowRight className="ml-2 h-5 w-5" />
                         </>
                       )}
@@ -389,43 +408,6 @@ function RegisterContent() {
               </div>
             )}
             
-            {/* Payment Method Form */}
-            {currentStep === 'payment' && (
-              <div className="space-y-6">
-                {/* Show selected plan summary */}
-                {selectedPlan && (
-                  <div className="mb-6">
-                    <PlanSelection
-                      selectedPlanCode={selectedPlanCode}
-                      plan={selectedPlan}
-                      promotion={validation}
-                      billingCycle={billingCycle}
-                      isLoading={false}
-                    />
-                  </div>
-                )}
-                
-                <Elements stripe={stripePromise}>
-                  <PaymentMethodForm
-                    onPaymentMethodCreated={handlePaymentMethodCreated}
-                    onError={handlePaymentError}
-                    isLoading={loading}
-                    showBillingAddress={true}
-                  />
-                </Elements>
-                
-                <div className="flex justify-center">
-                  <button
-                    type="button"
-                    onClick={handleBackToAccount}
-                    className="text-sm text-gray-600 hover:text-gray-800 underline"
-                  >
-                    ← Back to account details
-                  </button>
-                </div>
-              </div>
-            )}
-            
             {/* Processing State */}
             {currentStep === 'processing' && (
               <div className="text-center py-12">
@@ -441,7 +423,17 @@ function RegisterContent() {
                 <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                   <CheckCircle className="w-10 h-10 text-green-600" />
                 </div>
-                <p className="text-lg font-medium text-gray-900 mb-2">Account created successfully!</p>
+                <p className="text-lg font-medium text-gray-900 mb-2">Welcome to BOBinbox Beta!</p>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 max-w-md mx-auto">
+                  <div className="text-sm text-green-800">
+                    <p className="font-medium">Your beta access includes:</p>
+                    <ul className="mt-2 space-y-1 text-xs">
+                      <li>• 90 days free access to all {selectedPlan?.name || 'selected'} features</li>
+                      <li>• No payment required during beta period</li>
+                      <li>• Full platform access and support</li>
+                    </ul>
+                  </div>
+                </div>
                 <p className="text-sm text-gray-600">Redirecting to your dashboard...</p>
               </div>
             )}

@@ -6,13 +6,13 @@ import { Providers } from './providers'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Mailsender - B2B Email Marketing Automation Platform',
-  description: 'Scale your B2B email marketing with intelligent automation, professional account management, and superior deliverability',
+  title: 'BOBinbox - B2B Email Marketing Automation Platform',
+  description: 'Scale your B2B email marketing with BOBinbox - intelligent automation, professional account management, and superior deliverability',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Mailsender',
+    title: 'BOBinbox',
   },
   other: {
     'mobile-web-app-capable': 'yes',
@@ -37,9 +37,9 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/icon-192.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/icon-192.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/bobinbox-logo.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/bobinbox-logo.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/bobinbox-logo.png" />
         <style dangerouslySetInnerHTML={{
           __html: `
             /* Ensure gradient text works */

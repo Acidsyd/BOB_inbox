@@ -4,32 +4,105 @@ import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth/context'
 
+// Enhanced interface for API responses
 interface EmailAccountResponse {
   id: string
   email: string
   provider: string
-  settings: any
+  status: string
   health_score: number
-  warmup_status: string
   daily_limit: number
-  current_sent_today: number
-  last_sent_at: string | null
+  hourly_limit: number
+  emails_sent_today: number
+  sentToday: number
+  dailyLimit: number
+  health: number
+  warmup_status: string
+  warmupProgress: number
+  warmupDaysRemaining: number
+  reputation: string
+  availability_status: string
+  daily_remaining: number
+  hourly_remaining: number
+  rotation_priority: number
+  rotation_weight: number
+  last_activity: string | null
+  settings: any
   created_at: string
   updated_at: string
+  display_name: string
 }
 
 export interface EmailAccount {
   id: string
   email: string
-  provider: 'gmail' | 'outlook' | 'smtp'
+  provider: 'gmail' | 'outlook' | 'smtp' | 'gmail-oauth2' | 'outlook-oauth2'
   status: 'active' | 'warming' | 'paused' | 'error'
   health: number
+  health_score: number
   dailyLimit: number
+  daily_limit: number
+  hourly_limit: number
   sentToday: number
+  emails_sent_today: number
   warmupProgress: number
   warmupDaysRemaining: number
+  reputation: 'excellent' | 'good' | 'fair' | 'poor'
+  availability_status: 'available' | 'daily_limit_reached' | 'hourly_limit_reached' | 'inactive'
+  daily_remaining: number
+  hourly_remaining: number
+  rotation_priority: number
+  rotation_weight: number
   lastActivity: string
   createdAt: string
+  warmup_status: 'pending' | 'in_progress' | 'completed' | 'active' | 'warming'
+  display_name: string
+}
+
+// Usage statistics interface
+export interface AccountUsageStats {
+  currentUsage: {
+    daily_sent: number
+    hourly_sent: number
+    daily_remaining: number
+    hourly_remaining: number
+    availability_status: string
+  }
+  historicalUsage: Array<{
+    date: string
+    emails_sent: number
+    delivery_rate: number
+    bounce_rate: number
+    health_score_snapshot: number
+  }>
+  aggregatedStats: {
+    totalEmailsSent: number
+    avgDailyEmails: number
+    avgDeliveryRate: number
+    avgBounceRate: number
+    daysAnalyzed: number
+    healthTrend: 'improving' | 'declining' | 'stable'
+  }
+}
+
+// Account settings interface
+export interface AccountSettings {
+  daily_limit?: number
+  hourly_limit?: number
+  rotation_priority?: number
+  rotation_weight?: number
+  status?: 'active' | 'paused' | 'warming' | 'error'
+}
+
+// Rotation preview interface
+export interface RotationPreview {
+  position: number
+  email: string
+  dailyRemaining: number
+  hourlyRemaining: number
+  healthScore: number
+  priority: number
+  weight: number
 }
 
 interface UseEmailAccountsReturn {
@@ -38,50 +111,42 @@ interface UseEmailAccountsReturn {
   error: string | null
   refetch: () => Promise<void>
   updateAccountStatus: (accountId: string, status: 'active' | 'paused') => Promise<void>
+  updateAccountSettings: (accountId: string, settings: AccountSettings) => Promise<boolean>
+  getAccountUsageStats: (accountId: string, days?: number) => Promise<AccountUsageStats>
+  resetAccountUsage: (accountId: string, resetType?: 'daily' | 'hourly' | 'both') => Promise<boolean>
+  getRotationPreview: (strategy?: string) => Promise<RotationPreview[]>
+  bulkUpdateLimits: (updates: Array<{ id: string } & AccountSettings>) => Promise<any>
   isUpdating: boolean
 }
 
 function mapApiResponseToUI(row: EmailAccountResponse): EmailAccount {
-  // Calculate warmup progress and days remaining based on warmup_status and created_at
-  const createdDate = new Date(row.created_at)
-  const today = new Date()
-  const daysSinceCreation = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
-  const warmupDays = 30 // Typical warmup period
+  // Use the enhanced data from the API
+  const status = (row.status || row.warmup_status) as 'active' | 'warming' | 'paused' | 'error'
   
-  let status: 'active' | 'warming' | 'paused' | 'error'
-  let warmupProgress = 0
-  let warmupDaysRemaining = 0
-  
-  // Determine status based on warmup_status and health_score
-  if (row.warmup_status === 'completed' || daysSinceCreation >= warmupDays) {
-    status = row.health_score >= 70 ? 'active' : 'error'
-    warmupProgress = 100
-  } else if (row.warmup_status === 'paused') {
-    status = 'paused'
-    warmupProgress = (daysSinceCreation / warmupDays) * 100
-    warmupDaysRemaining = Math.max(0, warmupDays - daysSinceCreation)
-  } else if (row.warmup_status === 'error') {
-    status = 'error'
-    warmupProgress = (daysSinceCreation / warmupDays) * 100
-    warmupDaysRemaining = Math.max(0, warmupDays - daysSinceCreation)
-  } else {
-    status = 'warming'
-    warmupProgress = (daysSinceCreation / warmupDays) * 100
-    warmupDaysRemaining = Math.max(0, warmupDays - daysSinceCreation)
-  }
-
   return {
     id: row.id,
     email: row.email,
-    provider: row.provider as 'gmail' | 'outlook' | 'smtp',
+    provider: row.provider as 'gmail' | 'outlook' | 'smtp' | 'gmail-oauth2' | 'outlook-oauth2',
     status,
-    health: row.health_score,
-    dailyLimit: row.daily_limit,
-    sentToday: row.current_sent_today,
-    warmupProgress: Math.min(100, Math.max(0, warmupProgress)),
-    warmupDaysRemaining,
-    lastActivity: row.last_sent_at || row.updated_at,
-    createdAt: row.created_at
+    health: row.health || row.health_score,
+    health_score: row.health_score,
+    dailyLimit: row.dailyLimit || row.daily_limit,
+    daily_limit: row.daily_limit,
+    hourly_limit: row.hourly_limit || 5,
+    sentToday: row.sentToday || row.emails_sent_today,
+    emails_sent_today: row.emails_sent_today || 0,
+    warmupProgress: row.warmupProgress || 0,
+    warmupDaysRemaining: row.warmupDaysRemaining || 0,
+    warmup_status: status === 'warming' ? 'warming' : (row.warmup_status as any) || 'active',
+    reputation: (row.reputation as any) || 'good',
+    availability_status: row.availability_status || 'available',
+    daily_remaining: row.daily_remaining ?? (row.daily_limit - (row.emails_sent_today || 0)),
+    hourly_remaining: row.hourly_remaining ?? (row.hourly_limit || 5),
+    rotation_priority: row.rotation_priority || 1,
+    rotation_weight: row.rotation_weight || 1.0,
+    lastActivity: row.last_activity || row.updated_at,
+    createdAt: row.created_at,
+    display_name: row.display_name || row.email
   }
 }
 
@@ -139,11 +204,7 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
 
     setIsUpdating(true)
     try {
-      const warmupStatus = status === 'paused' ? 'paused' : 'active'
-      
-      await api.post(`/email-accounts/${accountId}/warmup`, {
-        warmup_status: warmupStatus
-      })
+      await api.put(`/email-accounts/${accountId}/settings`, { status })
 
       // Optimistic update
       setAccounts(prev => prev.map(account => 
@@ -160,6 +221,141 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
     }
   }, [user?.organizationId, isAuthenticated])
 
+  const updateAccountSettings = useCallback(async (
+    accountId: string, 
+    settings: AccountSettings
+  ): Promise<boolean> => {
+    if (!isAuthenticated || !user?.organizationId) {
+      console.log('📊 useEmailAccounts: Cannot update settings - not authenticated')
+      return false
+    }
+
+    setIsUpdating(true)
+    try {
+      const response = await api.put(`/email-accounts/${accountId}/settings`, settings)
+      
+      if (response.data.success) {
+        // Refresh accounts to get updated data
+        await fetchAccounts()
+        return true
+      } else {
+        throw new Error('Failed to update account settings')
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to update account settings'
+      setError(errorMessage)
+      console.error('❌ useEmailAccounts: Error updating account settings:', err)
+      return false
+    } finally {
+      setIsUpdating(false)
+    }
+  }, [user?.organizationId, isAuthenticated, fetchAccounts])
+
+  const getAccountUsageStats = useCallback(async (
+    accountId: string, 
+    days: number = 30
+  ): Promise<AccountUsageStats> => {
+    if (!isAuthenticated || !user?.organizationId) {
+      throw new Error('Not authenticated')
+    }
+
+    try {
+      const response = await api.get(`/email-accounts/${accountId}/usage-stats?days=${days}`)
+      
+      if (response.data.success) {
+        return response.data.data
+      } else {
+        throw new Error('Failed to fetch usage statistics')
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to fetch usage statistics'
+      console.error('❌ useEmailAccounts: Error fetching usage statistics:', err)
+      throw new Error(errorMessage)
+    }
+  }, [user?.organizationId, isAuthenticated])
+
+  const resetAccountUsage = useCallback(async (
+    accountId: string, 
+    resetType: 'daily' | 'hourly' | 'both' = 'both'
+  ): Promise<boolean> => {
+    if (!isAuthenticated || !user?.organizationId) {
+      console.log('📊 useEmailAccounts: Cannot reset usage - not authenticated')
+      return false
+    }
+
+    setIsUpdating(true)
+    try {
+      const response = await api.post(`/email-accounts/${accountId}/reset-usage`, { 
+        reset_type: resetType 
+      })
+      
+      if (response.data.success) {
+        // Refresh accounts to get updated counters
+        await fetchAccounts()
+        return true
+      } else {
+        throw new Error('Failed to reset usage counters')
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to reset usage counters'
+      setError(errorMessage)
+      console.error('❌ useEmailAccounts: Error resetting usage counters:', err)
+      return false
+    } finally {
+      setIsUpdating(false)
+    }
+  }, [user?.organizationId, isAuthenticated, fetchAccounts])
+
+  const getRotationPreview = useCallback(async (
+    strategy: string = 'hybrid'
+  ): Promise<RotationPreview[]> => {
+    if (!isAuthenticated || !user?.organizationId) {
+      throw new Error('Not authenticated')
+    }
+
+    try {
+      const response = await api.get(`/email-accounts/rotation-preview?strategy=${strategy}`)
+      
+      if (response.data.success) {
+        return response.data.rotation_order
+      } else {
+        throw new Error('Failed to fetch rotation preview')
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to fetch rotation preview'
+      console.error('❌ useEmailAccounts: Error fetching rotation preview:', err)
+      throw new Error(errorMessage)
+    }
+  }, [user?.organizationId, isAuthenticated])
+
+  const bulkUpdateLimits = useCallback(async (
+    updates: Array<{ id: string } & AccountSettings>
+  ): Promise<any> => {
+    if (!isAuthenticated || !user?.organizationId) {
+      throw new Error('Not authenticated')
+    }
+
+    setIsUpdating(true)
+    try {
+      const response = await api.put('/email-accounts/bulk-update-limits', { updates })
+      
+      if (response.data.success || response.data.summary?.successful > 0) {
+        // Refresh accounts to get updated data
+        await fetchAccounts()
+        return response.data
+      } else {
+        throw new Error('Failed to update account limits')
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to bulk update limits'
+      setError(errorMessage)
+      console.error('❌ useEmailAccounts: Error bulk updating limits:', err)
+      throw new Error(errorMessage)
+    } finally {
+      setIsUpdating(false)
+    }
+  }, [user?.organizationId, isAuthenticated, fetchAccounts])
+
   // Note: Real-time updates removed - using API polling instead
 
   // Initial fetch
@@ -173,6 +369,11 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
     error,
     refetch,
     updateAccountStatus,
+    updateAccountSettings,
+    getAccountUsageStats,
+    resetAccountUsage,
+    getRotationPreview,
+    bulkUpdateLimits,
     isUpdating
   }
 }

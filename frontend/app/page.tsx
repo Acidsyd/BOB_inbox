@@ -7,9 +7,10 @@ export default function LandingPage() {
       {/* Navigation */}
       <nav className="fixed top-0 w-full bg-white/80 backdrop-blur-md z-50 border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <span className="text-2xl font-bold gradient-text">OPhir</span>
+          <div className="flex justify-between items-center h-20">
+            <div className="flex items-center space-x-4">
+              <img src="/bobinbox-icon.png" alt="BOBinbox" className="w-12 h-12 rounded-xl shadow-md" />
+              <span className="text-3xl font-bold gradient-text">BOBinbox</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
               <Link href="/features" className="text-gray-600 hover:text-gray-900 transition">Features</Link>
@@ -212,7 +213,7 @@ export default function LandingPage() {
                 ))}
               </div>
               <p className="text-gray-700 mb-4">
-                "OPhir transformed our outreach. We went from 20 meetings/month to 150+ in just 3 months."
+                "BOBinbox transformed our outreach. We went from 20 meetings/month to 150+ in just 3 months."
               </p>
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-purple-100 rounded-full mr-3"></div>
@@ -269,7 +270,7 @@ export default function LandingPage() {
             Ready to <span className="gradient-text">10x Your Outreach?</span>
           </h2>
           <p className="text-xl text-gray-600 mb-8">
-            Join thousands of companies booking more meetings with OPhir
+            Join thousands of companies booking more meetings with BOBinbox
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/register">
@@ -293,7 +294,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid md:grid-cols-5 gap-8 mb-8">
             <div className="col-span-2">
-              <div className="text-2xl font-bold mb-4">OPhir</div>
+              <div className="text-2xl font-bold mb-4">BOBinbox</div>
               <p className="text-gray-400 mb-4">
                 The most powerful B2B email marketing automation platform for modern sales teams.
               </p>
@@ -339,7 +340,7 @@ export default function LandingPage() {
           </div>
           <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center">
             <p className="text-gray-400 text-sm">
-              © 2025 OPhir. All rights reserved.
+              © 2025 BOBinbox. All rights reserved.
             </p>
             <div className="flex space-x-6 mt-4 md:mt-0">
               <Link href="/terms" className="text-gray-400 text-sm hover:text-white transition">Terms</Link>

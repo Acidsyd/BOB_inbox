@@ -1,7 +1,7 @@
 {
-  "name": "mailsender-test-suite",
+  "name": "bobinbox-test-suite",
   "version": "1.0.0",
-  "description": "Comprehensive test suite for B2B email marketing automation platform",
+  "description": "Comprehensive test suite for BOBinbox B2B email marketing automation platform",
   "type": "module",
   "scripts": {
     "start": "node backend/src/index.js",
@@ -34,9 +34,10 @@
     "db:seed": "cd backend && npm run db:seed",
     "db:seed:performance": "cd backend && npm run db:seed:performance",
     "db:reset": "cd backend && npm run db:reset",
-    "worker": "cd backend && npm run worker",
-    "worker:dev": "cd backend && npm run worker:dev",
-    "worker:cluster": "cd backend && npm run worker:cluster",
+    "cron": "cd backend && npm run cron",
+    "cron:dev": "cd backend && npm run cron:dev",
+    "reply-monitor": "cd backend && npm run reply-monitor",
+    "reply-monitor:dev": "cd backend && npm run reply-monitor:dev",
     "setup": "npm install && cd backend && npm install && cd ../frontend && npm install",
     "clean": "npm run clean:coverage && npm run clean:reports && npm run clean:build",
     "clean:coverage": "rm -rf coverage coverage-combined",
@@ -51,7 +52,13 @@
     "security:fix": "npm audit fix && cd backend && npm audit fix && cd ../frontend && npm audit fix",
     "validate": "npm run typecheck && npm run lint && npm run test",
     "precommit": "npm run lint:fix && npm run test:unit",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "rate-limit:test": "node test-rate-limiting-system.js",
+    "rate-limit:check": "node scripts/check-system-status.js",
+    "rate-limit:monitor": "node scripts/monitor-rate-limiting.js",
+    "rate-limit:test-live": "node scripts/test-live-system.js",
+    "reset:daily": "node backend/src/cron/dailyReset.js",
+    "cron:setup": "node backend/src/scripts/setup-daily-reset-cron.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
@@ -70,7 +77,9 @@
     "supertest": "^7.0.0"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.56.0"
+    "@supabase/supabase-js": "^2.57.0",
+    "dotenv": "^17.2.2",
+    "useragent": "^2.3.0"
   },
   "engines": {
     "node": ">=20.0.0",
@@ -106,14 +115,14 @@
     "billing-system",
     "stripe-integration"
   ],
-  "author": "Mailsender Team",
+  "author": "BOBinbox Team",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/mailsender.git"
+    "url": "git+https://github.com/yourusername/bobinbox.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/mailsender/issues"
+    "url": "https://github.com/yourusername/bobinbox/issues"
   },
-  "homepage": "https://github.com/yourusername/mailsender#readme"
+  "homepage": "https://github.com/yourusername/bobinbox#readme"
 }

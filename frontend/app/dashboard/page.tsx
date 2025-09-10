@@ -1,49 +1,91 @@
 'use client'
 
+import { useState } from 'react'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import AppLayout from '@/components/layout/AppLayout'
 import { useAuth } from '@/lib/auth/context'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Mail, Users, TrendingUp, Activity, Plus, Target, Inbox } from 'lucide-react'
+import { Mail, Users, TrendingUp, Activity, Inbox } from 'lucide-react'
 import Link from 'next/link'
 import { DashboardErrorBoundary } from '@/components/ui/error-boundary'
-import { DashboardSkeleton } from '@/components/ui/skeletons'
 import { useOffline } from '@/hooks/useOffline'
-// Removed keyboard shortcuts for simplification
 
-interface DashboardStats {
+// Import new dashboard components
+import PeriodSelector from '@/components/dashboard/PeriodSelector'
+import MetricCard from '@/components/dashboard/MetricCard'
+import LabelChart from '@/components/dashboard/LabelChart'
+import ActivityChart from '@/components/dashboard/ActivityChart'
+import CampaignTable from '@/components/dashboard/CampaignTable'
+import LatestActivity from '@/components/dashboard/LatestActivity'
+
+interface DashboardData {
+  period: { type: string; startDate: string; endDate: string }
+  metrics: {
+    emailsSent: number
+    replyRate: number
+    activeCampaigns: number
+    totalLeads: number
+    inboxActivity: number
+  }
+  labels: Record<string, { count: number; color: string }>
+  dailyActivity: Array<{ date: string; sent: number; replies: number }>
   campaigns: { total: number; active: number }
-  leads: { total: number; active: number; replied: number; bounced: number }
-  emails: { sent: number; opened: number; clicked: number; replied: number; bounced: number }
+  leads: { total: number; active: number }
   accounts: { total: number; avgHealth: number }
-  rates: { openRate: string; clickRate: string; replyRate: string; bounceRate: string }
+  rates: { replyRate: string; bounceRate: string }
 }
 
 function DashboardContent() {
   const { user } = useAuth()
   const { isOnline, queuedActions } = useOffline()
-  // Keyboard shortcuts removed for simplification
+  const [selectedPeriod, setSelectedPeriod] = useState('month')
+  
+  // Parse custom period for API call
+  const getPeriodParams = (period: string) => {
+    if (period.startsWith('custom:')) {
+      const [, startDate, endDate] = period.split(':')
+      return { period: 'custom', startDate, endDate }
+    }
+    return { period }
+  }
 
-  const { data: stats, isLoading, error, refetch } = useQuery<DashboardStats>({
-    queryKey: ['dashboard-stats'],
-    queryFn: () => api.get('/analytics/dashboard').then(res => res.data),
+  const { data, isLoading, error, refetch } = useQuery<DashboardData>({
+    queryKey: ['dashboard-analytics', selectedPeriod],
+    queryFn: () => {
+      const params = getPeriodParams(selectedPeriod)
+      const query = new URLSearchParams(params).toString()
+      return api.get(`/analytics/dashboard?${query}`).then(res => res.data)
+    },
     refetchInterval: 30000, // Refresh every 30 seconds
     retry: (failureCount, error) => {
-      // Don't retry if offline
       if (!isOnline) return false
       return failureCount < 3
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 2 * 60 * 1000, // 2 minutes
   })
 
-  if (isLoading) {
-    return <DashboardSkeleton />
+  if (isLoading && !data) {
+    return (
+      <div className="p-6">
+        <div className="space-y-6">
+          <div className="h-16 bg-gray-200 rounded-lg animate-pulse" />
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="h-32 bg-gray-200 rounded-lg animate-pulse" />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="h-96 bg-gray-200 rounded-lg animate-pulse" />
+            <div className="h-96 bg-gray-200 rounded-lg animate-pulse" />
+          </div>
+        </div>
+      </div>
+    )
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="p-6">
         <div className="text-center py-12">
@@ -62,11 +104,22 @@ function DashboardContent() {
     )
   }
 
+  const stats = data || {
+    period: { type: 'month', startDate: '', endDate: '' },
+    metrics: { emailsSent: 0, replyRate: 0, activeCampaigns: 0, totalLeads: 0, inboxActivity: 0 },
+    labels: {},
+    dailyActivity: [],
+    campaigns: { total: 0, active: 0 },
+    leads: { total: 0, active: 0 },
+    accounts: { total: 0, avgHealth: 0 },
+    rates: { replyRate: '0%', bounceRate: '0%' }
+  }
+
   return (
-    <div className="p-6 animate-fade-in">
+    <div className="p-6 space-y-6 animate-fade-in">
       {/* Offline indicator */}
       {!isOnline && (
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <div className="flex items-center">
             <div className="h-2 w-2 bg-yellow-500 rounded-full mr-2" />
             <p className="text-sm text-yellow-800">
@@ -77,203 +130,88 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* Page Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">Welcome back, {user?.firstName}! Here's what's happening with your campaigns.</p>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="mb-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Link href="/campaigns/new">
-            <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer">
-              <div className="flex items-center">
-                <Target className="h-8 w-8 text-purple-600" />
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-gray-900">New Campaign</p>
-                  <p className="text-xs text-gray-500">Create outreach campaign</p>
-                </div>
-              </div>
-            </div>
-          </Link>
-          
-          <Link href="/leads/import">
-            <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer">
-              <div className="flex items-center">
-                <Users className="h-8 w-8 text-blue-600" />
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-gray-900">Import Leads</p>
-                  <p className="text-xs text-gray-500">Upload prospect list</p>
-                </div>
-              </div>
-            </div>
-          </Link>
-          
-          <Link href="/settings/email-accounts">
-            <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer">
-              <div className="flex items-center">
-                <Mail className="h-8 w-8 text-green-600" />
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-gray-900">Email Accounts</p>
-                  <p className="text-xs text-gray-500">Manage sending accounts</p>
-                </div>
-              </div>
-            </div>
-          </Link>
-          
-          <Link href="/inbox">
-            <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer">
-              <div className="flex items-center">
-                <Inbox className="h-8 w-8 text-orange-600" />
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-gray-900">Inbox</p>
-                  <p className="text-xs text-gray-500">View replies</p>
-                </div>
-              </div>
-            </div>
-          </Link>
+      {/* Header with Period Selector */}
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600">Welcome back, {user?.firstName}! Here's your performance overview.</p>
         </div>
+        
+        <PeriodSelector 
+          selectedPeriod={selectedPeriod}
+          onPeriodChange={setSelectedPeriod}
+        />
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Campaigns</CardTitle>
-            <Mail className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.campaigns.total || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats?.campaigns.active || 0} active
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.leads.total || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats?.leads.active || 0} active
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Emails Sent</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.emails.sent || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats?.rates.openRate || 0}% open rate
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Email Accounts</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.accounts.total || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats?.accounts.avgHealth || 0}% avg health
-            </p>
-          </CardContent>
-        </Card>
+      {/* Main Metrics Row */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <MetricCard
+          title="Emails Sent"
+          value={stats.metrics.emailsSent}
+          subtitle={`${stats.period.type} total`}
+          icon={<Mail className="h-4 w-4" />}
+          onClick={() => {}}
+        />
+        <MetricCard
+          title="Reply Rate"
+          value={`${stats.metrics.replyRate}%`}
+          subtitle="from sent emails"
+          icon={<TrendingUp className="h-4 w-4" />}
+          trend={{
+            direction: stats.metrics.replyRate > 5 ? 'up' : stats.metrics.replyRate < 2 ? 'down' : 'neutral',
+            value: stats.rates.replyRate
+          }}
+        />
+        <MetricCard
+          title="Active Campaigns"
+          value={stats.metrics.activeCampaigns}
+          subtitle={`of ${stats.campaigns.total} total`}
+          icon={<Activity className="h-4 w-4" />}
+          onClick={() => window.location.href = '/campaigns'}
+        />
+        <MetricCard
+          title="Total Leads"
+          value={stats.metrics.totalLeads}
+          subtitle="in database"
+          icon={<Users className="h-4 w-4" />}
+          onClick={() => window.location.href = '/leads'}
+        />
+        <MetricCard
+          title="Inbox Activity"
+          value={stats.metrics.inboxActivity}
+          subtitle="unread replies"
+          icon={<Inbox className="h-4 w-4" />}
+          onClick={() => window.location.href = '/inbox'}
+        />
       </div>
 
-      {/* Performance Metrics */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Email Performance</CardTitle>
-            <CardDescription>
-              Your email engagement metrics
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Open Rate</span>
-                <span className="text-sm text-green-600">{stats?.rates.openRate || 0}%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Click Rate</span>
-                <span className="text-sm text-blue-600">{stats?.rates.clickRate || 0}%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Reply Rate</span>
-                <span className="text-sm text-purple-600">{stats?.rates.replyRate || 0}%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Bounce Rate</span>
-                <span className="text-sm text-red-600">{stats?.rates.bounceRate || 0}%</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>
-              Common tasks to get you started
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <Link href="/campaigns/new">
-                <Button variant="outline" className="w-full justify-start">
-                  <Mail className="h-4 w-4 mr-2" />
-                  Create New Campaign
-                </Button>
-              </Link>
-              <Link href="/leads/import">
-                <Button variant="outline" className="w-full justify-start">
-                  <Users className="h-4 w-4 mr-2" />
-                  Import Leads
-                </Button>
-              </Link>
-              <Link href="/settings/email-accounts">
-                <Button variant="outline" className="w-full justify-start">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Email Account
-                </Button>
-              </Link>
-              <Link href="/analytics">
-                <Button variant="outline" className="w-full justify-start">
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  View Analytics
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <LabelChart 
+          labels={stats.labels}
+          title="Conversation Labels"
+        />
+        
+        <ActivityChart 
+          data={stats.dailyActivity}
+          title="Email Activity"
+          period={stats.period.type}
+        />
       </div>
 
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>
-            Latest updates from your campaigns
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-gray-500">
-            No recent activity to display
-          </div>
-        </CardContent>
-      </Card>
+      {/* Bottom Section - Campaigns and Latest Activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <CampaignTable 
+          title="Recent Campaigns"
+          limit={5}
+          showActions={true}
+        />
+        
+        <LatestActivity 
+          title="Latest Activity"
+          limit={8}
+        />
+      </div>
     </div>
   )
 }

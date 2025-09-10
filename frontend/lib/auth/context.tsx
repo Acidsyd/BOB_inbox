@@ -28,7 +28,8 @@ interface RegisterData {
   password: string
   firstName: string
   lastName: string
-  organizationName?: string
+  organizationName: string
+  planType?: string
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -43,14 +44,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initAuth = async () => {
       const token = localStorage.getItem('token')
+      console.log('🔐 === AUTH CONTEXT DEBUG ===')
+      console.log('  - Token exists:', !!token)
+      console.log('  - Token preview:', token ? token.substring(0, 50) + '...' : 'null')
+      
       if (token) {
         try {
+          console.log('  - Calling /auth/me...')
           const response = await api.get('/auth/me')
-          const userData = response.data
+          console.log('  - /auth/me response:', response.data)
+          const userData = response.data.user
+          console.log('  - User data extracted:', userData)
           setUser(userData)
           setIsAuthenticated(true)
-          console.log('🔐 Auth initialized with user:', userData.email, 'org:', userData.organizationId)
+          console.log('🔐 ✅ Auth initialized with user:', userData?.email, 'org:', userData?.organizationId)
         } catch (error) {
+          console.error('🔑 ❌ Auth/me failed:', error)
           console.warn('🔑 Token invalid, clearing auth state')
           localStorage.removeItem('token')
           localStorage.removeItem('refreshToken')

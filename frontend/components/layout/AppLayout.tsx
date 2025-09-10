@@ -2,13 +2,15 @@
 
 import { useAuth } from '@/lib/auth/context'
 import { Menu, X, Bell, Search, ChevronRight, Home } from 'lucide-react'
-import { useState, useMemo } from 'react'
-import { usePathname } from 'next/navigation'
+import { useState, useMemo, useEffect } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
 import Link from 'next/link'
 
 interface AppLayoutProps {
   children: React.ReactNode
+  hideHeader?: boolean
+  hideFooter?: boolean
 }
 
 interface BreadcrumbItem {
@@ -63,11 +65,11 @@ const getBreadcrumbs = (pathname: string): BreadcrumbItem[] => {
   return breadcrumbs
 }
 
-export default function AppLayout({ children }: AppLayoutProps) {
+export default function AppLayout({ children, hideHeader = false, hideFooter = false }: AppLayoutProps) {
   const { user } = useAuth()
   const pathname = usePathname()
+  const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  
   const breadcrumbs = useMemo(() => getBreadcrumbs(pathname), [pathname])
 
   return (
@@ -93,85 +95,73 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </nav>
       </div>
 
-      {/* Desktop sidebar */}
-      <Sidebar />
+      {/* Desktop sidebar - hide for full screen layouts */}
+      {!hideHeader && <Sidebar />}
 
       {/* Main content area */}
-      <div className="flex flex-col w-0 flex-1 overflow-hidden">
-        {/* Top header */}
-        <header className="bg-white shadow-sm border-b border-gray-200 flex items-center justify-between px-6 py-4 md:px-8">
-          <div className="flex items-center">
-            {/* Mobile menu button */}
-            <button
-              className="md:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 mr-2"
-              onClick={() => setSidebarOpen(true)}
-            >
-              <Menu className="h-6 w-6" />
-            </button>
+      <div className="flex flex-col w-0 flex-1 min-h-0">
+        {/* Top header - conditionally rendered */}
+        {!hideHeader && (
+          <header className="bg-white shadow-sm border-b border-gray-200 flex items-center justify-between px-6 py-4 md:px-8">
+            <div className="flex items-center">
+              {/* Mobile menu button */}
+              <button
+                className="md:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 mr-2"
+                onClick={() => setSidebarOpen(true)}
+              >
+                <Menu className="h-6 w-6" />
+              </button>
 
-            {/* Breadcrumbs */}
-            <div className="hidden sm:flex items-center">
-              <nav className="flex" aria-label="Breadcrumb">
-                <ol className="flex items-center space-x-2">
-                  {breadcrumbs.map((breadcrumb, index) => (
-                    <li key={index} className="flex items-center">
-                      {index > 0 && (
-                        <ChevronRight className="flex-shrink-0 h-4 w-4 text-gray-400 mx-2" />
-                      )}
-                      {breadcrumb.href ? (
-                        <Link
-                          href={breadcrumb.href}
-                          className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
-                        >
-                          {breadcrumb.label}
-                        </Link>
-                      ) : (
-                        <span className="text-sm font-medium text-gray-900">
-                          {breadcrumb.label}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ol>
-              </nav>
+              {/* Breadcrumbs */}
+              <div className="hidden sm:flex items-center">
+                <nav className="flex" aria-label="Breadcrumb">
+                  <ol className="flex items-center space-x-2">
+                    {breadcrumbs.map((breadcrumb, index) => (
+                      <li key={index} className="flex items-center">
+                        {index > 0 && (
+                          <ChevronRight className="flex-shrink-0 h-4 w-4 text-gray-400 mx-2" />
+                        )}
+                        {breadcrumb.href ? (
+                          <Link
+                            href={breadcrumb.href}
+                            className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+                          >
+                            {breadcrumb.label}
+                          </Link>
+                        ) : (
+                          <span className="text-sm font-medium text-gray-900">
+                            {breadcrumb.label}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </nav>
+              </div>
             </div>
-            
-            {/* Search bar */}
-            <div className="hidden lg:flex items-center ml-6">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-5 w-5 text-gray-400" />
+
+            {/* Right side actions */}
+            <div className="flex items-center space-x-4">
+              {/* Notifications */}
+              <button className="p-2 text-gray-400 hover:text-gray-500">
+                <Bell className="h-6 w-6" />
+              </button>
+
+              {/* User profile */}
+              <div className="flex items-center space-x-3">
+                <div className="hidden sm:flex sm:flex-col sm:items-end">
+                  <p className="text-sm font-medium text-gray-900">{user?.firstName} {user?.lastName}</p>
+                  <p className="text-xs text-gray-500">{user?.email}</p>
                 </div>
-                <input
-                  type="text"
-                  placeholder="Search leads, campaigns..."
-                  className="block w-80 pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm transition-all"
-                />
+                <div className="h-8 w-8 bg-purple-600 rounded-full flex items-center justify-center">
+                  <span className="text-sm font-medium text-white">
+                    {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-
-          {/* Right side actions */}
-          <div className="flex items-center space-x-4">
-            {/* Notifications */}
-            <button className="p-2 text-gray-400 hover:text-gray-500">
-              <Bell className="h-6 w-6" />
-            </button>
-
-            {/* User profile */}
-            <div className="flex items-center space-x-3">
-              <div className="hidden sm:flex sm:flex-col sm:items-end">
-                <p className="text-sm font-medium text-gray-900">{user?.firstName} {user?.lastName}</p>
-                <p className="text-xs text-gray-500">{user?.email}</p>
-              </div>
-              <div className="h-8 w-8 bg-purple-600 rounded-full flex items-center justify-center">
-                <span className="text-sm font-medium text-white">
-                  {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </header>
+          </header>
+        )}
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto focus:outline-none">

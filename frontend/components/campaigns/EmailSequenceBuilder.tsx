@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
 import { 
   Plus, 
   Trash2, 
@@ -14,8 +15,25 @@ import {
   Mail, 
   Clock,
   Copy,
-  AlertCircle
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react'
+
+// Dynamic import for RichTextEditor to avoid SSR issues
+const RichTextEditor = dynamic(
+  () => import('@/components/ui/simple-rich-text-editor').then(mod => ({ default: mod.SimpleRichTextEditor })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="min-h-[200px] border border-gray-300 rounded-md p-4 bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-2"></div>
+          <p className="text-sm text-gray-600">Loading editor...</p>
+        </div>
+      </div>
+    )
+  }
+)
 
 interface EmailSequence {
   id: number
@@ -23,6 +41,7 @@ interface EmailSequence {
   content: string
   delay: number
   useSameSubject?: boolean
+  replyToSameThread?: boolean
 }
 
 interface CampaignData {
@@ -53,6 +72,26 @@ interface EmailSequenceBuilderProps {
   campaignData: CampaignData
   updateCampaignData: (data: Partial<CampaignData>) => void
 }
+
+// Common email variables for personalization
+const emailVariables = [
+  { key: 'first_name', label: 'First Name', value: 'John' },
+  { key: 'last_name', label: 'Last Name', value: 'Doe' },
+  { key: 'full_name', label: 'Full Name', value: 'John Doe' },
+  { key: 'email', label: 'Email', value: 'john@example.com' },
+  { key: 'company', label: 'Company', value: 'Acme Corp' },
+  { key: 'job_title', label: 'Job Title', value: 'Marketing Manager' },
+  { key: 'phone', label: 'Phone', value: '+1 (555) 123-4567' },
+  { key: 'website', label: 'Website', value: 'example.com' },
+  { key: 'linkedin_url', label: 'LinkedIn URL', value: 'linkedin.com/in/johndoe' },
+  { key: 'address', label: 'Address', value: '123 Main St' },
+  { key: 'city', label: 'City', value: 'San Francisco' },
+  { key: 'state', label: 'State', value: 'CA' },
+  { key: 'country', label: 'Country', value: 'USA' },
+  { key: 'custom_field_1', label: 'Custom Field 1', value: 'Custom Value 1' },
+  { key: 'custom_field_2', label: 'Custom Field 2', value: 'Custom Value 2' },
+  { key: 'custom_field_3', label: 'Custom Field 3', value: 'Custom Value 3' },
+]
 
 export default function EmailSequenceBuilder({ campaignData, updateCampaignData }: EmailSequenceBuilderProps) {
   const [expandedEmails, setExpandedEmails] = useState<Set<number>>(new Set([0]))
@@ -152,281 +191,204 @@ export default function EmailSequenceBuilder({ campaignData, updateCampaignData 
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Initial Email */}
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Email Sequence Builder</h3>
-        <p className="text-sm text-gray-600">
-          Create a sequence of emails to send to your leads. The first email is sent immediately, 
-          follow-ups are sent after the specified delays.
+        <Label htmlFor="emailSubject">Email Subject Line *</Label>
+        <Input
+          id="emailSubject"
+          value={campaignData.emailSubject}
+          onChange={(e) => updateCampaignData({ emailSubject: e.target.value })}
+          placeholder="e.g., {Hi|Hello|Hey} {first_name}, quick question about {company}"
+          className="mt-1"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          💡 Tip: Use spintax {'{option1|option2}'} for variations. Variables: {'{first_name}'}, {'{company}'}, {'{job_title}'}, etc.
         </p>
       </div>
 
-      {/* Email Sequence */}
-      <div className="space-y-4">
-        {allEmails.map((email, index) => {
-          const isExpanded = expandedEmails.has(email.id)
-          const isInitial = 'isInitial' in email && email.isInitial
-          
-          return (
-            <Card key={email.id} className={`transition-all ${isExpanded ? 'shadow-md' : 'shadow-sm'}`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <button
-                      onClick={() => toggleExpanded(email.id)}
-                      className="p-1 hover:bg-gray-100 rounded transition-colors"
-                    >
-                      {isExpanded ? (
-                        <ChevronDown className="h-4 w-4 text-gray-500" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4 text-gray-500" />
-                      )}
-                    </button>
-                    
-                    <div className="flex items-center space-x-2">
-                      <div className={`p-2 rounded-full ${
-                        isInitial ? 'bg-purple-100' : 'bg-blue-100'
-                      }`}>
-                        <Mail className={`h-4 w-4 ${
-                          isInitial ? 'text-purple-600' : 'text-blue-600'
-                        }`} />
-                      </div>
-                      
-                      <div>
-                        <CardTitle className="text-base">
-                          {isInitial ? 'Initial Email' : `Follow-up ${index}`}
-                        </CardTitle>
-                        <CardDescription className="flex items-center space-x-2">
-                          {!isInitial && (
-                            <>
-                              <Clock className="h-3 w-3" />
-                              <span>Send {email.delay} days after {index === 1 ? 'initial email' : `follow-up ${index - 1}`}</span>
-                            </>
-                          )}
-                          {isInitial && <span>Sent immediately when campaign starts</span>}
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </div>
+      <div>
+        <Label htmlFor="emailContent">Email Content *</Label>
+        <div className="mt-1">
+          <RichTextEditor
+            content={campaignData.emailContent}
+            onChange={(html, text) => {
+              updateCampaignData({ emailContent: html })
+            }}
+            placeholder="Hi {first_name},
 
-                  <div className="flex items-center space-x-2">
-                    {!isInitial && (
-                      <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => copyEmail(email.id)}
-                          title="Copy this email"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeSequenceEmail(email.id)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Delete this email"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-
-              {isExpanded && (
-                <CardContent className="space-y-4">
-                  {/* Delay Setting (for follow-ups only) */}
-                  {!isInitial && (
-                    <div className="grid grid-cols-2 gap-4 p-3 bg-blue-50 rounded-lg">
-                      <div>
-                        <Label htmlFor={`delay-${email.id}`}>Send after (days)</Label>
-                        <Input
-                          id={`delay-${email.id}`}
-                          type="number"
-                          value={email.delay}
-                          onChange={(e) => updateSequenceEmail(email.id, 'delay', parseInt(e.target.value) || 1)}
-                          className="mt-1"
-                          min="1"
-                          max="365"
-                        />
-                      </div>
-                      <div className="flex items-end">
-                        <div className="text-sm text-blue-700">
-                          <div className="font-medium">Scheduled for:</div>
-                          <div>
-                            Day {index === 0 ? 1 : (
-                              allEmails.slice(0, index + 1).reduce((sum, e) => sum + e.delay, 1)
-                            )} of campaign
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Subject Line */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <Label htmlFor={`subject-${email.id}`}>
-                        Email Subject Line *
-                      </Label>
-                      {!isInitial && index > 0 && (
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id={`same-subject-${email.id}`}
-                            checked={email.useSameSubject || false}
-                            onChange={(e) => {
-                              updateSequenceEmail(email.id, 'useSameSubject', e.target.checked)
-                              if (e.target.checked) {
-                                // Get the previous email's subject
-                                const prevEmail = allEmails[index - 1]
-                                updateSequenceEmail(email.id, 'subject', `Re: ${prevEmail.subject}`)
-                              }
-                            }}
-                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                          />
-                          <Label 
-                            htmlFor={`same-subject-${email.id}`}
-                            className="text-sm font-normal cursor-pointer"
-                          >
-                            Use "Re:" with previous subject
-                          </Label>
-                        </div>
-                      )}
-                    </div>
-                    <Input
-                      id={`subject-${email.id}`}
-                      value={email.subject}
-                      onChange={(e) => {
-                        if (isInitial) {
-                          updateCampaignData({ emailSubject: e.target.value })
-                        } else {
-                          updateSequenceEmail(email.id, 'subject', e.target.value)
-                          if (email.useSameSubject) {
-                            updateSequenceEmail(email.id, 'useSameSubject', false)
-                          }
-                        }
-                      }}
-                      placeholder={isInitial ? 
-                        "e.g., {Hi|Hello|Hey} {first_name}, quick question about {company}" : 
-                        "e.g., Re: {previous subject} or Following up on my {previous|last} email"}
-                      className="mt-1"
-                      disabled={!isInitial && email.useSameSubject}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      💡 Tip: Use spintax {'{option1|option2}'} for variations. Variables: {'{first_name}'}, {'{company}'}, etc.
-                    </p>
-                  </div>
-
-                  {/* Email Content */}
-                  <div>
-                    <Label htmlFor={`content-${email.id}`}>
-                      Email Content *
-                    </Label>
-                    <div className="mt-1">
-                      <Textarea
-                        id={`content-${email.id}`}
-                        value={email.content}
-                        onChange={(e) => {
-                          if (isInitial) {
-                            updateCampaignData({ emailContent: e.target.value })
-                          } else {
-                            updateSequenceEmail(email.id, 'content', e.target.value)
-                          }
-                        }}
-                        placeholder={isInitial ? 
-                          "Hi {first_name},\n\nI hope this email finds you well..." :
-                          "Hi {first_name},\n\nI wanted to follow up on my previous email..."
-                        }
-                        className="min-h-[250px] resize-y"
-                      />
-                    </div>
-                    {isInitial && (
-                      <p className="mt-2 text-sm text-gray-500">
-                        💡 Use dynamic content like {'{first_name}'}, {'{company}'}, and spintax {'{option1|option2}'} to personalize your emails.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Email Preview */}
-                  {email.subject && (
-                    <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                      <div className="text-sm font-medium text-gray-700 mb-1">Preview:</div>
-                      <div className="text-xs text-gray-600 mb-2">
-                        <strong>Subject:</strong> {email.subject}
-                      </div>
-                      <div 
-                        className="text-xs text-gray-600 max-h-20 overflow-y-auto"
-                        dangerouslySetInnerHTML={{ 
-                          __html: email.content.substring(0, 200) + (email.content.length > 200 ? '...' : '')
-                        }}
-                      />
-                    </div>
-                  )}
-                </CardContent>
-              )}
-            </Card>
-          )
-        })}
+I hope this email finds you well..."
+            minHeight="300px"
+            variables={emailVariables}
+          />
+        </div>
+        <p className="mt-2 text-sm text-gray-500">
+          💡 You can use template variables like {'{first_name}'}, {'{company}'}, {'{job_title}'}, etc. to personalize your emails.
+        </p>
       </div>
 
+      {/* Follow-up Emails */}
+      {campaignData.emailSequence.map((email, index) => (
+        <div key={email.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-sm font-medium">
+                {index + 1}
+              </div>
+              <h3 className="font-medium text-gray-900">Follow-up Email #{index + 1}</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => copyEmail(email.id)}
+                className="text-xs"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => removeSequenceEmail(email.id)}
+                className="text-red-600 hover:text-red-700 text-xs"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <Label>Delay (days after previous email)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="30"
+                value={email.delay}
+                onChange={(e) => updateSequenceEmail(email.id, 'delay', parseInt(e.target.value) || 1)}
+                className="mt-1 w-32"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <Checkbox
+                id={`reply-same-thread-${email.id}`}
+                checked={email.replyToSameThread || false}
+                onCheckedChange={(checked) => updateSequenceEmail(email.id, 'replyToSameThread', checked)}
+              />
+              <Label htmlFor={`reply-same-thread-${email.id}`} className="text-sm font-medium">
+                Reply to same conversation (continues email thread)
+              </Label>
+            </div>
+            <p className="text-xs text-gray-500">
+              ✅ Checked: Continues the same email thread with "Re:" prefix
+              <br />
+              ❌ Unchecked: Creates a new conversation (subject line required)
+            </p>
+
+            {!email.replyToSameThread && (
+              <div>
+                <Label>Subject Line *</Label>
+                <Input
+                  value={email.subject}
+                  onChange={(e) => updateSequenceEmail(email.id, 'subject', e.target.value)}
+                  placeholder="Follow-up: {first_name}, did you see my previous email?"
+                  className="mt-1"
+                  required
+                />
+              </div>
+            )}
+
+            {email.replyToSameThread && (
+              <div>
+                <Label>Subject Preview (Auto-generated)</Label>
+                <div className="mt-1 p-3 bg-gray-100 border rounded-md text-sm text-gray-700">
+                  Re: {campaignData.emailSubject || '[Initial Email Subject]'}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Subject will automatically use "Re:" prefix with the initial email subject
+                </p>
+              </div>
+            )}
+
+            <div>
+              <Label>Email Content *</Label>
+              <div className="mt-1">
+                <RichTextEditor
+                  content={email.content}
+                  onChange={(html, text) => {
+                    updateSequenceEmail(email.id, 'content', html)
+                  }}
+                  placeholder="Hi {first_name},
+
+I wanted to follow up on my previous email..."
+                  minHeight="250px"
+                  variables={emailVariables}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+
       {/* Add Email Button */}
-      <div className="flex justify-center">
+      <div className="flex justify-center mt-6">
         <Button
           variant="outline"
           onClick={addSequenceEmail}
           disabled={campaignData.emailSequence.length >= 10}
-          className="flex items-center space-x-2"
+          className="flex items-center space-x-3 h-14 px-6 border-dashed border-2 hover:border-purple-300 hover:bg-purple-50"
         >
-          <Plus className="h-4 w-4" />
-          <span>Add Follow-up Email</span>
-          <span className="text-xs text-gray-500">
-            ({campaignData.emailSequence.length}/10)
-          </span>
+          <Plus className="h-6 w-6 text-purple-600" />
+          <div className="text-left">
+            <div className="font-medium">Add Follow-up Email</div>
+            <div className="text-xs text-gray-500">
+              {campaignData.emailSequence.length}/10 emails in sequence
+            </div>
+          </div>
         </Button>
       </div>
 
-      {/* Sequence Summary */}
+      {/* Sequence Summary - Only show if emails exist */}
       {campaignData.emailSequence.length > 0 && (
-        <Card className="bg-green-50 border-green-200">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-green-800 text-sm">Sequence Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm text-green-700 space-y-2">
-              <div>📧 Total emails: {allEmails.length} (1 initial + {campaignData.emailSequence.length} follow-ups)</div>
-              <div>⏱️ Campaign duration: {Math.max(...allEmails.map(e => e.delay)) || 0} days</div>
-              <div>🎯 Each lead will receive all emails unless they reply, unsubscribe, or opt out</div>
-              
-              <div className="mt-3 pt-3 border-t border-green-200">
-                <div className="font-medium mb-1">Timeline:</div>
-                <div className="space-y-1">
-                  {allEmails.map((email, index) => (
-                    <div key={email.id} className="flex items-center space-x-2 text-xs">
-                      <span className="font-medium">Day {
-                        index === 0 ? 1 : allEmails.slice(0, index + 1).reduce((sum, e) => sum + e.delay, 1)
-                      }:</span>
-                      <span>{email.subject || 'Untitled Email'}</span>
-                    </div>
-                  ))}
-                </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <CheckCircle className="h-5 w-5 text-blue-600" />
+              <div>
+                <h3 className="font-medium text-gray-900">Sequence Summary</h3>
+                <p className="text-sm text-gray-600">
+                  {campaignData.emailSequence.length + 1} emails over {Math.max(...campaignData.emailSequence.map(e => e.delay)) || 0} days
+                </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+            <div className="text-sm text-gray-600">
+              {campaignData.emailSequence.filter(e => {
+                // Email is complete if it has content and either:
+                // 1. Has a subject (for new conversations)
+                // 2. Is replying to same thread (subject not required)
+                return e.content && (e.subject || e.replyToSameThread)
+              }).length + (campaignData.emailSubject && campaignData.emailContent ? 1 : 0)} of {campaignData.emailSequence.length + 1} complete
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Validation */}
-      {allEmails.some(email => !email.subject || !email.content) && (
+      {((!campaignData.emailSubject || !campaignData.emailContent) || 
+        campaignData.emailSequence.some(email => {
+          // Check if email content is missing
+          if (!email.content) return true
+          // Check if subject is required (when not replying to same thread) and missing
+          if (!email.replyToSameThread && !email.subject) return true
+          return false
+        })) && (
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
           <div className="flex items-center space-x-2 text-orange-800">
             <AlertCircle className="h-4 w-4" />
             <span className="font-medium">Incomplete emails</span>
           </div>
           <p className="text-sm text-orange-700 mt-1">
-            Please complete all email subjects and content before proceeding to the next step.
+            Please complete all required fields. Subject line is required for emails that don't reply to the same conversation.
           </p>
         </div>
       )}

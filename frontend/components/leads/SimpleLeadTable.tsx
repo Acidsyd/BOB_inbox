@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import { 
   Search,
@@ -11,7 +11,8 @@ import {
   Building,
   Calendar,
   User,
-  X
+  X,
+  Trash2
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -33,6 +34,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
 interface Lead {
   id: string
@@ -63,6 +75,8 @@ interface SimpleLeadTableProps {
   onSearchChange?: (search: string) => void
   onPageChange?: (page: number) => void
   onLimitChange?: (limit: number) => void
+  onDeleteLead?: (leadId: string) => void
+  deletingLeadId?: string | null
 }
 
 const statusColors = {
@@ -88,24 +102,61 @@ export default function SimpleLeadTable({
   searchTerm = '',
   onSearchChange,
   onPageChange,
-  onLimitChange
+  onLimitChange,
+  onDeleteLead,
+  deletingLeadId
 }: SimpleLeadTableProps) {
   const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm)
+  const [debounceTimeout, setDebounceTimeout] = useState<NodeJS.Timeout | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout)
+      }
+    }
+  }, [debounceTimeout])
+
+  // Reset searching state when loading changes
+  useEffect(() => {
+    if (!isLoading) {
+      setIsSearching(false)
+    }
+  }, [isLoading])
 
   const handleSearchChange = (value: string) => {
     setLocalSearchTerm(value)
+    
+    // Clear existing timeout
+    if (debounceTimeout) {
+      clearTimeout(debounceTimeout)
+    }
+    
     if (onSearchChange) {
-      // Debounce search
-      const timeoutId = setTimeout(() => {
-        onSearchChange(value)
-      }, 300)
+      setIsSearching(true)
       
-      return () => clearTimeout(timeoutId)
+      // Set new timeout for debounced search
+      const newTimeoutId = setTimeout(() => {
+        onSearchChange(value)
+        setIsSearching(false)
+      }, 500) // 500ms delay for better UX
+      
+      setDebounceTimeout(newTimeoutId)
     }
   }
 
   const handleClearSearch = () => {
     setLocalSearchTerm('')
+    setIsSearching(false)
+    
+    // Clear any pending search timeout
+    if (debounceTimeout) {
+      clearTimeout(debounceTimeout)
+      setDebounceTimeout(null)
+    }
+    
     if (onSearchChange) {
       onSearchChange('')
     }
@@ -118,8 +169,29 @@ export default function SimpleLeadTable({
     return parts.length > 0 ? parts.join(' ') : 'No name'
   }
 
-  const formatDate = (dateString: string) => {
-    return format(new Date(dateString), 'MMM dd, yyyy')
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString || dateString === 'null' || dateString === 'undefined' || dateString.trim() === '') return '-'
+    
+    try {
+      // Handle various date formats
+      const date = new Date(dateString)
+      if (isNaN(date.getTime()) || !isFinite(date.getTime())) {
+        console.warn('Invalid date string:', dateString)
+        return '-'
+      }
+      
+      // Additional validation: check if the date is reasonable (between 1900 and 2100)
+      const year = date.getFullYear()
+      if (year < 1900 || year > 2100) {
+        console.warn('Date out of reasonable range:', dateString, 'Year:', year)
+        return '-'
+      }
+      
+      return format(date, 'MMM dd, yyyy')
+    } catch (error) {
+      console.warn('Date formatting error:', error, 'for date:', dateString)
+      return '-'
+    }
   }
 
   const getCustomFields = (lead: Lead) => {
@@ -186,12 +258,19 @@ export default function SimpleLeadTable({
       {/* Search Bar */}
       {onSearchChange && (
         <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          {isSearching ? (
+            <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+            </div>
+          ) : (
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          )}
           <Input
             placeholder="Search leads by name, email, or company..."
             value={localSearchTerm}
             onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-10"
+            disabled={isLoading}
           />
           {localSearchTerm && (
             <Button
@@ -217,6 +296,7 @@ export default function SimpleLeadTable({
                 <TableHead>Status</TableHead>
                 <TableHead>Custom Fields</TableHead>
                 <TableHead>Added</TableHead>
+                <TableHead className="w-20">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -280,8 +360,50 @@ export default function SimpleLeadTable({
                       {formatDate(lead.added_at)}
                     </div>
                     <div className="text-xs text-gray-400 mt-1">
-                      via {lead.source.replace('_', ' ')}
+                      via {lead.source ? lead.source.replace('_', ' ') : 'manual'}
                     </div>
+                  </TableCell>
+
+                  {/* Actions Column */}
+                  <TableCell>
+                    {onDeleteLead && (
+                      <AlertDialog>
+                        <AlertDialogTrigger>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={deletingLeadId === lead.id}
+                            className="h-10 w-10 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50"
+                            title={deletingLeadId === lead.id ? "Deleting..." : "Delete lead"}
+                          >
+                            {deletingLeadId === lead.id ? (
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-600"></div>
+                            ) : (
+                              <Trash2 className="h-6 w-6" />
+                            )}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Lead</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete "{formatName(lead)}" ({lead.email})? 
+                              This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel disabled={deletingLeadId === lead.id}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction 
+                              onClick={() => onDeleteLead(lead.id)}
+                              disabled={deletingLeadId === lead.id}
+                              className="bg-red-600 hover:bg-red-700"
+                            >
+                              {deletingLeadId === lead.id ? 'Deleting...' : 'Delete Lead'}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

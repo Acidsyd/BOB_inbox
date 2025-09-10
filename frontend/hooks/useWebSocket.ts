@@ -70,7 +70,7 @@ export const useWebSocket = (options: WebSocketOptions = {}) => {
     autoConnect: options.autoConnect !== false,
     reconnectionAttempts: options.reconnectionAttempts || 5,
     reconnectionDelay: options.reconnectionDelay || 1000,
-    heartbeatInterval: options.heartbeatInterval || 15000,
+    heartbeatInterval: options.heartbeatInterval || 300000, // Changed to 5 minutes to prevent constant refreshing
     enableCompression: options.enableCompression !== false,
   };
 

@@ -1,4 +1,4 @@
-# Mailsender - B2B Email Marketing Automation Platform v3.0.0 🚀
+# BOBinbox - B2B Email Marketing Automation Platform v3.0.0 🚀
 
 A comprehensive B2B email marketing automation platform featuring **advanced LEADS management system**, intelligent spreadsheet interface, automated workflows, and enterprise-grade email automation. **Now with complete data enrichment and formula system.**
 
@@ -149,7 +149,7 @@ A comprehensive B2B email marketing automation platform featuring **advanced LEA
 ```bash
 # 1. Clone the repository
 git clone <repository-url>
-cd OPhir
+cd BOBinbox
 
 # 2. Set up Supabase (Required - see docs/SUPABASE_SETUP_GUIDE.md)
 # - Create Supabase project
@@ -188,7 +188,7 @@ cd ../frontend && npm run dev &
 ```bash
 # 1. Clone and setup environment
 git clone <repository-url>
-cd OPhir
+cd BOBinbox
 
 # 2. Configure Supabase environment variables
 # Backend (.env):
@@ -333,7 +333,7 @@ Processes incoming emails:
 The project has been organized for better maintainability:
 
 ```
-Mailsender/
+BOBinbox/
 ├── README.md                 # Main project documentation
 ├── CLAUDE.md                # Development guidance for Claude AI
 ├── docker-compose.yml       # Docker deployment configuration
@@ -527,7 +527,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Documentation: [docs/](docs/)
 - Issues: GitHub Issues
-- Email: support@ophir.dev
+- Email: support@bobinbox.com
 
 ## 🎯 Roadmap
 

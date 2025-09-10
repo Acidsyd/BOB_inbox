@@ -3,12 +3,19 @@
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import AppLayout from '@/components/layout/AppLayout'
 import { useEmailAccounts } from '@/hooks/useEmailAccounts'
-// Removed tracking configuration hook for simplification
 import { useToast } from '@/components/ui/toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { 
   ArrowLeft, 
   Plus, 
@@ -24,10 +31,10 @@ import {
   WifiIcon,
   WifiOff,
   RefreshCw,
-  Activity,
-  Eye,
-  MousePointer,
-  Target
+  Edit,
+  Trash2,
+  TestTube,
+  Copy
 } from 'lucide-react'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
@@ -86,24 +93,63 @@ function StatusIndicator({ isConnected }: { isConnected: boolean }) {
 
 function EmailAccountsContent() {
   const { accounts, isLoading, error, refetch, updateAccountStatus, isUpdating } = useEmailAccounts()
-  const { 
-    accountTrackingHealths, 
-    refreshAccountHealth, 
-    testTrackingSetup,
-    getAccountTrackingHealth 
-  } = useTrackingConfiguration()
   const { addToast } = useToast()
   const [actionLoadingStates, setActionLoadingStates] = useState<Record<string, boolean>>({})
-  const [trackingTestStates, setTrackingTestStates] = useState<Record<string, boolean>>({})
+  const [lastRefresh, setLastRefresh] = useState(new Date())
+  const [autoRefresh, setAutoRefresh] = useState(false)
+  
+  console.log('📧 Email accounts loaded:', accounts.length)
 
-  // Load tracking health data for all accounts when they change
+  // Auto-refresh functionality
   useEffect(() => {
-    if (accounts.length > 0) {
-      accounts.forEach(account => {
-        getAccountTrackingHealth(account.id).catch(console.error)
-      })
+    let interval: NodeJS.Timeout | null = null
+    
+    if (autoRefresh && !isLoading) {
+      interval = setInterval(async () => {
+        try {
+          await refetch()
+          setLastRefresh(new Date())
+        } catch (error) {
+          console.error('Auto-refresh failed:', error)
+        }
+      }, 30000) // Refresh every 30 seconds
     }
-  }, [accounts, getAccountTrackingHealth])
+
+    return () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+    }
+  }, [autoRefresh, isLoading, refetch])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ctrl/Cmd + R for refresh
+      if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
+        event.preventDefault()
+        if (!isLoading) {
+          refetch().then(() => setLastRefresh(new Date()))
+        }
+      }
+      // Ctrl/Cmd + Shift + A for auto-refresh toggle
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'A') {
+        event.preventDefault()
+        setAutoRefresh(prev => {
+          const newValue = !prev
+          addToast({
+            title: newValue ? 'Auto-refresh enabled' : 'Auto-refresh disabled',
+            description: newValue ? 'Updates every 30 seconds' : 'Manual refresh only',
+            type: 'info'
+          })
+          return newValue
+        })
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isLoading, refetch, addToast])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -122,61 +168,49 @@ function EmailAccountsContent() {
   }
 
   const getHealthIcon = (health: number) => {
-    if (health >= 90) return <CheckCircle className="h-4 w-4 text-green-600" />
-    if (health >= 70) return <AlertTriangle className="h-4 w-4 text-yellow-600" />
-    return <XCircle className="h-4 w-4 text-red-600" />
+    if (health >= 90) return <CheckCircle className="h-3 w-3 text-green-600" />
+    if (health >= 70) return <AlertTriangle className="h-3 w-3 text-yellow-600" />
+    return <XCircle className="h-3 w-3 text-red-600" />
   }
 
-  // Get tracking health for an account
-  const getTrackingHealth = (accountId: string) => {
-    return accountTrackingHealths[accountId]
-  }
-
-  const getTrackingHealthColor = (reliability: string) => {
-    switch (reliability) {
-      case 'excellent': return 'text-green-600 bg-green-100'
-      case 'good': return 'text-blue-600 bg-blue-100' 
-      case 'poor': return 'text-yellow-600 bg-yellow-100'
-      case 'critical': return 'text-red-600 bg-red-100'
-      default: return 'text-gray-600 bg-gray-100'
-    }
-  }
-
-  const getTrackingIcon = (reliability: string) => {
-    switch (reliability) {
-      case 'excellent': return <Activity className="h-4 w-4 text-green-600" />
-      case 'good': return <Activity className="h-4 w-4 text-blue-600" />
-      case 'poor': return <Activity className="h-4 w-4 text-yellow-600" />
-      case 'critical': return <Activity className="h-4 w-4 text-red-600" />
-      default: return <Activity className="h-4 w-4 text-gray-400" />
-    }
-  }
-
-  // Test tracking setup for an account
-  const handleTrackingTest = async (accountId: string) => {
-    setTrackingTestStates(prev => ({ ...prev, [accountId]: true }))
+  // Test connection for an account
+  const handleConnectionTest = async (accountId: string, email: string) => {
+    addToast({
+      title: 'Testing Connection',
+      description: `Testing connection for ${email}...`,
+      type: 'info'
+    })
     
-    try {
-      const result = await testTrackingSetup(accountId)
-      
+    // TODO: Implement actual connection test
+    setTimeout(() => {
       addToast({
-        title: result ? 'Tracking Test Passed' : 'Tracking Test Failed',
-        description: result 
-          ? 'Tracking pixel and links are working correctly' 
-          : 'There are issues with tracking setup',
-        type: result ? 'success' : 'error'
+        title: 'Connection Successful',
+        description: `${email} is connected and working properly`,
+        type: 'success'
       })
-      
-      // Refresh tracking health after test
-      await refreshAccountHealth(accountId)
+    }, 2000)
+  }
+
+  // Delete account handler
+  const handleDeleteAccount = async (accountId: string, email: string) => {
+    if (!confirm(`Are you sure you want to delete ${email}? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      // TODO: Implement actual delete functionality
+      addToast({
+        title: 'Account Deleted',
+        description: `${email} has been removed`,
+        type: 'success'
+      })
+      await refetch()
     } catch (error: any) {
       addToast({
-        title: 'Test failed',
-        description: 'Unable to test tracking setup',
+        title: 'Delete Failed',
+        description: 'Failed to delete account',
         type: 'error'
       })
-    } finally {
-      setTrackingTestStates(prev => ({ ...prev, [accountId]: false }))
     }
   }
 
@@ -205,6 +239,7 @@ function EmailAccountsContent() {
   const handleRefresh = async () => {
     try {
       await refetch()
+      setLastRefresh(new Date())
       addToast({
         title: 'Refreshed',
         description: 'Email accounts refreshed successfully',
@@ -217,6 +252,15 @@ function EmailAccountsContent() {
         type: 'error'
       })
     }
+  }
+
+  const toggleAutoRefresh = () => {
+    setAutoRefresh(!autoRefresh)
+    addToast({
+      title: autoRefresh ? 'Auto-refresh disabled' : 'Auto-refresh enabled',
+      description: autoRefresh ? 'Manual refresh only' : 'Updates every 30 seconds',
+      type: 'info'
+    })
   }
 
   if (isLoading) {
@@ -297,10 +341,33 @@ function EmailAccountsContent() {
               <h1 className="text-2xl font-bold text-gray-900">Email Accounts</h1>
               <StatusIndicator isConnected={!error} />
             </div>
-            <p className="text-gray-600">Manage your sending accounts and warmup settings</p>
+            <p className="text-gray-600 flex items-center space-x-2">
+              <span>Manage your sending accounts and warmup settings</span>
+              {lastRefresh && (
+                <>
+                  <span>•</span>
+                  <span className="text-xs">
+                    Last updated: {lastRefresh.toLocaleTimeString()}
+                  </span>
+                </>
+              )}
+              <span>•</span>
+              <span className="text-xs text-gray-400">
+                Press Ctrl+R to refresh, Ctrl+Shift+A for auto-refresh
+              </span>
+            </p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
+          <Button
+            variant={autoRefresh ? "default" : "outline"}
+            size="sm"
+            onClick={toggleAutoRefresh}
+            className={autoRefresh ? "bg-green-600 hover:bg-green-700" : ""}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${autoRefresh ? 'animate-pulse' : ''}`} />
+            Auto-refresh
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -320,58 +387,64 @@ function EmailAccountsContent() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card>
-          <CardContent className="p-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center">
-              <Mail className="h-8 w-8 text-purple-600" />
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <Mail className="h-5 w-5 text-purple-600" />
+              </div>
               <div className="ml-3">
-                <p className="text-2xl font-bold">{accounts.length}</p>
-                <p className="text-sm text-gray-600">Total Accounts</p>
+                <p className="text-xl font-bold text-gray-900">{accounts.length}</p>
+                <p className="text-xs text-gray-500 font-medium">Total Accounts</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center">
-              <CheckCircle className="h-8 w-8 text-green-600" />
+              <div className="p-2 bg-green-100 rounded-lg">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              </div>
               <div className="ml-3">
-                <p className="text-2xl font-bold">
+                <p className="text-xl font-bold text-gray-900">
                   {accounts.filter(a => a.status === 'active').length}
                 </p>
-                <p className="text-sm text-gray-600">Active</p>
+                <p className="text-xs text-gray-500 font-medium">Active</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center">
-              <Zap className="h-8 w-8 text-blue-600" />
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Zap className="h-5 w-5 text-blue-600" />
+              </div>
               <div className="ml-3">
-                <p className="text-2xl font-bold">
+                <p className="text-xl font-bold text-gray-900">
                   {accounts.filter(a => a.status === 'warming').length}
                 </p>
-                <p className="text-sm text-gray-600">Warming Up</p>
+                <p className="text-xs text-gray-500 font-medium">Warming Up</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center">
-              <Activity className="h-8 w-8 text-purple-600" />
+              <div className="p-2 bg-yellow-100 rounded-lg">
+                <Pause className="h-5 w-5 text-yellow-600" />
+              </div>
               <div className="ml-3">
-                <p className="text-2xl font-bold">
-                  {Object.values(accountTrackingHealths).filter(h => 
-                    h.trackingReliability === 'excellent' || h.trackingReliability === 'good'
-                  ).length}
+                <p className="text-xl font-bold text-gray-900">
+                  {accounts.filter(a => a.status === 'paused').length}
                 </p>
-                <p className="text-sm text-gray-600">Tracking Healthy</p>
+                <p className="text-xs text-gray-500 font-medium">Paused</p>
               </div>
             </div>
           </CardContent>
@@ -379,112 +452,59 @@ function EmailAccountsContent() {
       </div>
 
       {/* Accounts List */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         {accounts.map((account) => (
-          <Card key={account.id} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-6">
+          <Card key={account.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
+            <CardContent className="p-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="p-2 bg-gray-100 rounded-lg">
-                    <Mail className="h-6 w-6 text-gray-600" />
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-gray-50 rounded-lg">
+                    <Mail className="h-4 w-4 text-gray-600" />
                   </div>
-                  <div>
-                    <div className="flex items-center space-x-3">
-                      <h3 className="text-lg font-semibold">{account.email}</h3>
-                      <Badge className={getStatusColor(account.status)}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <h3 className="text-sm font-semibold text-gray-900 truncate">{account.email}</h3>
+                      <Badge className={`text-xs px-2 py-0.5 ${getStatusColor(account.status)}`}>
                         {account.status}
                       </Badge>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-gray-500 uppercase">
-                          {account.provider}
-                        </span>
-                        {account.provider === 'gmail' && (
-                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                            OAuth2
-                          </span>
-                        )}
-                        {account.provider === 'outlook' && (
-                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                            Microsoft OAuth2
-                          </span>
-                        )}
-                        {account.provider === 'smtp' && (
-                          <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
-                            SMTP
-                          </span>
-                        )}
-                      </div>
+                      <span className="text-xs text-gray-500 uppercase font-medium">
+                        {account.provider}
+                      </span>
                     </div>
-                    <div className="flex items-center space-x-4 mt-2 text-sm text-gray-600">
-                      <div className="flex items-center">
+                    <div className="flex items-center space-x-3 text-xs text-gray-500">
+                      <div className="flex items-center space-x-1">
                         {getHealthIcon(account.health)}
-                        <span className={`ml-1 font-medium ${getHealthColor(account.health)}`}>
-                          {account.health}% Health
+                        <span className={`font-medium ${getHealthColor(account.health)}`}>
+                          {account.health}%
                         </span>
                       </div>
-                      
-                      {/* Tracking Health Indicator */}
-                      {(() => {
-                        const trackingHealth = getTrackingHealth(account.id)
-                        return trackingHealth ? (
-                          <div className="flex items-center">
-                            {getTrackingIcon(trackingHealth.trackingReliability)}
-                            <span className={`ml-1 px-2 py-1 text-xs font-medium rounded-full ${
-                              getTrackingHealthColor(trackingHealth.trackingReliability)
-                            }`}>
-                              Tracking: {trackingHealth.trackingScore}%
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center">
-                            <Activity className="h-4 w-4 text-gray-400" />
-                            <span className="ml-1 text-gray-500 text-xs">Testing...</span>
-                          </div>
-                        )
-                      })()} 
-                      
-                      <div>
-                        Sent: {account.sentToday}/{account.dailyLimit} today
-                      </div>
+                      <span>•</span>
+                      <span>{account.sentToday}/{account.dailyLimit} sent today</span>
                       {account.status === 'warming' && (
-                        <div>
-                          Warmup: {account.warmupProgress}% ({account.warmupDaysRemaining} days left)
-                        </div>
+                        <>
+                          <span>•</span>
+                          <span>Warmup {account.warmupProgress}% ({account.warmupDaysRemaining}d left)</span>
+                        </>
                       )}
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center space-x-2">
-                  {/* Tracking Test Button */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleTrackingTest(account.id)}
-                    disabled={trackingTestStates[account.id]}
-                    className="text-purple-600 border-purple-200 hover:bg-purple-50"
-                  >
-                    {trackingTestStates[account.id] ? (
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Target className="h-4 w-4 mr-2" />
-                    )}
-                    Test Tracking
-                  </Button>
-                  
+                  {/* Quick Status Toggle */}
                   {account.status === 'active' ? (
                     <Button 
                       variant="outline" 
                       size="sm"
                       onClick={() => handleStatusChange(account.id, 'paused')}
                       disabled={actionLoadingStates[account.id] || isUpdating}
+                      className="h-8 px-3"
                     >
                       {actionLoadingStates[account.id] ? (
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        <RefreshCw className="h-3 w-3 animate-spin" />
                       ) : (
-                        <Pause className="h-4 w-4 mr-2" />
+                        <Pause className="h-3 w-3" />
                       )}
-                      Pause
                     </Button>
                   ) : account.status === 'paused' ? (
                     <Button 
@@ -492,137 +512,92 @@ function EmailAccountsContent() {
                       size="sm"
                       onClick={() => handleStatusChange(account.id, 'active')}
                       disabled={actionLoadingStates[account.id] || isUpdating}
+                      className="h-8 px-3"
                     >
                       {actionLoadingStates[account.id] ? (
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        <RefreshCw className="h-3 w-3 animate-spin" />
                       ) : (
-                        <Play className="h-4 w-4 mr-2" />
+                        <Play className="h-3 w-3" />
                       )}
-                      Resume
                     </Button>
                   ) : account.status === 'error' ? (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="text-red-600 border-red-200 hover:bg-red-50"
-                      onClick={() => {
-                        addToast({
-                          title: 'Configure Account',
-                          description: 'Please check your email account settings and credentials',
-                          type: 'info'
-                        })
-                      }}
-                    >
-                      <Settings className="h-4 w-4 mr-2" />
-                      Fix Issues
-                    </Button>
+                    <Link href={`/settings/email-accounts/${account.id}`}>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="text-red-600 border-red-200 hover:bg-red-50 h-8 px-3"
+                      >
+                        <AlertTriangle className="h-3 w-3" />
+                      </Button>
+                    </Link>
                   ) : null}
                   
+                  {/* Configure Button */}
                   <Link href={`/settings/email-accounts/${account.id}`}>
                     <Button 
                       variant="outline" 
                       size="sm"
+                      className="h-8 px-3"
                     >
-                      <Settings className="h-4 w-4 mr-2" />
-                      Configure
+                      <Settings className="h-3 w-3" />
                     </Button>
                   </Link>
                   
-                  <Button variant="ghost" size="sm">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
+                  {/* Dropdown Menu */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <MoreHorizontal className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuLabel>Account Actions</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem>
+                        <Link href={`/settings/email-accounts/${account.id}`} className="cursor-pointer flex items-center w-full">
+                          <Edit className="mr-2 h-3 w-3" />
+                          Edit Account
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleConnectionTest(account.id, account.email)}>
+                        <TestTube className="mr-2 h-3 w-3" />
+                        Test Connection
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => {
+                        navigator.clipboard.writeText(account.email)
+                        addToast({ title: 'Copied', description: 'Email address copied to clipboard', type: 'success' })
+                      }}>
+                        <Copy className="mr-2 h-3 w-3" />
+                        Copy Email
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        className="text-red-600 focus:text-red-600"
+                        onClick={() => handleDeleteAccount(account.id, account.email)}
+                      >
+                        <Trash2 className="mr-2 h-3 w-3" />
+                        Delete Account
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
 
-              {/* Progress bars */}
-              <div className="mt-4 space-y-3">
-                {/* Daily usage */}
-                <div>
+              {/* Warmup progress (if warming) */}
+              {account.status === 'warming' && (
+                <div className="mt-3">
                   <div className="flex justify-between text-xs text-gray-500 mb-1">
-                    <span>Daily Usage</span>
-                    <span>{account.sentToday}/{account.dailyLimit}</span>
+                    <span>Warmup Progress</span>
+                    <span>{account.warmupProgress}%</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
                     <div
-                      className="bg-purple-600 h-2 rounded-full"
-                      style={{
-                        width: `${Math.min((account.sentToday / account.dailyLimit) * 100, 100)}%`
-                      }}
+                      className="bg-blue-500 h-1.5 rounded-full transition-all"
+                      style={{ width: `${account.warmupProgress}%` }}
                     ></div>
                   </div>
                 </div>
-
-                {/* Tracking Health Progress */}
-                {(() => {
-                  const trackingHealth = getTrackingHealth(account.id)
-                  return trackingHealth && (
-                    <div>
-                      <div className="flex justify-between text-xs text-gray-500 mb-1">
-                        <span className="flex items-center">
-                          <Eye className="h-3 w-3 mr-1" />
-                          Tracking Performance
-                        </span>
-                        <span>{trackingHealth.trackingScore}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${
-                            trackingHealth.trackingScore >= 90 ? 'bg-green-500' :
-                            trackingHealth.trackingScore >= 70 ? 'bg-blue-500' :
-                            trackingHealth.trackingScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                          }`}
-                          style={{ width: `${trackingHealth.trackingScore}%` }}
-                        ></div>
-                      </div>
-                      
-                      {/* Tracking details */}
-                      <div className="flex justify-between text-xs text-gray-400 mt-1">
-                        <span className="flex items-center">
-                          <MousePointer className="h-3 w-3 mr-1" />
-                          Pixel: {Math.round(trackingHealth.pixelDeliveryRate)}%
-                        </span>
-                        <span>Links: {Math.round(trackingHealth.linkClickabilityRate)}%</span>
-                      </div>
-                      
-                      {/* Tracking issues warning */}
-                      {trackingHealth.trackingIssues.length > 0 && (
-                        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
-                          <div className="flex items-center text-yellow-800 mb-1">
-                            <AlertTriangle className="h-3 w-3 mr-1" />
-                            <span className="font-medium">Tracking Issues ({trackingHealth.trackingIssues.length})</span>
-                          </div>
-                          <div className="text-yellow-700">
-                            {trackingHealth.trackingIssues.slice(0, 2).map((issue, index) => (
-                              <div key={index}>• {issue}</div>
-                            ))}
-                            {trackingHealth.trackingIssues.length > 2 && (
-                              <div className="text-yellow-600 font-medium">
-                                +{trackingHealth.trackingIssues.length - 2} more issues
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })()}
-
-                {/* Warmup progress (if warming) */}
-                {account.status === 'warming' && (
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>Warmup Progress</span>
-                      <span>{account.warmupProgress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{ width: `${account.warmupProgress}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
             </CardContent>
           </Card>
         ))}

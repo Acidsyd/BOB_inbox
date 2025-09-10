@@ -29,9 +29,10 @@ interface CSVUploadResults {
     errors: number
   }
   details?: {
-    duplicateEmails: string[]
-    errors: string[]
-    stats: any
+    duplicate_leads?: any[]
+    duplicateEmails?: string[]
+    errors?: string[]
+    stats?: any
   }
 }
 
@@ -47,7 +48,11 @@ interface FieldMapping {
 
 interface DuplicateDetail {
   email: string
-  existingInLists: string[]
+  existing?: any // Raw database records from backend
+  existingInLists: Array<{
+    listId: string
+    listName: string
+  }>
 }
 
 interface CSVPreviewData {
@@ -470,7 +475,10 @@ export default function CSVUploader() {
           duplicates: results.duplicates,
           errors: results.errors
         },
-        details: results.details
+        details: {
+          duplicate_leads: results.duplicate_leads || [],
+          errors: [] // results.errors is a number, not an array
+        }
       }
       
       setUploadResults(transformedResults)
@@ -537,14 +545,16 @@ export default function CSVUploader() {
 
   // Navigate to lead list
   const viewLeadList = (listId: string) => {
+    console.log('🔍 Navigating to lead list:', listId)
+    // Navigate to the lead list detail page
     router.push(`/leads/lists/${listId}`)
   }
 
   // Import duplicates to existing list
   const importDuplicates = async () => {
     console.log('🔥 Import duplicates clicked!')
-    if (!file || !uploadResults) {
-      setError('No file or upload results available')
+    if (!uploadResults || !uploadResults.details?.duplicate_leads) {
+      setError('No duplicate leads available to import')
       return
     }
 
@@ -552,10 +562,12 @@ export default function CSVUploader() {
     setError('')
 
     try {
-      const formData = new FormData()
-      formData.append('csvFile', file)
-
-      const response = await api.post(`/leads/lists/${uploadResults.leadList.id}/import-duplicates`, formData)
+      // Send the duplicate leads data as JSON, not FormData
+      console.log('📤 Sending duplicate leads:', uploadResults.details.duplicate_leads);
+      
+      const response = await api.post(`/leads/lists/${uploadResults.leadList.id}/import-duplicates`, {
+        duplicateLeads: uploadResults.details.duplicate_leads
+      })
       
       // Show detailed feedback about the import process
       if (response.data.success) {
@@ -687,20 +699,15 @@ export default function CSVUploader() {
           </div>
 
           {uploadResults.details?.errors && uploadResults.details.errors.length > 0 && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Import Issues:</strong>
-                <ul className="mt-2 list-disc list-inside">
-                  {uploadResults.details.errors.slice(0, 5).map((error, index) => (
-                    <li key={index} className="text-sm">{error}</li>
-                  ))}
-                  {uploadResults.details.errors.length > 5 && (
-                    <li className="text-sm">...and {uploadResults.details.errors.length - 5} more</li>
-                  )}
-                </ul>
-              </AlertDescription>
-            </Alert>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-gray-500" />
+                <span className="text-sm font-medium text-gray-700">Import Notes:</span>
+              </div>
+              <div className="text-sm text-gray-600 mt-2">
+                {uploadResults.details.errors.length} item{uploadResults.details.errors.length > 1 ? 's' : ''} skipped due to processing requirements
+              </div>
+            </div>
           )}
 
           <div className="flex justify-center gap-3">
@@ -975,11 +982,15 @@ export default function CSVUploader() {
                         <div className="text-sm text-blue-800 font-medium mb-2">Duplicates found in these lists:</div>
                         <div className="text-sm text-blue-700 space-y-1">
                           {(() => {
+                            console.log('🔍 Rendering duplicateDetails:', JSON.stringify(csvPreview.duplicateDetails, null, 2));
                             const listCounts = new Map<string, number>();
                             csvPreview.duplicateDetails.forEach(detail => {
-                              detail.existingInLists.forEach(listName => {
-                                listCounts.set(listName, (listCounts.get(listName) || 0) + 1);
-                              });
+                              if (detail.existingInLists && Array.isArray(detail.existingInLists)) {
+                                detail.existingInLists.forEach(listInfo => {
+                                  const listName = typeof listInfo === 'string' ? listInfo : (listInfo?.listName || 'Unknown List');
+                                  listCounts.set(listName, (listCounts.get(listName) || 0) + 1);
+                                });
+                              }
                             });
                             return Array.from(listCounts.entries()).map(([listName, count], index) => 
                               <div key={index}>• {listName} ({count} duplicate{count > 1 ? 's' : ''})</div>
@@ -1099,38 +1110,6 @@ export default function CSVUploader() {
             )}
 
             {/* Action Buttons */}
-            {/* Debug Section */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium text-yellow-800">Debug: Duplicate Detection</h4>
-                  <p className="text-sm text-yellow-700">
-                    Database duplicates: {csvPreview.databaseDuplicates} | 
-                    Checking: {csvPreview.isCheckingDuplicates ? 'Yes' : 'No'} | 
-                    Columns: {csvPreview.columns.length} | 
-                    Rows: {csvPreview.allDataRows?.length || 0}
-                  </p>
-                  <p className="text-xs text-yellow-600 mt-1">
-                    Available columns: {csvPreview.columns.map(col => col.name).join(', ')}
-                  </p>
-                </div>
-                <Button 
-                  variant="outline" 
-                  onClick={handleManualDuplicateCheck}
-                  disabled={csvPreview?.isCheckingDuplicates || isManualCheckingDuplicates}
-                  size="sm"
-                >
-                  {isManualCheckingDuplicates ? (
-                    <>
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-2"></div>
-                      Checking...
-                    </>
-                  ) : (
-                    '🔍 Check for Duplicates'
-                  )}
-                </Button>
-              </div>
-            </div>
 
             <div className="flex justify-between">
               <Button variant="outline" onClick={resetUpload}>

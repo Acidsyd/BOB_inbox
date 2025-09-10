@@ -55,7 +55,7 @@ services:
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -176,16 +176,16 @@ services:
           memory: 128M
           cpus: '0.1'
 
-  # Worker Service for Background Jobs
-  worker:
+  # Cron Email Processor Service
+  cron-processor:
     build:
       context: ./backend
       dockerfile: Dockerfile.production
       args:
         - NODE_ENV=production
-    container_name: mailsender-worker
+    container_name: mailsender-cron
     restart: unless-stopped
-    command: ["npm", "run", "worker"]
+    command: ["npm", "run", "cron"]
     environment:
       # Same as backend but optimized for workers
       - NODE_ENV=production
@@ -198,9 +198,8 @@ services:
       - GOOGLE_OAUTH2_CLIENT_SECRET=${GOOGLE_OAUTH2_CLIENT_SECRET}
       - LOG_LEVEL=info
       - LOG_FILE_PATH=/app/logs
-      - WORKER_CONCURRENCY=5
     volumes:
-      - ./logs/worker:/app/logs
+      - ./logs/cron:/app/logs
       - backend-uploads:/app/uploads
     networks:
       - mailsender-network

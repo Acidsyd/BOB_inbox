@@ -100,6 +100,7 @@ function AddEmailAccountContent() {
   const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [connectionTestPassed, setConnectionTestPassed] = useState(false)
   
+  
   // SMTP Configuration
   const [smtpConfig, setSMTPConfig] = useState<SMTPConfig>({
     email: '',

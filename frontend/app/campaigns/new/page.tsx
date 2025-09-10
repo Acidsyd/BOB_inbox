@@ -17,25 +17,19 @@ import {
   Settings, 
   Calendar,
   Play,
-  Upload,
-  Download,
   AlertCircle,
-  X,
-  Send,
-  CheckCircle,
   BarChart
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { CSVParser, type LeadData, type ParseResult } from '@/lib/csvParser'
+import { CSVParser, type ParseResult } from '@/lib/csvParser'
 import { useWorkflowNavigation } from '@/lib/navigation/context'
 import { useEmailAccountsSelection } from '@/hooks/useEmailAccountsSelection'
+import { useTrackingConfiguration, type TrackingConfiguration } from '@/hooks/useTrackingConfiguration'
 import EmailSequenceBuilder from '@/components/campaigns/EmailSequenceBuilder'
-import CSVFieldMapper from '@/components/campaigns/CSVFieldMapper'
 import EmailPreviewAndTest from '@/components/campaigns/EmailPreviewAndTest'
 import LeadListSelector from '@/components/campaigns/LeadListSelector'
 import { api } from '@/lib/api'
-// Removed rich text editor and tracking components for simplification
 
 interface EmailSequence {
   id: number
@@ -70,6 +64,9 @@ interface CampaignData {
     end: number          // ora di fine (0-23)
   }
   timezone: string        // timezone per la campagna
+  // Human-like timing settings
+  enableJitter: boolean    // abilita variazione casuale nei tempi
+  jitterMinutes: number    // minuti di variazione (1-3)
   csvData: any[]          // dati del CSV caricato
   csvHeaders: string[]    // intestazioni CSV
   csvRawData: any[][]     // dati grezzi CSV per mapping
@@ -88,7 +85,7 @@ interface CampaignData {
   domainRateLimit: boolean
   includeUnsubscribe: boolean
   // Tracking Configuration
-  trackingConfiguration: TrackingConfiguration | null
+  trackingConfiguration: any | null
 }
 
 const steps = [
@@ -124,18 +121,12 @@ const steps = [
   },
   {
     id: 6,
-    name: 'Tracking Settings',
-    description: 'Configure email tracking',
-    icon: BarChart
-  },
-  {
-    id: 7,
     name: 'Advanced Settings',
     description: 'Campaign optimization',
     icon: Settings
   },
   {
-    id: 8,
+    id: 7,
     name: 'Review & Test',
     description: 'Final review and test email',
     icon: Play
@@ -153,9 +144,9 @@ function CampaignBuilderContent() {
   const [testEmailSent, setTestEmailSent] = useState(false)
   const [testEmailError, setTestEmailError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isLaunching, setIsLaunching] = useState(false) // Instant loading state for launch button
   const { accounts: emailAccounts, loading: accountsLoading, error: accountsError, refresh: refreshAccounts } = useEmailAccountsSelection()
   const { 
-    configuration: trackingConfig, 
     accountTrackingHealths, 
     refreshAccountHealth,
     testTrackingSetup 
@@ -182,6 +173,9 @@ function CampaignBuilderContent() {
       end: 17     // 5:00 PM
     },
     timezone: 'UTC',
+    // Human-like timing defaults
+    enableJitter: true,   // Enabled by default for natural timing
+    jitterMinutes: 3,     // ±3 minutes variation
     csvData: [],
     csvHeaders: [],
     csvRawData: [],
@@ -212,37 +206,26 @@ function CampaignBuilderContent() {
     if (!testEmail || !campaignData.emailSubject || !campaignData.emailContent) {
       return
     }
-
     setIsLoading(true)
     setTestEmailError('')
     setTestEmailSent(false)
-
     try {
-      // Use sample data from CSV for personalization
       const sampleData = campaignData.csvData[0] || {}
-      
-      // Create personalized content
       let personalizedSubject = campaignData.emailSubject
       let personalizedContent = campaignData.emailContent
-      
-      // Replace placeholders with sample data
       Object.entries(sampleData).forEach(([key, value]) => {
         const placeholder = `{${key}}`
         personalizedSubject = personalizedSubject.replace(new RegExp(placeholder, 'g'), String(value) || '[Sample Data]')
         personalizedContent = personalizedContent.replace(new RegExp(placeholder, 'g'), String(value) || '[Sample Data]')
       })
-
-      // Make API call to send test email
       const response = await api.post('/campaigns/test-email', {
         to: testEmail,
         subject: personalizedSubject,
         content: personalizedContent,
         sampleData: sampleData
       })
-
       setTestEmailSent(true)
-      setTimeout(() => setTestEmailSent(false), 5000) // Reset after 5 seconds
-
+      setTimeout(() => setTestEmailSent(false), 5000)
     } catch (error: any) {
       console.error('Error sending test email:', error)
       const errorMessage = error.response?.data?.error || error.message || 'Unknown error occurred'
@@ -261,17 +244,13 @@ function CampaignBuilderContent() {
         reader.onerror = () => reject(new Error('Failed to read file'))
         reader.readAsText(file, 'UTF-8')
       })
-
       const lines = content.split('\n').filter(line => line.trim())
       if (lines.length === 0) return null
-
-      // Parse CSV lines
       const parseCSVLine = (line: string): string[] => {
         const result: string[] = []
         let current = ''
         let inQuotes = false
         let i = 0
-
         while (i < line.length) {
           const char = line[i]
           if (char === '"' && !inQuotes) {
@@ -294,84 +273,48 @@ function CampaignBuilderContent() {
         result.push(current.trim())
         return result
       }
-
       const headers = parseCSVLine(lines[0])
       const rawData = lines.slice(1).map(line => parseCSVLine(line))
-
       return { headers, rawData }
-    } catch (error) {
+    } catch (_error) {
       return null
     }
   }
 
+  // CSV and mapping functions
   const handleCSVUpload = async (file: File) => {
     setCsvUploading(true)
-    setCsvParseResult(null)
-    
     try {
-      // Parse CSV for field mapping first
-      const csvMapping = await parseCSVForMapping(file)
-      if (!csvMapping) {
-        throw new Error('Failed to parse CSV file')
+      const result = await CSVParser.parseCSV(file)
+      setCsvParseResult(result)
+      if (result.success) {
+        updateCampaignData({
+          csvData: result.data,
+          csvHeaders: Object.keys(result.data[0] || {}),
+          csvRawData: []
+        })
       }
-
-      // Store headers and raw data for mapping
-      updateCampaignData({
-        csvHeaders: csvMapping.headers,
-        csvRawData: csvMapping.rawData,
-        selectedLeads: [file.name]
-      })
-
-      // Show field mapping interface
-      setShowFieldMapping(true)
-      setCsvParseResult({
-        success: true,
-        data: [],
-        errors: [],
-        warnings: [`CSV file loaded with ${csvMapping.headers.length} columns and ${csvMapping.rawData.length} rows`],
-        totalRows: csvMapping.rawData.length,
-        validRows: 0
-      })
     } catch (error) {
-      setCsvParseResult({
-        success: false,
-        data: [],
-        errors: [`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
-        warnings: [],
-        totalRows: 0,
-        validRows: 0
-      })
+      console.error('CSV upload error:', error)
     } finally {
       setCsvUploading(false)
     }
   }
-
-  // Handle field mapping completion
+  
   const handleMappingComplete = (mapping: Record<string, number>, mappedData: any[]) => {
-    updateCampaignData({ csvData: mappedData })
-    setShowFieldMapping(false)
-    setCsvParseResult({
-      success: true,
-      data: mappedData,
-      errors: [],
-      warnings: [],
-      totalRows: mappedData.length,
-      validRows: mappedData.length
+    updateCampaignData({
+      csvData: mappedData,
+      csvHeaders: Object.keys(mappedData[0] || {})
     })
+    setShowFieldMapping(false)
   }
-
-  // Handle field mapping cancel
+  
   const handleMappingCancel = () => {
     setShowFieldMapping(false)
     setCsvParseResult(null)
-    updateCampaignData({ 
-      csvHeaders: [],
-      csvRawData: [],
-      csvData: [],
-      selectedLeads: []
-    })
+    updateCampaignData({ csvData: [], csvHeaders: [], csvRawData: [] })
   }
-
+  
   const handleDownloadTemplate = () => {
     CSVParser.downloadTemplate()
   }
@@ -379,12 +322,22 @@ function CampaignBuilderContent() {
   const nextStep = () => {
     if (currentStep < steps.length) {
       setCurrentStep(currentStep + 1)
+      // Scroll to top of page when navigating to next step
+      // Use setTimeout to ensure it happens after React re-renders the new content
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 50)
     }
   }
 
   const prevStep = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1)
+      // Scroll to top of page when navigating to previous step
+      // Use setTimeout to ensure it happens after React re-renders the new content
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 50)
     }
   }
 
@@ -395,9 +348,12 @@ function CampaignBuilderContent() {
       case 2:
         // Check initial email and all sequence emails are complete
         const initialComplete = campaignData.emailSubject.trim() !== '' && campaignData.emailContent.trim() !== ''
-        const sequenceComplete = campaignData.emailSequence.every(email => 
-          email.subject.trim() !== '' && email.content.trim() !== ''
-        )
+        const sequenceComplete = campaignData.emailSequence.every(email => {
+          // Email is complete if it has content and either:
+          // 1. Has a subject (for new conversations)
+          // 2. Is replying to same thread (subject not required)
+          return email.content.trim() !== '' && (email.subject.trim() !== '' || email.replyToSameThread)
+        })
         return initialComplete && sequenceComplete
       case 3:
         return !!campaignData.selectedLeadListId
@@ -406,17 +362,20 @@ function CampaignBuilderContent() {
       case 5:
         return campaignData.emailsPerDay > 0 && campaignData.sendingInterval > 0
       case 6:
-        return true // Tracking settings are optional
-      case 7:
         return true
+      case 7:
+        return true // Final review step - all validations already passed
       default:
         return false
     }
   }
 
   const handleLaunch = async () => {
+    // ⚡ IMMEDIATELY set loading state to block UI
+    setIsLaunching(true)
+    
     try {
-      console.log('Creating campaign:', campaignData)
+      console.log('🚀 Launching campaign:', campaignData.name)
       
       // Prepare campaign data for API - replace CSV data with lead list ID
       const apiCampaignData = {
@@ -431,54 +390,41 @@ function CampaignBuilderContent() {
         selectedLeadListCount: undefined
       }
       
-      // Create campaign via API
-      const response = await fetch('/api/campaigns', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}` // Assuming token-based auth
-        },
-        body: JSON.stringify(apiCampaignData)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to create campaign')
-      }
-
-      const result = await response.json()
-      console.log('Campaign created:', result)
+      console.log('📋 Creating campaign with API...')
+      // Create campaign via API using the api utility (handles auth automatically)
+      const response = await api.post('/campaigns', apiCampaignData)
+      const result = response.data
+      console.log('✅ Campaign created:', result.campaign.id)
 
       // If immediate launch is selected, start the campaign
       if (campaignData.scheduleType === 'immediate') {
-        const startResponse = await fetch(`/api/campaigns/${result.campaign.id}/start`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        })
-
-        if (startResponse.ok) {
-          const startResult = await startResponse.json()
-          console.log('Campaign started:', startResult)
+        console.log('⚡ Starting campaign immediately...')
+        try {
+          const startResponse = await api.post(`/campaigns/${result.campaign.id}/start`)
+          const startResult = startResponse.data
+          console.log('✅ Campaign started successfully:', startResult)
+        } catch (startError) {
+          console.error('⚠️ Failed to start campaign, but campaign was created:', startError)
         }
       }
 
       // Preserve workflow by preventing auth redirects during campaign creation  
       workflowNavigation.preserveWorkflow('/campaigns')
       
+      console.log('🏠 Redirecting to campaigns list...')
       // Redirect to campaigns page
       router.push('/campaigns')
       
     } catch (error) {
-      console.error('Error launching campaign:', error)
-      // TODO: Show error message to user
+      console.error('❌ Error launching campaign:', error)
+      setIsLaunching(false) // Clear loading state on error
+      // TODO: Replace with proper toast notification
       alert('Failed to create campaign: ' + error.message)
     }
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto min-h-screen">
       {/* Header */}
       <div className="flex items-center mb-8">
         <Link href="/campaigns">
@@ -536,7 +482,7 @@ function CampaignBuilderContent() {
       </div>
 
       {/* Step Content */}
-      <Card className="mb-8">
+      <Card className="mb-8 min-h-[600px]">
         <CardHeader>
           <CardTitle>Step {currentStep}: {steps[currentStep - 1].name}</CardTitle>
           <CardDescription>{steps[currentStep - 1].description}</CardDescription>
@@ -837,12 +783,58 @@ function CampaignBuilderContent() {
                       id="sendingInterval"
                       type="number"
                       value={campaignData.sendingInterval}
-                      onChange={(e) => updateCampaignData({ sendingInterval: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 5;
+                        updateCampaignData({ sendingInterval: Math.max(5, value) });
+                      }}
                       className="mt-1"
-                      min="1"
+                      min="5"
                       max="60"
+                      placeholder="Minimum 5 minutes"
                     />
+                    {campaignData.sendingInterval < 5 && (
+                      <p className="text-sm text-red-500 mt-1">
+                        Minimum interval is 5 minutes for optimal deliverability
+                      </p>
+                    )}
                   </div>
+                </div>
+              </div>
+
+              {/* Human-like Timing */}
+              <div>
+                <Label className="text-base font-semibold">Timing Naturale</Label>
+                <div className="space-y-4 mt-3">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      id="enableJitter"
+                      type="checkbox"
+                      checked={campaignData.enableJitter}
+                      onChange={(e) => updateCampaignData({ enableJitter: e.target.checked })}
+                      className="rounded border-gray-300"
+                    />
+                    <Label htmlFor="enableJitter" className="text-sm">
+                      Aggiungi variazione casuale per sembrare più naturale
+                    </Label>
+                  </div>
+                  
+                  {campaignData.enableJitter && (
+                    <div>
+                      <Label htmlFor="jitterMinutes">Variazione massima (minuti)</Label>
+                      <Input
+                        id="jitterMinutes"
+                        type="number"
+                        value={campaignData.jitterMinutes}
+                        onChange={(e) => updateCampaignData({ jitterMinutes: Math.min(3, Math.max(1, parseInt(e.target.value) || 3)) })}
+                        className="mt-1 max-w-20"
+                        min="1"
+                        max="3"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Es: intervallo 15min → 9:02, 9:14, 9:32, 9:47 invece di 9:00, 9:15, 9:30, 9:45
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -920,28 +912,10 @@ function CampaignBuilderContent() {
                 </div>
               </div>
 
-              {/* Preview calcolo */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-medium text-blue-900 mb-2">Riepilogo Timing</h4>
-                <div className="text-sm text-blue-800 space-y-1">
-                  <div>Trigger N8N ogni: {campaignData.sendingInterval} minuti</div>
-                  <div>Orario: {String(campaignData.sendingHours.start).padStart(2, '0')}:00 - {String(campaignData.sendingHours.end).padStart(2, '0')}:00</div>
-                  <div>Giorni attivi: {campaignData.activeDays.length}</div>
-                  <div>Email al giorno: {campaignData.emailsPerDay}</div>
-                </div>
-              </div>
             </div>
           )}
 
           {currentStep === 6 && (
-            <div className="text-center p-12 bg-gray-50 rounded-lg">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Tracking Configuration</h3>
-              <p className="text-gray-600 mb-4">Advanced tracking configuration has been simplified for better stability.</p>
-              <p className="text-sm text-gray-500">Basic email tracking will be enabled automatically.</p>
-            </div>
-          )}
-
-          {currentStep === 7 && (
             <div className="space-y-8">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Advanced Campaign Settings</h3>
@@ -972,6 +946,7 @@ function CampaignBuilderContent() {
                     <Label htmlFor="stopOnReply" className="flex-1">
                       <div className="font-medium">Stop when lead replies</div>
                       <div className="text-sm text-gray-500">Prevent sending follow-ups to engaged prospects</div>
+                      <div className="text-xs text-green-600 mt-1">✅ Working - Automatically stops follow-up emails when leads reply</div>
                     </Label>
                   </div>
                   
@@ -986,6 +961,7 @@ function CampaignBuilderContent() {
                     <Label htmlFor="stopOnClick" className="flex-1">
                       <div className="font-medium">Stop when lead clicks links</div>
                       <div className="text-sm text-gray-500">Pause sequence when leads show interest</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Feature not implemented</div>
                     </Label>
                   </div>
                   
@@ -1000,6 +976,7 @@ function CampaignBuilderContent() {
                     <Label htmlFor="stopOnOpen" className="flex-1">
                       <div className="font-medium">Stop when lead opens email</div>
                       <div className="text-sm text-gray-500">Less aggressive - stops on first open</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Feature not implemented</div>
                     </Label>
                   </div>
                 </CardContent>
@@ -1025,6 +1002,7 @@ function CampaignBuilderContent() {
                     <Label htmlFor="sendPlainText" className="flex-1">
                       <div className="font-medium">Send emails in plain text</div>
                       <div className="text-sm text-gray-500">Better deliverability but no HTML formatting</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Feature not implemented</div>
                     </Label>
                   </div>
                   
@@ -1039,6 +1017,7 @@ function CampaignBuilderContent() {
                     <Label htmlFor="aiEmailMatching" className="flex-1">
                       <div className="font-medium">AI Email Provider Matching</div>
                       <div className="text-sm text-gray-500">Gmail to Gmail, Outlook to Outlook for better delivery</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - AI feature not implemented</div>
                     </Label>
                   </div>
                   
@@ -1078,6 +1057,7 @@ function CampaignBuilderContent() {
                     <Label htmlFor="trackOpens" className="flex-1">
                       <div className="font-medium">Track email opens</div>
                       <div className="text-sm text-gray-500">See when leads open your emails</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Tracking not implemented</div>
                     </Label>
                   </div>
                   
@@ -1092,6 +1072,7 @@ function CampaignBuilderContent() {
                     <Label htmlFor="trackClicks" className="flex-1">
                       <div className="font-medium">Track link clicks</div>
                       <div className="text-sm text-gray-500">Monitor which links leads click</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Tracking not implemented</div>
                     </Label>
                   </div>
                   
@@ -1106,6 +1087,7 @@ function CampaignBuilderContent() {
                     <Label htmlFor="aiLeadCategorization" className="flex-1">
                       <div className="font-medium">AI Lead Response Categorization</div>
                       <div className="text-sm text-gray-500">Automatically categorize replies as interested/not interested</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - AI feature not implemented</div>
                     </Label>
                   </div>
                 </CardContent>
@@ -1131,6 +1113,7 @@ function CampaignBuilderContent() {
                     <Label htmlFor="companyLevelPause" className="flex-1">
                       <div className="font-medium">Company-Level Auto-Pause</div>
                       <div className="text-sm text-gray-500">Stop messaging everyone at a company when someone replies</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Feature not implemented</div>
                     </Label>
                   </div>
                   
@@ -1145,6 +1128,7 @@ function CampaignBuilderContent() {
                     <Label htmlFor="domainRateLimit" className="flex-1">
                       <div className="font-medium">Domain-Level Rate Limiting</div>
                       <div className="text-sm text-gray-500">Control sending speed per domain for better delivery</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Feature not implemented</div>
                     </Label>
                   </div>
                   
@@ -1159,6 +1143,7 @@ function CampaignBuilderContent() {
                     <Label htmlFor="includeUnsubscribe" className="flex-1">
                       <div className="font-medium">Include Unsubscribe Link</div>
                       <div className="text-sm text-gray-500">Add unsubscribe option to comply with regulations</div>
+                      <div className="text-xs text-green-600 mt-1">✅ Working - Secure token-based unsubscribe links</div>
                     </Label>
                   </div>
                 </CardContent>
@@ -1166,12 +1151,12 @@ function CampaignBuilderContent() {
             </div>
           )}
 
-          {currentStep === 8 && (
+          {currentStep === 7 && (
             <div className="space-y-6">
               {/* Email Preview and Test Component */}
               <EmailPreviewAndTest 
                 campaignData={campaignData}
-                emailAccounts={emailAccounts}
+                emailAccounts={emailAccounts as any}
                 onTestEmailSent={(success, message) => {
                   setTestEmailSent(success)
                   setTestEmailError(success ? '' : message)
@@ -1312,15 +1297,32 @@ function CampaignBuilderContent() {
           ) : (
             <Button 
               onClick={handleLaunch}
-              disabled={!canProceed()}
+              disabled={!canProceed() || isLaunching}
               className="btn-primary"
             >
               <Play className="h-4 w-4 mr-2" />
-              Launch Campaign
+              {isLaunching ? 'Launching...' : 'Launch Campaign'}
             </Button>
           )}
         </div>
       </div>
+
+      {/* Loading Overlay - Shows when launching campaign */}
+      {isLaunching && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 max-w-md mx-4 text-center shadow-xl">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Launching Campaign...</h3>
+            <p className="text-gray-600 text-sm mb-4">
+              Please wait while we create and launch your campaign. This may take a few minutes for large lead lists.
+            </p>
+            <div className="text-xs text-gray-500">
+              Creating campaign → Starting emails → Redirecting to campaigns
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

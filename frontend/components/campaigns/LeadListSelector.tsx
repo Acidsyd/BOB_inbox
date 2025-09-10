@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatDistanceToNow } from 'date-fns'
 import Link from 'next/link'
+import { api } from '@/lib/api'
 
 interface LeadList {
   id: string
@@ -54,18 +55,11 @@ export default function LeadListSelector({
   const fetchLeadLists = async () => {
     try {
       setIsLoading(true)
-      const response = await fetch('/api/leads/lists', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch lead lists')
-      }
-
-      const data = await response.json()
-      setLeadLists(data.leadLists || [])
+      const response = await api.get('/leads/lists')
+      
+      // The backend returns an array directly
+      const lists = Array.isArray(response.data) ? response.data : []
+      setLeadLists(lists)
     } catch (error) {
       console.error('Error fetching lead lists:', error)
       setError('Failed to load lead lists')
@@ -78,18 +72,10 @@ export default function LeadListSelector({
   const fetchPreviewData = async (listId: string) => {
     try {
       setIsLoadingPreview(true)
-      const response = await fetch(`/api/leads/lists/${listId}?limit=3`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch preview data')
-      }
-
-      const data = await response.json()
-      setPreviewData(data.leads.slice(0, 3) || [])
+      const response = await api.get(`/leads/lists/${listId}?limit=3`)
+      
+      const data = response.data
+      setPreviewData(data.leads ? data.leads.slice(0, 3) : [])
     } catch (error) {
       console.error('Error fetching preview data:', error)
       setPreviewData([])

@@ -74,11 +74,14 @@ export default function LeadListCard({ leadList, onDelete, onEdit }: LeadListCar
   }
 
   const getHealthStatus = () => {
-    if (leadList.totalLeads === 0) {
+    const totalLeads = leadList.totalLeads || 0;
+    const activeLeads = leadList.activeLeads || 0;
+    
+    if (totalLeads === 0) {
       return { color: 'gray', label: 'Empty', icon: AlertCircle }
     }
     
-    const activePercentage = (leadList.activeLeads / leadList.totalLeads) * 100
+    const activePercentage = (activeLeads / totalLeads) * 100
     
     if (activePercentage >= 80) {
       return { color: 'green', label: 'Healthy', icon: UserCheck }
@@ -94,33 +97,72 @@ export default function LeadListCard({ leadList, onDelete, onEdit }: LeadListCar
 
   return (
     <>
-      <Card className="group hover:shadow-md transition-shadow">
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <CardTitle className="text-lg font-medium truncate">
-                <Link 
-                  href={`/leads/lists/${leadList.id}`}
-                  className="hover:text-blue-600 transition-colors"
-                >
-                  {leadList.name}
-                </Link>
-              </CardTitle>
-              {leadList.description && (
-                <p className="text-sm text-gray-600 mt-1 line-clamp-2">
-                  {leadList.description}
-                </p>
-              )}
+      <Card className="group hover:shadow-sm transition-shadow">
+        <div className="flex items-center px-4 py-2.5 gap-4">
+          {/* Left section - Title and description */}
+          <div className="min-w-0 flex-1 max-w-sm">
+            <CardTitle className="text-sm font-medium truncate">
+              <Link 
+                href={`/leads/lists/${leadList.id}`}
+                className="hover:text-blue-600 transition-colors"
+              >
+                {leadList.name}
+              </Link>
+            </CardTitle>
+            {leadList.description && (
+              <p className="text-xs text-gray-500 truncate">
+                {leadList.description}
+              </p>
+            )}
+          </div>
+
+          {/* Stats */}
+          <div className="flex items-center gap-6 text-sm">
+            <div className="flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5 text-gray-400" />
+              <span className="font-medium text-gray-900">
+                {(leadList.totalLeads || 0).toLocaleString()}
+              </span>
+              <span className="text-gray-500">leads</span>
             </div>
+            <div className="flex items-center gap-1.5">
+              <UserCheck className="h-3.5 w-3.5 text-blue-500" />
+              <span className="font-medium text-blue-600">
+                {(leadList.activeLeads || 0).toLocaleString()}
+              </span>
+              <span className="text-gray-500">active</span>
+            </div>
+          </div>
+
+          {/* Health Status Badge */}
+          {(leadList.totalLeads || 0) > 0 && (
+            <Badge variant="secondary" className="text-xs px-2 py-0.5">
+              {Math.round(((leadList.activeLeads || 0) / (leadList.totalLeads || 1)) * 100)}%
+            </Badge>
+          )}
+
+          {/* Date */}
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <Calendar className="h-3 w-3" />
+            <span>{formatDate(leadList.createdAt)}</span>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-1">
+            <Link href={`/leads/lists/${leadList.id}`}>
+              <Button variant="ghost" size="sm" className="h-8 px-3 text-xs">
+                View
+              </Button>
+            </Link>
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="h-8 w-8 p-0"
                 >
-                  <MoreHorizontal className="h-4 w-4" />
+                  <MoreHorizontal className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -148,67 +190,7 @@ export default function LeadListCard({ leadList, onDelete, onEdit }: LeadListCar
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </CardHeader>
-        
-        <CardContent className="pt-0">
-          <div className="space-y-4">
-            {/* Stats */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="text-center p-3 bg-gray-50 rounded-lg">
-                <div className="text-2xl font-bold text-gray-900">
-                  {leadList.totalLeads.toLocaleString()}
-                </div>
-                <div className="text-xs text-gray-600">Total Leads</div>
-              </div>
-              <div className="text-center p-3 bg-blue-50 rounded-lg">
-                <div className="text-2xl font-bold text-blue-600">
-                  {leadList.activeLeads.toLocaleString()}
-                </div>
-                <div className="text-xs text-blue-700">Active</div>
-              </div>
-            </div>
-
-            {/* Health Status */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <HealthIcon className={`h-4 w-4 ${
-                  healthStatus.color === 'green' ? 'text-green-500' :
-                  healthStatus.color === 'yellow' ? 'text-yellow-500' :
-                  healthStatus.color === 'red' ? 'text-red-500' :
-                  'text-gray-500'
-                }`} />
-                <span className={`text-sm font-medium ${
-                  healthStatus.color === 'green' ? 'text-green-700' :
-                  healthStatus.color === 'yellow' ? 'text-yellow-700' :
-                  healthStatus.color === 'red' ? 'text-red-700' :
-                  'text-gray-700'
-                }`}>
-                  {healthStatus.label}
-                </span>
-              </div>
-              
-              {leadList.totalLeads > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  {Math.round((leadList.activeLeads / leadList.totalLeads) * 100)}% Active
-                </Badge>
-              )}
-            </div>
-
-            {/* Dates */}
-            <div className="space-y-2 text-xs text-gray-500">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-3 w-3" />
-                <span>Created {formatDate(leadList.createdAt)}</span>
-              </div>
-              {leadList.lastLeadAdded && (
-                <div className="flex items-center gap-2">
-                  <Users className="h-3 w-3" />
-                  <span>Last import {formatDate(leadList.lastLeadAdded)}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Delete Confirmation Dialog */}
@@ -218,7 +200,7 @@ export default function LeadListCard({ leadList, onDelete, onEdit }: LeadListCar
             <AlertDialogTitle>Delete Lead List</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{leadList.name}"? 
-              This will remove the list and all {leadList.totalLeads} leads in it. 
+              This will remove the list and all {leadList.totalLeads || 0} leads in it. 
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

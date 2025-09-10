@@ -9,38 +9,35 @@ import {
   TrendingUp, 
   Settings, 
   Inbox,
-  Plus,
   LogOut,
   ChevronDown,
   Target,
   FileText,
-  HelpCircle
+  HelpCircle,
+  BarChart3
 } from 'lucide-react'
 import { useState } from 'react'
 
 const navigation = [
   {
-    name: 'Dashboard', 
+    name: 'Dashboard',
     href: '/dashboard',
-    icon: LayoutDashboard,
+    icon: BarChart3,
+  },
+  {
+    name: 'Inbox',
+    href: '/inbox',
+    icon: Inbox,
   },
   {
     name: 'Campaigns',
     href: '/campaigns',
     icon: Target,
-    children: [
-      { name: 'All Campaigns', href: '/campaigns' },
-      { name: 'Create Campaign', href: '/campaigns/new' },
-    ]
   },
   {
-    name: 'Leads',
-    href: '/leads',
+    name: 'Lead Lists',
+    href: '/leads/lists',
     icon: Users,
-    children: [
-      { name: 'All Leads', href: '/leads' },
-      { name: 'Lead Lists', href: '/leads/lists' },
-    ]
   },
   {
     name: 'Settings',
@@ -56,7 +53,7 @@ const navigation = [
 export default function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Campaigns', 'Leads', 'Settings'])
+  const [expandedItems, setExpandedItems] = useState<string[]>(['Settings'])
 
   const toggleExpanded = (itemName: string) => {
     setExpandedItems(prev => 
@@ -71,8 +68,9 @@ export default function Sidebar() {
       <div className="flex flex-col flex-grow pt-5 bg-white border-r border-gray-200 overflow-y-auto">
         {/* Logo */}
         <div className="flex items-center flex-shrink-0 px-4">
-          <Link href="/dashboard" className="text-2xl font-bold gradient-text">
-            Mailsender
+          <Link href="/dashboard" className="flex items-center space-x-4">
+            <img src="/bobinbox-icon.png" alt="BOBinbox" className="w-16 h-16 rounded-lg shadow-sm" />
+            <span className="text-3xl font-bold gradient-text">BOBinbox</span>
           </Link>
         </div>
 
@@ -91,7 +89,7 @@ export default function Sidebar() {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
             const isExpanded = expandedItems.includes(item.name)
             const hasChildren = item.children && item.children.length > 0
-            const isPrimary = (item as any).isPrimary
+            const isMainAction = (item as any).isMainAction
 
             return (
               <div key={item.name}>
@@ -99,22 +97,15 @@ export default function Sidebar() {
                   {hasChildren ? (
                     <button
                       onClick={() => toggleExpanded(item.name)}
-                      className={`w-full flex items-center justify-between px-2 py-2 text-sm font-medium rounded-md hover:bg-gray-100 transition-colors ${
+                      className={`w-full flex items-center justify-between px-2 py-2 text-sm font-medium rounded-md transition-colors ${
                         isActive 
                           ? 'bg-purple-50 text-purple-700' 
-                          : isPrimary
-                            ? 'text-purple-600 hover:text-purple-700 hover:bg-purple-50'
-                            : 'text-gray-600 hover:text-gray-900'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                       }`}
                     >
                       <div className="flex items-center">
-                        <Icon className={`mr-3 h-5 w-5 ${isPrimary ? 'text-purple-600' : ''}`} />
-                        <span className={isPrimary ? 'font-semibold' : ''}>{item.name}</span>
-                        {isPrimary && (
-                          <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full">
-                            NEW
-                          </span>
-                        )}
+                        <Icon className="mr-3 h-5 w-5" />
+                        <span>{item.name}</span>
                       </div>
                       <ChevronDown 
                         className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
@@ -126,18 +117,11 @@ export default function Sidebar() {
                       className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors ${
                         isActive
                           ? 'bg-purple-50 text-purple-700'
-                          : isPrimary
-                            ? 'text-purple-600 hover:text-purple-700 hover:bg-purple-50'
-                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                       }`}
                     >
-                      <Icon className={`mr-3 h-5 w-5 ${isPrimary ? 'text-purple-600' : ''}`} />
-                      <span className={isPrimary ? 'font-semibold' : ''}>{item.name}</span>
-                      {isPrimary && (
-                        <span className="ml-2 px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full">
-                          NEW
-                        </span>
-                      )}
+                      <Icon className="mr-3 h-5 w-5" />
+                      <span>{item.name}</span>
                     </Link>
                   )}
                 </div>
@@ -165,15 +149,6 @@ export default function Sidebar() {
           })}
         </nav>
 
-        {/* Quick Action Buttons */}
-        <div className="px-4 pb-4 space-y-2">
-          <Link href="/campaigns/new">
-            <button className="btn-primary w-full flex items-center justify-center">
-              <Plus className="h-4 w-4 mr-2" />
-              New Campaign
-            </button>
-          </Link>
-        </div>
 
         {/* Logout */}
         <div className="px-4 pb-4 border-t border-gray-200 pt-4">

@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { api } from '@/lib/api'
 
 interface LeadList {
   id: string
@@ -32,20 +33,21 @@ function LeadListsContent() {
   // Fetch lead lists
   const fetchLeadLists = async () => {
     try {
-      const response = await fetch('/api/leads/lists', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch lead lists')
+      console.log('🚀 Starting fetchLeadLists...');
+      
+      const response = await api.get('/leads/lists')
+      console.log('📋 Frontend received data:', response.data)
+      console.log('📊 Data type:', typeof response.data, 'Array?', Array.isArray(response.data), 'Length:', response.data?.length);
+      
+      if (response.data && Array.isArray(response.data)) {
+        console.log('✅ Setting leadLists with', response.data.length, 'items');
+        setLeadLists(response.data)
+      } else {
+        console.log('❌ No valid data received:', response.data);
+        setLeadLists([])
       }
-
-      const data = await response.json()
-      setLeadLists(data.leadLists || [])
     } catch (error) {
-      console.error('Error fetching lead lists:', error)
+      console.error('❌ Error fetching lead lists:', error)
       setError('Failed to load lead lists')
     } finally {
       setIsLoading(false)
@@ -55,17 +57,8 @@ function LeadListsContent() {
   // Delete lead list
   const handleDeleteList = async (listId: string) => {
     try {
-      const response = await fetch(`/api/leads/lists/${listId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to delete lead list')
-      }
-
+      await api.delete(`/leads/lists/${listId}`)
+      
       // Remove from local state
       setLeadLists(prev => prev.filter(list => list.id !== listId))
     } catch (error) {
@@ -81,8 +74,20 @@ function LeadListsContent() {
   // Filter lead lists based on search term
   const filteredLeadLists = leadLists.filter(list =>
     list.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    list.description.toLowerCase().includes(searchTerm.toLowerCase())
+    (list.description || '').toLowerCase().includes(searchTerm.toLowerCase())
   )
+  
+  // Debug logging - CRITICAL for user debugging
+  console.log('🔍 === LEADS LIST DEBUG INFO ===')
+  console.log('  - leadLists array:', leadLists)
+  console.log('  - leadLists length:', leadLists.length)
+  console.log('  - searchTerm:', `"${searchTerm}"`)
+  console.log('  - filteredLeadLists length:', filteredLeadLists.length)
+  console.log('  - filteredLeadLists sample:', filteredLeadLists[0])
+  console.log('  - isLoading:', isLoading)
+  console.log('  - error:', error)
+  console.log('  - Will show "No lead lists yet"?', filteredLeadLists.length === 0 && !isLoading && !error)
+  console.log('🔍 ===============================')
 
   // Calculate stats
   const totalLeads = leadLists.reduce((sum, list) => sum + list.totalLeads, 0)
@@ -170,18 +175,25 @@ function LeadListsContent() {
           </CardContent>
         </Card>
       ) : isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, i) => (
+        <div className="space-y-2">
+          {[...Array(8)].map((_, i) => (
             <Card key={i}>
-              <CardContent className="p-6">
-                <Skeleton className="h-6 w-3/4 mb-2" />
-                <Skeleton className="h-4 w-full mb-4" />
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <Skeleton className="h-16 w-full" />
-                  <Skeleton className="h-16 w-full" />
+              <div className="flex items-center px-4 py-2.5 gap-4">
+                <div className="min-w-0 flex-1 max-w-sm">
+                  <Skeleton className="h-4 w-32 mb-1" />
+                  <Skeleton className="h-3 w-48" />
                 </div>
-                <Skeleton className="h-4 w-1/2" />
-              </CardContent>
+                <div className="flex items-center gap-6">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+                <Skeleton className="h-5 w-10" />
+                <Skeleton className="h-3 w-24" />
+                <div className="flex items-center gap-1">
+                  <Skeleton className="h-8 w-12" />
+                  <Skeleton className="h-8 w-8" />
+                </div>
+              </div>
             </Card>
           ))}
         </div>
@@ -225,7 +237,7 @@ function LeadListsContent() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="space-y-2 overflow-y-auto pr-2" style={{ maxHeight: 'calc(100vh - 28rem)' }}>
           {filteredLeadLists.map((leadList) => (
             <LeadListCard
               key={leadList.id}

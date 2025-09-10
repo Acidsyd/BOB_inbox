@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface Campaign {
   id: string
@@ -54,8 +55,10 @@ interface Campaign {
 
 function CampaignsContent() {
   const { user } = useAuth()
+  const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState('all')
+  const [isCreatingCampaign, setIsCreatingCampaign] = useState(false)
 
   const { data: campaignsResponse, isLoading } = useQuery({
     queryKey: ['campaigns'],
@@ -82,6 +85,11 @@ function CampaignsContent() {
       case 'draft': return 'bg-gray-100 text-gray-800'
       default: return 'bg-gray-100 text-gray-800'
     }
+  }
+
+  const handleCreateNewCampaign = () => {
+    setIsCreatingCampaign(true) // ⚡ INSTANT UI blocking
+    router.push('/campaigns/new')
   }
 
   // Tracking functions removed for simplification
@@ -112,12 +120,14 @@ function CampaignsContent() {
               Automated Campaign
             </Button>
           </Link>
-          <Link href="/campaigns/new">
-            <Button className="btn-primary">
-              <Plus className="h-4 w-4 mr-2" />
-              New Campaign
-            </Button>
-          </Link>
+          <Button 
+            className="btn-primary"
+            onClick={handleCreateNewCampaign}
+            disabled={isCreatingCampaign}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            {isCreatingCampaign ? 'Creating...' : 'New Campaign'}
+          </Button>
         </div>
       </div>
 
@@ -184,12 +194,14 @@ function CampaignsContent() {
                   Automated Campaign
                 </Button>
               </Link>
-              <Link href="/campaigns/new">
-                <Button className="btn-primary">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Campaign
-                </Button>
-              </Link>
+              <Button 
+                className="btn-primary"
+                onClick={handleCreateNewCampaign}
+                disabled={isCreatingCampaign}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                {isCreatingCampaign ? 'Creating...' : 'Create Campaign'}
+              </Button>
             </div>
           </div>
         </Card>
@@ -198,18 +210,18 @@ function CampaignsContent() {
           {filteredCampaigns.map((campaign) => {
             if (!campaign?.id) return null;
             
-            const leads = campaign.lead_count || 0;
-            const sent = campaign.emails_sent || 0;
-            const opened = campaign.emails_opened || 0;
-            const replied = campaign.replies || 0;
-            const lastActivity = campaign.updated_at || campaign.created_at;
+            const leads = campaign.leads || 0;
+            const sent = campaign.sent || 0;
+            const opened = campaign.opened || 0;
+            const replied = campaign.replied || 0;
+            const lastActivity = campaign.updatedAt || campaign.createdAt;
             
             // Tracking status removed for simplification
             
-            // Calculate rates
-            const openRate = sent > 0 ? Math.round((opened / sent) * 100) : 0
-            const clickRate = opened > 0 ? Math.round((campaign.clicks || 0) / opened * 100) : 0
-            const replyRate = sent > 0 ? Math.round((replied / sent) * 100) : 0
+            // Use backend-calculated rates or fallback to local calculation
+            const openRate = campaign.openRate ?? (sent > 0 ? Math.round((opened / sent) * 100) : 0)
+            const clickRate = campaign.clickRate ?? (opened > 0 ? Math.round((campaign.clicked || 0) / opened * 100) : 0)
+            const replyRate = campaign.replyRate ?? (sent > 0 ? Math.round((replied / sent) * 100) : 0)
             
             return (
               <Card key={campaign.id} className="hover:shadow-lg transition-shadow">

@@ -4,7 +4,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
 
 export const api = axios.create({
   baseURL: `${API_URL}/api`,
-  timeout: 60000, // Increased timeout to 60 seconds for campaign creation
+  timeout: 120000, // Increased timeout to 120 seconds for sync operations
 })
 
 // Add logging for debugging
