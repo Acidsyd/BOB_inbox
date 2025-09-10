@@ -1,0 +1,63 @@
+# Multi-stage build for production optimization
+FROM node:20-alpine AS deps
+
+# Install dependencies only when needed
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json* ./
+RUN npm ci --only=production && npm cache clean --force
+
+# Development dependencies for building (if needed)
+FROM node:20-alpine AS dev-deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci && npm cache clean --force
+
+# Build stage (if TypeScript compilation needed)
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Copy dependencies and source code
+COPY --from=dev-deps /app/node_modules ./node_modules
+COPY . .
+
+# Build the application (TypeScript compilation if needed)
+RUN npm run build || echo "No build step required"
+
+# Production image
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+# Create non-root user for security
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nodeapp
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Copy production dependencies
+COPY --from=deps --chown=nodeapp:nodejs /app/node_modules ./node_modules
+
+# Copy source code and built assets
+COPY --chown=nodeapp:nodejs . .
+
+# Create logs directory
+RUN mkdir -p logs uploads && chown -R nodeapp:nodejs logs uploads
+
+# Switch to non-root user
+USER nodeapp
+
+# Expose port
+EXPOSE 4000
+
+# Environment variables
+ENV NODE_ENV=production
+ENV PORT=4000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:4000/api/health || exit 1
+
+# Start the application
+CMD ["npm", "start"]
