@@ -1,6 +1,16 @@
 import axios from 'axios'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+// Ensure HTTPS in production, fallback for local development
+const getApiUrl = () => {
+  // If we're on the production domain, always use HTTPS
+  if (typeof window !== 'undefined' && window.location.hostname === 'qquadro.com') {
+    return 'https://qquadro.com'
+  }
+  // Otherwise use environment variable or localhost
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+}
+
+const API_URL = getApiUrl()
 
 export const api = axios.create({
   baseURL: `${API_URL}/api`,
