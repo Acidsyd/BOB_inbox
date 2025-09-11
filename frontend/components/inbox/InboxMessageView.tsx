@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useInboxMessages } from '@/hooks/useInboxMessages'
+import { useTimezone } from '@/contexts/TimezoneContext'
 import { Label } from '@/hooks/useLabels'
 import { LabelPicker } from './LabelPicker'
 import { ConversationLabelsFull } from './ConversationLabels'
@@ -92,6 +93,9 @@ export function InboxMessageView({
   const [useRichText, setUseRichText] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [conversationLabels, setConversationLabels] = useState<Label[]>(conversation.labels || [])
+  
+  // Timezone-aware date formatting
+  const { formatMessageDate } = useTimezone()
   
   // Reset labels when conversation changes
   useEffect(() => {
@@ -397,16 +401,9 @@ export function InboxMessageView({
   }
 
 
+  // Use timezone-aware formatting from context
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return 'Unknown'
-    try {
-      // CRITICAL: Backend stores local timestamps, don't force UTC conversion
-      // EmailSyncService stores local timestamps, UnifiedInboxService must preserve them without UTC conversion
-      const date = new Date(dateStr)
-      return format(date, 'MMM d, yyyy h:mm a')
-    } catch {
-      return 'Invalid date'
-    }
+    return formatMessageDate(dateStr)
   }
 
   const renderMessageContent = (message: Message) => {

@@ -8,6 +8,7 @@ import { ToastProvider } from '../components/ui/toast'
 // Removed enhanced toast provider for simplification
 import { ConfirmationProvider } from '../components/ui/confirmation-dialog'
 import { ErrorBoundary } from '../components/ui/error-boundary'
+import { TimezoneProvider } from '../contexts/TimezoneContext'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -22,15 +23,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ErrorBoundary section="Application Root">
       <QueryClientProvider client={queryClient}>
-        <NavigationProvider>
-          <AuthProvider>
-            <ConfirmationProvider>
-              <ToastProvider>
-                {children}
-              </ToastProvider>
-            </ConfirmationProvider>
-          </AuthProvider>
-        </NavigationProvider>
+        <TimezoneProvider>
+          <NavigationProvider>
+            <AuthProvider>
+              <ConfirmationProvider>
+                <ToastProvider>
+                  {children}
+                </ToastProvider>
+              </ConfirmationProvider>
+            </AuthProvider>
+          </NavigationProvider>
+        </TimezoneProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   )

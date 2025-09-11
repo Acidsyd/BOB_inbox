@@ -14,6 +14,7 @@ import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { ConversationLabelsCompact } from './ConversationLabels'
 import { Label } from '@/hooks/useLabels'
+import { useTimezone } from '@/contexts/TimezoneContext'
 
 interface Conversation {
   id: string
@@ -46,21 +47,12 @@ export function InboxConversationItem({ conversation, isSelected, isChecked, onC
     console.log('CIAO CONVERSATION:', conversation.campaign_name || 'NO CAMPAIGN NAME');
   }
   
+  // Timezone-aware date formatting
+  const { formatConversationDate } = useTimezone()
+  
+  // Use timezone-aware formatting from context
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return ''
-    
-    try {
-      const date = new Date(dateStr)
-      if (isToday(date)) {
-        return format(date, 'h:mm a')
-      } else if (isYesterday(date)) {
-        return 'Yesterday'
-      } else {
-        return format(date, 'MMM d')
-      }
-    } catch {
-      return ''
-    }
+    return formatConversationDate(dateStr)
   }
 
   const getParticipantDisplay = () => {
