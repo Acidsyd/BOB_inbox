@@ -58,7 +58,9 @@
     "rate-limit:monitor": "node scripts/monitor-rate-limiting.js",
     "rate-limit:test-live": "node scripts/test-live-system.js",
     "reset:daily": "node backend/src/cron/dailyReset.js",
-    "cron:setup": "node backend/src/scripts/setup-daily-reset-cron.js"
+    "cron:setup": "node backend/src/scripts/setup-daily-reset-cron.js",
+    "production:setup": "./scripts/production-setup.sh",
+    "production:deploy": "/usr/local/bin/deploy-mailsender"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

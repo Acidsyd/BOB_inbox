@@ -25,10 +25,10 @@ const RichTextEditor = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="min-h-[200px] border border-gray-300 rounded-md p-4 bg-gray-50 flex items-center justify-center">
+      <div className="min-h-[200px] border border-gray-300 rounded-md p-4 bg-blue-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-2"></div>
-          <p className="text-sm text-gray-600">Loading editor...</p>
+          <div className="text-blue-600 font-medium">📝 Editor Loading... (This should appear briefly)</div>
+          <p className="text-xs text-blue-500 mt-1">If this stays, there's a loading issue</p>
         </div>
       </div>
     )

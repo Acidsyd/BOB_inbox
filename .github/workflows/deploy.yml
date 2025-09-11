@@ -1,5 +1,5 @@
-# Automatic Deploy to Digital Ocean Production
-name: Deploy to Digital Ocean
+# Fresh Deployment to Digital Ocean
+name: Deploy to Production
 
 on:
   push:
@@ -8,170 +8,106 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to Digital Ocean
+    name: Deploy to DigitalOcean
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: production
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup SSH Keys  
-      uses: webfactory/ssh-agent@v0.9.0
-      with:
-        ssh-private-key: |
-          ${{ secrets.DEPLOY_SSH_KEY }}
-          ${{ secrets.REPO_SSH_KEY }}
-          
-    - name: Test SSH Keys
-      run: |
-        echo "Testing SSH agent..."
-        ssh-add -l || echo "No keys in agent"
-        echo "Testing GitHub SSH access..."
-        ssh -T git@github.com 2>&1 || true
-        echo "Testing server SSH access..."
-        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 root@qquadro.com "echo 'Server SSH OK'" || echo "Server SSH failed"
-        
-    - name: Add server to known hosts
+    - name: Setup SSH connection
       run: |
         mkdir -p ~/.ssh
-        ssh-keyscan -H qquadro.com >> ~/.ssh/known_hosts
-        
-    - name: Deploy to Digital Ocean
+        echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+          
+    - name: Test SSH connection
       run: |
-        echo "🚀 Starting deployment to Digital Ocean (SSH version)..."
-        ssh -A -o StrictHostKeyChecking=no root@qquadro.com << 'EOF'
-          # Remove set -e temporarily for better debugging
-          
-          echo "📂 Setting up application directory..."
-          cd /root || { echo "❌ Failed to cd to /root"; exit 1; }
-          
-          echo "🔍 Current directory: $(pwd)"
-          echo "🔍 Available space: $(df -h /root)"
-          echo "🔍 Git version: $(git --version)"
-          
-          # Remove existing directory if it exists
-          if [ -d "mailsender" ]; then
-            echo "🔄 Removing existing directory..."
-            rm -rf mailsender || { echo "❌ Failed to remove mailsender directory"; exit 1; }
-          fi
-          
-          echo "🔄 Cloning repository..."
-          echo "🔗 Repository URL: git@github.com:Acidsyd/BOB_inbox.git (SSH)"
-          
-          # Check if SSH agent is available
-          echo "🔍 Checking SSH agent..."
-          ssh-add -l || echo "⚠️ No SSH keys in agent"
-          
-          # Add GitHub to known hosts to prevent SSH verification prompts
-          ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || echo "⚠️ Failed to add GitHub to known hosts"
-          
-          # Test GitHub connection
-          echo "🔍 Testing GitHub SSH connection..."
-          ssh -T git@github.com 2>&1 || true
-          
-          # Configure git to use SSH instead of HTTPS
-          git config --global url."git@github.com:".insteadOf "https://github.com/"
-          
-          # Clone using SSH
-          git clone git@github.com:Acidsyd/BOB_inbox.git mailsender
-          clone_exit_code=$?
-          
-          if [ $clone_exit_code -ne 0 ]; then
-            echo "❌ Git clone failed with exit code: $clone_exit_code"
-            echo "🔍 Trying to diagnose the issue..."
-            
-            # Test network connectivity
-            echo "🌐 Testing network connectivity to GitHub..."
-            ping -c 3 github.com || echo "⚠️ Cannot reach github.com"
-            
-            # Test DNS resolution
-            echo "🔍 DNS lookup for github.com:"
-            nslookup github.com || echo "⚠️ DNS lookup failed"
-            
-            # Try with verbose git clone using SSH
-            echo "🔍 Attempting verbose git clone with SSH..."
-            git clone --verbose git@github.com:Acidsyd/BOB_inbox.git mailsender-debug
-            
-            exit 1
-          fi
-          
-          cd mailsender || { echo "❌ Failed to cd to mailsender"; exit 1; }
-          echo "✅ Repository cloned successfully"
-          
-          echo "📋 Current directory contents:"
-          ls -la
-          
-          echo "🔍 Git status:"
-          git status
-          
-          echo "🔄 Ensuring we're on main branch..."
-          git branch -a
-          git checkout main || { echo "⚠️ No main branch, staying on current branch"; }
-          
-          # Continue with deployment only if we got this far
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'"
+        
+    - name: Deploy to server
+      run: |
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
           set -e
+          echo "🚀 Starting fresh deployment..."
           
-          echo "🛑 Stopping existing containers..."
-          docker-compose -f docker-compose.production.yml down --remove-orphans
+          # Set up application directory
+          APP_DIR="/var/www/mailsender"
           
-          echo "🏗️ Building and starting containers..."
-          docker-compose -f docker-compose.production.yml up -d --build --force-recreate
+          # Stop existing services if any
+          echo "⏹️ Stopping existing services..."
+          systemctl stop mailsender-backend || true
+          systemctl stop mailsender-frontend || true
+          systemctl stop nginx || true
           
-          echo "⏳ Waiting for services to start..."
-          sleep 30
+          # Create app directory
+          echo "📁 Setting up application directory..."
+          mkdir -p $APP_DIR
+          cd $APP_DIR
           
-          echo "🔍 Checking service health..."
-          docker-compose -f docker-compose.production.yml ps
+          # Remove existing files
+          rm -rf * .* 2>/dev/null || true
           
-          echo "📊 Service logs (last 20 lines)..."
-          docker-compose -f docker-compose.production.yml logs --tail=20 backend frontend nginx
+          # Clone repository using HTTPS (more reliable)
+          echo "📥 Cloning repository..."
+          git clone https://github.com/Acidsyd/BOB_inbox.git .
+          
+          # Setup environment
+          echo "⚙️ Setting up environment..."
+          cp .env.production.example .env.production
+          
+          # Install Node.js 20 if not present
+          echo "📦 Installing Node.js..."
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          apt-get install -y nodejs
+          
+          # Install PM2 globally
+          echo "🔧 Installing PM2..."
+          npm install -g pm2
+          
+          # Install dependencies and build
+          echo "🔨 Building application..."
+          npm run setup
+          npm run build
+          
+          # Setup production environment
+          echo "🌐 Setting up production environment..."
+          npm run production:setup
           
           echo "✅ Deployment completed successfully!"
         EOF
         
-    - name: Verify deployment
+    - name: Health check
       run: |
-        echo "🔍 Verifying deployment..."
+        echo "🔍 Running health checks..."
+        sleep 30
         
-        # Wait a bit for services to fully start
-        sleep 15
-        
-        # Check if the site is responding
-        if curl -f -s https://qquadro.com > /dev/null; then
-          echo "✅ Website is responding!"
-        else
-          echo "❌ Website check failed!"
-          exit 1
-        fi
-        
-        # Check API health endpoint
-        if curl -f -s https://qquadro.com/api/health > /dev/null; then
-          echo "✅ API health check passed!"
-        else
-          echo "⚠️ API health check failed (might be normal during startup)"
-        fi
+        # Check if services are running
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+          echo "Checking service status..."
+          pm2 status || true
+          systemctl status nginx --no-pager || true
+        EOF
         
     - name: Deployment summary
+      if: success()
       run: |
         echo "🎉 DEPLOYMENT SUCCESSFUL!"
         echo "========================="
-        echo "✅ Code deployed to Digital Ocean"
-        echo "✅ Docker containers rebuilt and restarted"
-        echo "✅ Services health checked"
+        echo "✅ Fresh installation completed"
+        echo "✅ Node.js and PM2 installed"
+        echo "✅ Application built and configured"
         echo ""
-        echo "🌐 Production URL: https://qquadro.com"
-        echo "📊 Check logs: ssh root@qquadro.com 'cd /root/mailsender && docker-compose -f docker-compose.production.yml logs'"
-        echo ""
-        echo "🚀 Your CSV uploader and all fixes are now live!"
+        echo "🌐 Production URL: https://${{ secrets.DEPLOY_HOST }}"
+        echo "📊 SSH access: ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
         
     - name: Notify on failure
       if: failure()
       run: |
         echo "❌ DEPLOYMENT FAILED!"
         echo "===================="
-        echo "Please check the logs above for details."
-        echo "You can manually deploy by running:"
-        echo "ssh root@qquadro.com"
-        echo "cd /root/mailsender && git pull && docker-compose -f docker-compose.production.yml up -d --build"
+        echo "Check the logs above for details."
+        echo "Manual recovery: ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"

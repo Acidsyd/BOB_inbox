@@ -29,6 +29,7 @@ import { useTrackingConfiguration, type TrackingConfiguration } from '@/hooks/us
 import EmailSequenceBuilder from '@/components/campaigns/EmailSequenceBuilder'
 import EmailPreviewAndTest from '@/components/campaigns/EmailPreviewAndTest'
 import LeadListSelector from '@/components/campaigns/LeadListSelector'
+import DuplicateCheckStep from '@/components/campaigns/DuplicateCheckStep'
 import { api } from '@/lib/api'
 
 interface EmailSequence {

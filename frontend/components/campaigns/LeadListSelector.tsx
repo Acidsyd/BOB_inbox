@@ -231,6 +231,33 @@ export default function LeadListSelector({
         </p>
       </div>
 
+      {/* 🚨 ALWAYS VISIBLE TEST BUTTON - MOVED OUTSIDE ALL CONDITIONALS 🚨 */}
+      <div className="border-4 border-red-600 pt-6 mb-6 bg-red-200 p-6 rounded-lg">
+        <h1 className="text-red-900 font-bold text-xl mb-4 text-center">🚨 TEST: DUPLICATE CHECK BUTTON 🚨</h1>
+        <h2 className="text-red-800 font-semibold text-lg mb-3 text-center">This button should ALWAYS be visible!</h2>
+        <Button 
+          onClick={checkForDuplicates}
+          disabled={isCheckingDuplicates || !selectedList}
+          variant="outline"
+          className="w-full border-red-600 text-red-900 hover:bg-red-100 bg-red-300 font-bold text-lg py-3"
+        >
+          {isCheckingDuplicates ? (
+            <>
+              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+              Checking duplicates...
+            </>
+          ) : (
+            <>
+              <Copy className="h-5 w-5 mr-2" />
+              🔍 CHECK FOR DUPLICATES - TEST VERSION
+            </>
+          )}
+        </Button>
+        {!selectedList && (
+          <p className="text-red-800 text-sm text-center mt-2">Select a lead list first to check for duplicates</p>
+        )}
+      </div>
+
       {/* Selected List Summary (if selected) */}
       {selectedList && (
         <Card className="border-blue-200 bg-blue-50">
@@ -278,35 +305,6 @@ export default function LeadListSelector({
               </div>
             </div>
 
-            {/* Duplicate Check Button */}
-            <div className="border-t border-blue-200 pt-4 mb-4">
-              <Button 
-                onClick={checkForDuplicates}
-                disabled={isCheckingDuplicates}
-                variant="outline"
-                className="w-full border-blue-300 text-blue-700 hover:bg-blue-50"
-              >
-                {isCheckingDuplicates ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Checking duplicates...
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4 mr-2" />
-                    Check for Duplicates
-                  </>
-                )}
-              </Button>
-              {duplicateResults && (
-                <div className="text-xs text-blue-600 mt-2 text-center">
-                  {duplicateResults.existingInDatabase > 0 
-                    ? `✓ Found ${duplicateResults.existingInDatabase} duplicates in other campaigns`
-                    : '✓ No duplicates found'
-                  }
-                </div>
-              )}
-            </div>
 
             {/* Preview Data */}
             <div className="border-t border-blue-200 pt-4">

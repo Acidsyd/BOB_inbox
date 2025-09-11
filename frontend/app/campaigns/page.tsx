@@ -88,8 +88,23 @@ function CampaignsContent() {
   }
 
   const handleCreateNewCampaign = () => {
+    if (isCreatingCampaign) return // Prevent double clicks
+    
+    console.log('🔍 Create campaign button clicked')
     setIsCreatingCampaign(true) // ⚡ INSTANT UI blocking
-    router.push('/campaigns/new')
+    
+    try {
+      console.log('🔍 Navigating to /campaigns/new')
+      router.push('/campaigns/new')
+    } catch (error) {
+      console.error('❌ Navigation error:', error)
+      setIsCreatingCampaign(false)
+    }
+    
+    // Reset loading state after 3 seconds as fallback
+    setTimeout(() => {
+      setIsCreatingCampaign(false)
+    }, 3000)
   }
 
   // Tracking functions removed for simplification
