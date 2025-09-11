@@ -23,6 +23,15 @@ jobs:
         ssh-private-key: |
           ${{ secrets.DEPLOY_SSH_KEY }}
           ${{ secrets.REPO_SSH_KEY }}
+          
+    - name: Test SSH Keys
+      run: |
+        echo "Testing SSH agent..."
+        ssh-add -l || echo "No keys in agent"
+        echo "Testing GitHub SSH access..."
+        ssh -T git@github.com 2>&1 || true
+        echo "Testing server SSH access..."
+        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 root@qquadro.com "echo 'Server SSH OK'" || echo "Server SSH failed"
         
     - name: Add server to known hosts
       run: |
