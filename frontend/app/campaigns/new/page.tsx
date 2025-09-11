@@ -524,11 +524,11 @@ function CampaignBuilderContent() {
           {currentStep === 3 && (
             <LeadListSelector
               selectedListId={campaignData.selectedLeadListId}
-              onListSelect={(listId, list) => {
+              onListSelect={(listId, list, filteredCount) => {
                 updateCampaignData({
                   selectedLeadListId: listId,
                   selectedLeadListName: list.name,
-                  selectedLeadListCount: list.activeLeads
+                  selectedLeadListCount: filteredCount !== undefined ? filteredCount : list.activeLeads
                 })
               }}
               onClearSelection={() => {

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Search, Users, Calendar, AlertCircle, Database, FileText, CheckCircle, Loader2 } from 'lucide-react'
+import { Search, Users, Calendar, AlertCircle, Database, FileText, CheckCircle, Loader2, Copy, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,9 +24,24 @@ interface LeadList {
 
 interface LeadListSelectorProps {
   selectedListId?: string
-  onListSelect: (listId: string, list: LeadList) => void
+  onListSelect: (listId: string, list: LeadList, filteredCount?: number) => void
   onClearSelection: () => void
   className?: string
+}
+
+interface DuplicateDetail {
+  email: string
+  existingInLists: {
+    listId: string
+    listName: string
+  }[]
+}
+
+interface DuplicateCheckResult {
+  total: number
+  existingInDatabase: number
+  duplicateDetails: DuplicateDetail[]
+  emails: string[]
 }
 
 interface LeadPreview {
@@ -50,6 +65,10 @@ export default function LeadListSelector({
   const [previewData, setPreviewData] = useState<LeadPreview[]>([])
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [selectedList, setSelectedList] = useState<LeadList | null>(null)
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false)
+  const [duplicateResults, setDuplicateResults] = useState<DuplicateCheckResult | null>(null)
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
+  const [filteredLeadCount, setFilteredLeadCount] = useState<number | null>(null)
 
   // Fetch lead lists
   const fetchLeadLists = async () => {
@@ -84,6 +103,38 @@ export default function LeadListSelector({
     }
   }
 
+  // Check for duplicates in other campaigns
+  const checkForDuplicates = async () => {
+    if (!selectedList) return
+
+    try {
+      setIsCheckingDuplicates(true)
+      
+      // Fetch all leads from selected list
+      const response = await api.get(`/leads/lists/${selectedList.id}`)
+      const leads = response.data.leads || []
+      const emails = leads.map(lead => lead.email)
+      
+      if (emails.length === 0) {
+        alert('No leads found in this list')
+        return
+      }
+
+      // Check for duplicates
+      const duplicateResponse = await api.post('/leads/check-duplicates', { emails })
+      const results: DuplicateCheckResult = duplicateResponse.data
+      
+      setDuplicateResults(results)
+      setShowDuplicateModal(true)
+      
+    } catch (error) {
+      console.error('Error checking duplicates:', error)
+      alert('Failed to check for duplicates. Please try again.')
+    } finally {
+      setIsCheckingDuplicates(false)
+    }
+  }
+
   useEffect(() => {
     fetchLeadLists()
   }, [])
@@ -91,6 +142,8 @@ export default function LeadListSelector({
   // Handle list selection
   const handleListSelect = (list: LeadList) => {
     setSelectedList(list)
+    setFilteredLeadCount(null) // Reset filtered count
+    setDuplicateResults(null) // Reset duplicate results
     onListSelect(list.id, list)
     fetchPreviewData(list.id)
   }
@@ -99,7 +152,34 @@ export default function LeadListSelector({
   const handleClearSelection = () => {
     setSelectedList(null)
     setPreviewData([])
+    setFilteredLeadCount(null)
+    setDuplicateResults(null)
     onClearSelection()
+  }
+
+  // Handle duplicate choice - Continue with all leads
+  const handleContinueWithAll = () => {
+    setShowDuplicateModal(false)
+    // Keep original count
+    setFilteredLeadCount(null)
+    if (selectedList) {
+      onListSelect(selectedList.id, selectedList, selectedList.activeLeads)
+    }
+  }
+
+  // Handle duplicate choice - Skip duplicates
+  const handleSkipDuplicates = () => {
+    setShowDuplicateModal(false)
+    if (selectedList && duplicateResults) {
+      const newCount = selectedList.activeLeads - duplicateResults.existingInDatabase
+      setFilteredLeadCount(newCount)
+      onListSelect(selectedList.id, selectedList, newCount)
+    }
+  }
+
+  // Close duplicate modal without changes
+  const handleCloseDuplicateModal = () => {
+    setShowDuplicateModal(false)
   }
 
   // Filter lead lists
@@ -184,16 +264,48 @@ export default function LeadListSelector({
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
-                  {selectedList.activeLeads.toLocaleString()}
+                  {filteredLeadCount !== null ? filteredLeadCount.toLocaleString() : selectedList.activeLeads.toLocaleString()}
                 </div>
-                <div className="text-xs text-green-700">Active Leads</div>
+                <div className="text-xs text-green-700">
+                  Active Leads {filteredLeadCount !== null && `(${duplicateResults?.existingInDatabase || 0} duplicates skipped)`}
+                </div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">
-                  {Math.round((selectedList.activeLeads / selectedList.totalLeads) * 100) || 0}%
+                  {Math.round(((filteredLeadCount !== null ? filteredLeadCount : selectedList.activeLeads) / selectedList.totalLeads) * 100) || 0}%
                 </div>
                 <div className="text-xs text-purple-700">Active Rate</div>
               </div>
+            </div>
+
+            {/* Duplicate Check Button */}
+            <div className="border-t border-blue-200 pt-4 mb-4">
+              <Button 
+                onClick={checkForDuplicates}
+                disabled={isCheckingDuplicates}
+                variant="outline"
+                className="w-full border-blue-300 text-blue-700 hover:bg-blue-50"
+              >
+                {isCheckingDuplicates ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Checking duplicates...
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Check for Duplicates
+                  </>
+                )}
+              </Button>
+              {duplicateResults && (
+                <div className="text-xs text-blue-600 mt-2 text-center">
+                  {duplicateResults.existingInDatabase > 0 
+                    ? `✓ Found ${duplicateResults.existingInDatabase} duplicates in other campaigns`
+                    : '✓ No duplicates found'
+                  }
+                </div>
+              )}
             </div>
 
             {/* Preview Data */}
@@ -382,6 +494,104 @@ export default function LeadListSelector({
             </div>
           )}
         </>
+      )}
+
+      {/* Duplicate Check Results Modal */}
+      {showDuplicateModal && duplicateResults && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Duplicate Check Results</h3>
+              <Button variant="ghost" size="sm" onClick={handleCloseDuplicateModal}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto">
+              {duplicateResults.existingInDatabase > 0 ? (
+                <>
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+                    <div className="flex items-center mb-2">
+                      <AlertCircle className="h-5 w-5 text-orange-600 mr-2" />
+                      <span className="font-medium text-orange-900">
+                        Found {duplicateResults.existingInDatabase} duplicate leads
+                      </span>
+                    </div>
+                    <p className="text-sm text-orange-700">
+                      These leads already exist in other campaigns or lists. What would you like to do?
+                    </p>
+                  </div>
+
+                  {/* Show duplicate details */}
+                  <div className="mb-6">
+                    <h4 className="font-medium text-gray-900 mb-3">Duplicate Leads:</h4>
+                    <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg">
+                      {duplicateResults.duplicateDetails.slice(0, 10).map((duplicate, index) => (
+                        <div key={index} className="p-3 border-b border-gray-100 last:border-b-0">
+                          <div className="font-medium text-gray-900 text-sm">{duplicate.email}</div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            Found in: {duplicate.existingInLists.map(list => list.listName).join(', ')}
+                          </div>
+                        </div>
+                      ))}
+                      {duplicateResults.duplicateDetails.length > 10 && (
+                        <div className="p-3 text-center text-sm text-gray-500">
+                          ... and {duplicateResults.duplicateDetails.length - 10} more duplicates
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex gap-3">
+                    <Button 
+                      onClick={handleContinueWithAll}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      Continue with All Leads
+                      <span className="ml-2 text-sm opacity-75">
+                        ({selectedList?.activeLeads} leads)
+                      </span>
+                    </Button>
+                    <Button 
+                      onClick={handleSkipDuplicates}
+                      variant="outline"
+                      className="flex-1 border-orange-300 text-orange-700 hover:bg-orange-50"
+                    >
+                      Skip Duplicates
+                      <span className="ml-2 text-sm opacity-75">
+                        ({(selectedList?.activeLeads || 0) - duplicateResults.existingInDatabase} leads)
+                      </span>
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                    <div className="flex items-center mb-2">
+                      <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                      <span className="font-medium text-green-900">
+                        No duplicates found!
+                      </span>
+                    </div>
+                    <p className="text-sm text-green-700">
+                      All {duplicateResults.total} leads in this list are unique.
+                    </p>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <Button 
+                      onClick={handleCloseDuplicateModal}
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      Continue with Campaign
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
