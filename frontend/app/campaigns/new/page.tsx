@@ -1,12 +1,12 @@
 'use client'
 
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import AppLayout from '@/components/layout/AppLayout'
+import ProtectedRoute from '../../../components/auth/ProtectedRoute'
+import AppLayout from '../../../components/layout/AppLayout'
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '../../../components/ui/button'
+import { Input } from '../../../components/ui/input'
+import { Label } from '../../../components/ui/label'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -22,15 +22,15 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { CSVParser, type ParseResult } from '@/lib/csvParser'
-import { useWorkflowNavigation } from '@/lib/navigation/context'
-import { useEmailAccountsSelection } from '@/hooks/useEmailAccountsSelection'
-import { useTrackingConfiguration, type TrackingConfiguration } from '@/hooks/useTrackingConfiguration'
-import EmailSequenceBuilder from '@/components/campaigns/EmailSequenceBuilder'
-import EmailPreviewAndTest from '@/components/campaigns/EmailPreviewAndTest'
-import LeadListSelector from '@/components/campaigns/LeadListSelector'
-import DuplicateCheckStep from '@/components/campaigns/DuplicateCheckStep'
-import { api } from '@/lib/api'
+import { CSVParser, type ParseResult } from '../../../lib/csvParser'
+import { useWorkflowNavigation } from '../../../lib/navigation/context'
+import { useEmailAccountsSelection } from '../../../hooks/useEmailAccountsSelection'
+import { useTrackingConfiguration, type TrackingConfiguration } from '../../../hooks/useTrackingConfiguration'
+import EmailSequenceBuilder from '../../../components/campaigns/EmailSequenceBuilder'
+import EmailPreviewAndTest from '../../../components/campaigns/EmailPreviewAndTest'
+import LeadListSelector from '../../../components/campaigns/LeadListSelector'
+import DuplicateCheckStep from '../../../components/campaigns/DuplicateCheckStep'
+import { api } from '../../../lib/api'
 
 interface EmailSequence {
   id: number
