@@ -1,15 +1,15 @@
 'use client'
 
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import AppLayout from '@/components/layout/AppLayout'
-import { useAuth } from '@/lib/auth/context'
+import ProtectedRoute from '../../components/auth/ProtectedRoute'
+import AppLayout from '../../components/layout/AppLayout'
+import { useAuth } from '../../lib/auth/context'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { api } from '../../lib/api'
 // Removed tracking components for simplification
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
+import { Button } from '../../components/ui/button'
+import { Input } from '../../components/ui/input'
+import { Badge } from '../../components/ui/badge'
 import { 
   Plus, 
   Search, 
