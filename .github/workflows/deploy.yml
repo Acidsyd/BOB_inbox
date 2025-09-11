@@ -17,12 +17,12 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup SSH Keys
+    - name: Setup SSH Keys  
       uses: webfactory/ssh-agent@v0.9.0
       with:
         ssh-private-key: |
           ${{ secrets.DEPLOY_SSH_KEY }}
-          ${{ secrets.GITHUB_SSH_KEY }}
+          ${{ secrets.REPO_SSH_KEY }}
         
     - name: Add server to known hosts
       run: |
