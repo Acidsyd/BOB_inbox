@@ -473,8 +473,112 @@ router.get('/:id/leads', authenticateToken, async (req, res) => {
   }
 });
 
-// Check duplicates endpoint - used by frontend to check emails from parsed CSV
+// Check duplicates for a specific lead list - NEW endpoint for DuplicateCheckStep
 router.post('/check-duplicates', authenticateToken, async (req, res) => {
+  try {
+    const { leadListId } = req.body;
+
+    if (!leadListId) {
+      return res.status(400).json({ error: 'leadListId is required' });
+    }
+
+    console.log('🔍 Checking duplicates for lead list:', leadListId);
+    
+    // Verify lead list ownership
+    const { data: leadList, error: listError } = await supabase
+      .from('lead_lists')
+      .select('*')
+      .eq('id', leadListId)
+      .eq('organization_id', req.user.organizationId)
+      .single();
+
+    if (listError || !leadList) {
+      return res.status(404).json({ error: 'Lead list not found' });
+    }
+
+    // Get all emails from the specified lead list
+    const { data: leadsInList, error: leadsError } = await supabase
+      .from('leads')
+      .select('email')
+      .eq('lead_list_id', leadListId)
+      .eq('organization_id', req.user.organizationId);
+
+    if (leadsError) {
+      throw leadsError;
+    }
+
+    if (!leadsInList || leadsInList.length === 0) {
+      return res.json({
+        total: 0,
+        existingInDatabase: 0,
+        duplicateDetails: [],
+        emails: []
+      });
+    }
+
+    const emails = leadsInList.map(lead => lead.email);
+    console.log(`📊 Found ${emails.length} emails in lead list to check for duplicates`);
+
+    const existingInDatabase = [];
+    const duplicateDetails = [];
+
+    // Check each email against OTHER lists in the database
+    for (const email of emails) {
+      try {
+        // Clean email by removing any emoji/special characters and trim
+        const cleanEmail = email.replace(/[^\w@.-]/g, '').toLowerCase().trim();
+        
+        const { data: existingLeads, error: checkError } = await supabase
+          .from('leads')
+          .select(`
+            *,
+            lead_lists:lead_list_id (
+              id,
+              name
+            )
+          `)
+          .eq('email', cleanEmail)
+          .eq('organization_id', req.user.organizationId)
+          .neq('lead_list_id', leadListId); // Exclude the current list
+
+        if (checkError) {
+          console.error('Error checking email:', checkError);
+          continue;
+        }
+
+        if (existingLeads && existingLeads.length > 0) {
+          existingInDatabase.push(cleanEmail);
+          duplicateDetails.push({
+            email: email,
+            existing: existingLeads,
+            existingInLists: existingLeads.map(existingLead => ({
+              listId: existingLead.lead_list_id,
+              listName: existingLead.lead_lists?.name || 'Unknown List'
+            }))
+          });
+        }
+      } catch (err) {
+        console.error('Error processing email:', err);
+      }
+    }
+
+    console.log('📊 Found duplicates:', existingInDatabase.length);
+
+    res.json({
+      total: emails.length,
+      existingInDatabase: existingInDatabase.length,
+      duplicateDetails: duplicateDetails,
+      emails: existingInDatabase
+    });
+
+  } catch (error) {
+    console.error('Check duplicates error:', error);
+    res.status(500).json({ error: 'Failed to check duplicates' });
+  }
+});
+
+// Check duplicates endpoint - used by frontend to check emails from parsed CSV
+router.post('/check-duplicates-emails', authenticateToken, async (req, res) => {
   try {
     const { emails } = req.body;
 

@@ -168,3 +168,5 @@ yarn.lock
 *.njsproj
 *.sln
 *.sw?
+.env.github
+.mcp.json
