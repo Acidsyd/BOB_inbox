@@ -16,6 +16,22 @@ class UnifiedInboxService {
     this.emailSyncService = null;
   }
 
+  /**
+   * Helper function to create local timestamp (preserves timezone)
+   * CRITICAL: EmailSyncService stores local timestamps, UnifiedInboxService must preserve them without UTC conversion
+   */
+  getLocalTimestamp() {
+    // Use the same format as EmailSyncService to maintain consistency
+    const dateObj = new Date();
+    // Format using browser's local timezone (getHours() gives local browser time)
+    return dateObj.getFullYear() + '-' + 
+      String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(dateObj.getDate()).padStart(2, '0') + 'T' + 
+      String(dateObj.getHours()).padStart(2, '0') + ':' + 
+      String(dateObj.getMinutes()).padStart(2, '0') + ':' + 
+      String(dateObj.getSeconds()).padStart(2, '0') + '.000Z';
+  }
+
   // Lazy load EmailSyncService to avoid circular dependency
   getEmailSyncService() {
     if (!this.emailSyncService) {
@@ -97,7 +113,7 @@ class UnifiedInboxService {
             status: 'active',
             message_count: 1,
             unread_count: 1,
-            last_activity_at: enrichedEmailData.received_at || new Date().toISOString(),
+            last_activity_at: enrichedEmailData.received_at || this.getLocalTimestamp(),
             last_message_preview: enrichedEmailData.content_plain?.substring(0, 200) || 'Bounce notification',
             provider_thread_id: enrichedEmailData.provider_thread_id || `bounce-${Date.now()}`
           })
@@ -134,7 +150,7 @@ class UnifiedInboxService {
             content_html: enrichedEmailData.content_html,
             content_plain: enrichedEmailData.content_plain,
             direction: 'received',
-            received_at: enrichedEmailData.received_at || new Date().toISOString(),
+            received_at: enrichedEmailData.received_at || this.getLocalTimestamp(),
             is_read: false,
             provider_message_id: enrichedEmailData.provider_message_id,
             provider_thread_id: enrichedEmailData.provider_thread_id
