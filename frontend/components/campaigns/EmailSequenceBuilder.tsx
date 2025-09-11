@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,21 +18,8 @@ import {
   CheckCircle
 } from 'lucide-react'
 
-// Dynamic import for RichTextEditor to avoid SSR issues
-const RichTextEditor = dynamic(
-  () => import('@/components/ui/simple-rich-text-editor').then(mod => mod.SimpleRichTextEditor),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="min-h-[200px] border border-gray-300 rounded-md p-4 bg-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-blue-600 font-medium">📝 Editor Loading... (This should appear briefly)</div>
-          <p className="text-xs text-blue-500 mt-1">If this stays, there's a loading issue</p>
-        </div>
-      </div>
-    )
-  }
-)
+// Direct import since SimpleRichTextEditor is just a textarea component
+import { SimpleRichTextEditor } from '@/components/ui/simple-rich-text-editor'
 
 interface EmailSequence {
   id: number
@@ -209,7 +195,7 @@ export default function EmailSequenceBuilder({ campaignData, updateCampaignData 
       <div>
         <Label htmlFor="emailContent">Email Content *</Label>
         <div className="mt-1">
-          <RichTextEditor
+          <SimpleRichTextEditor
             content={campaignData.emailContent}
             onChange={(html, text) => {
               updateCampaignData({ emailContent: html })
@@ -313,7 +299,7 @@ I hope this email finds you well..."
             <div>
               <Label>Email Content *</Label>
               <div className="mt-1">
-                <RichTextEditor
+                <SimpleRichTextEditor
                   content={email.content}
                   onChange={(html, text) => {
                     updateSequenceEmail(email.id, 'content', html)

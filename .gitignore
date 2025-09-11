@@ -170,3 +170,4 @@ yarn.lock
 *.sw?
 .env.github
 .mcp.json
+.env.digitalocean
