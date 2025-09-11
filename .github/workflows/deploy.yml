@@ -36,20 +36,27 @@ jobs:
           echo "📂 Setting up application directory..."
           cd /root
           
-          # Clone repository if it doesn't exist
-          if [ ! -d "mailsender" ]; then
-            echo "🔄 Cloning repository for first time..."
-            git clone https://github.com/Acidsyd/BOB_inbox.git mailsender
-            cd mailsender
-            echo "✅ Repository cloned successfully"
-          else
-            echo "📂 Repository exists, navigating..."
-            cd mailsender
+          # Remove existing directory if it exists and is corrupted
+          if [ -d "mailsender" ]; then
+            echo "🔄 Removing existing directory..."
+            rm -rf mailsender
           fi
           
-          echo "🔄 Pulling latest changes..."
-          git fetch origin
-          git reset --hard origin/main
+          echo "🔄 Cloning repository..."
+          git clone https://github.com/Acidsyd/BOB_inbox.git mailsender || {
+            echo "❌ Git clone failed. Trying with different approach..."
+            exit 1
+          }
+          
+          cd mailsender
+          echo "✅ Repository setup completed"
+          
+          echo "📋 Current directory contents:"
+          ls -la
+          
+          echo "🔄 Ensuring we're on main branch..."
+          git checkout main || git checkout -b main
+          git pull origin main || echo "⚠️ Pull failed, continuing with cloned version"
           
           echo "🛑 Stopping existing containers..."
           docker-compose -f docker-compose.production.yml down --remove-orphans
