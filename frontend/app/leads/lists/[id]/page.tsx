@@ -5,12 +5,12 @@ import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Download, Trash2, Upload, Users } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import AppLayout from '@/components/layout/AppLayout'
-import SimpleLeadTable from '@/components/leads/SimpleLeadTable'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import ProtectedRoute from '../../../../components/auth/ProtectedRoute'
+import AppLayout from '../../../../components/layout/AppLayout'
+import SimpleLeadTable from '../../../../components/leads/SimpleLeadTable'
+import { Button } from '../../../../components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../../../../components/ui/card'
+import { Badge } from '../../../../components/ui/badge'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,7 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
+} from '../../../../components/ui/alert-dialog'
 
 interface Lead {
   id: string
