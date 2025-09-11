@@ -540,50 +540,44 @@ router.post('/check-duplicates', authenticateToken, async (req, res) => {
     
     console.log(`📊 Found ${emails.length} emails in lead list to check for duplicates`);
 
-    // OPTIMIZED: Use a single query with organization-wide duplicate detection
-    console.log('📊 Checking for duplicates with single optimized query...');
+    // NEW LOGIC: Check if this lead list is assigned to ANY campaign
+    console.log('📊 Checking if lead list is assigned to any campaigns...');
+    const { data: campaignsUsingList, error: campaignError } = await supabase
+      .from('campaigns')
+      .select('id, name, config')
+      .eq('organization_id', req.user.organizationId);
+    
+    if (campaignError) {
+      throw campaignError;
+    }
+    
+    // Check if any campaign uses this lead list
+    const isListUsedByCampaign = campaignsUsingList.some(campaign => 
+      campaign.config?.leadListId === leadListId
+    );
+    
+    console.log(`📊 Lead list ${leadListId} is ${isListUsedByCampaign ? 'USED' : 'NOT USED'} by campaigns`);
+    
     const duplicateMap = new Map();
     const existingInDatabase = [];
     
-    // Get ALL leads for the organization (this will be cached/efficient on Supabase side)
-    const { data: allOrgLeads, error: allLeadsError } = await supabase
-      .from('leads')
-      .select('email, lead_list_id, lead_lists:lead_list_id (id, name)')
-      .eq('organization_id', req.user.organizationId)
-      .eq('status', 'active');
-    
-    if (allLeadsError) {
-      throw allLeadsError;
+    if (isListUsedByCampaign) {
+      // If list is assigned to campaigns, ALL emails are considered duplicates
+      console.log('📊 List is used by campaigns - marking all emails as duplicates');
+      emails.forEach(originalEmail => {
+        const cleanEmail = originalEmail.replace(/[^\w@.-]/g, '').toLowerCase().trim();
+        duplicateMap.set(cleanEmail, [{
+          listId: leadListId,
+          listName: leadList.name || 'Current List'
+        }]);
+        existingInDatabase.push(cleanEmail);
+      });
+    } else {
+      // If list is NOT assigned to campaigns, NO emails are duplicates
+      console.log('📊 List is not used by campaigns - all emails are unique');
     }
     
-    console.log(`📊 Retrieved ${allOrgLeads.length} total leads for organization`);
-    
-    // Create a map of email -> list of occurrences for efficient lookups
-    const orgEmailMap = new Map();
-    allOrgLeads.forEach(lead => {
-      const cleanEmail = lead.email.replace(/[^\w@.-]/g, '').toLowerCase().trim();
-      if (!orgEmailMap.has(cleanEmail)) {
-        orgEmailMap.set(cleanEmail, []);
-      }
-      orgEmailMap.get(cleanEmail).push({
-        listId: lead.lead_list_id,
-        listName: lead.lead_lists?.name || 'Unknown List'
-      });
-    });
-    
-    // Now check each email from our current list against the org map
-    emails.forEach(originalEmail => {
-      const cleanEmail = originalEmail.replace(/[^\w@.-]/g, '').toLowerCase().trim();
-      const occurrences = orgEmailMap.get(cleanEmail) || [];
-      
-      if (occurrences.length > 1) {
-        // This email appears multiple times across the organization
-        duplicateMap.set(cleanEmail, occurrences);
-        existingInDatabase.push(cleanEmail);
-      }
-    });
-    
-    console.log(`📊 Found ${existingInDatabase.length} emails with duplicates using single query approach`);
+    console.log(`📊 Found ${existingInDatabase.length} emails marked as duplicates (campaign-based logic)`);
 
     // Build duplicate details array - count unique emails that have duplicates
     const duplicateDetails = [];
@@ -594,14 +588,12 @@ router.post('/check-duplicates', authenticateToken, async (req, res) => {
       if (duplicateMap.has(cleanEmail)) {
         const instances = duplicateMap.get(cleanEmail);
         
-        // Only count emails that appear MORE than once (have actual duplicates)
-        if (instances.length > 1) {
-          uniqueDuplicateEmails.add(cleanEmail);
-          duplicateDetails.push({
-            email: originalEmail,
-            existingInLists: instances
-          });
-        }
+        // Add all emails that are marked as duplicates (campaign-based logic)
+        uniqueDuplicateEmails.add(cleanEmail);
+        duplicateDetails.push({
+          email: originalEmail,
+          existingInLists: instances
+        });
       }
     });
 

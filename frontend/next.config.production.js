@@ -10,15 +10,18 @@ const nextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
 
-  // Simple image configuration
+  // Simple image optimization
   images: {
     formats: ['image/webp', 'image/avif'],
     dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 
-  // Minimal experimental features to avoid build issues
-  experimental: {},
+  // Disable complex optimizations that might cause path resolution issues
+  experimental: {
+    optimizePackageImports: [],
+    optimizeCss: false,
+  },
 
   // Simplified webpack config
   webpack: (config) => {
@@ -34,9 +37,9 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
 
-  // Output for production deployment
-  output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
-
+  // Output for production
+  output: 'standalone',
+  
   // API rewrites
   async rewrites() {
     return [
