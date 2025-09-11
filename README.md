@@ -401,7 +401,28 @@ docker-compose -f docker-compose.test.yml up
 
 ## 🚀 Deployment
 
-### Production Deployment
+### DigitalOcean App Platform (Recommended)
+
+**✅ GitHub Integration Configured** - Automatic deployment from GitHub repository
+
+```bash
+# Quick deployment using DigitalOcean CLI
+./scripts/deploy-to-digitalocean.sh
+
+# Or manually create app
+doctl apps create --spec .do/app.yaml
+```
+
+**What's Configured:**
+- **Backend Service**: `backend/` directory, auto-deploy on push
+- **Frontend Service**: `frontend/` directory, auto-deploy on push  
+- **GitHub Repository**: `Acidsyd/BOB_inbox` connected
+- **Health Checks**: `/health` endpoint monitoring
+- **Environment Variables**: Production-ready configuration
+
+📖 **Complete Setup Guide**: See `DIGITALOCEAN_SETUP.md` for detailed instructions
+
+### Traditional Production Deployment
 
 1. Update environment variables for production
 2. Configure SSL certificates in nginx

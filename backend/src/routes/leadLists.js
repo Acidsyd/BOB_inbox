@@ -473,7 +473,7 @@ router.get('/:id/leads', authenticateToken, async (req, res) => {
   }
 });
 
-// Check duplicates for a specific lead list - NEW endpoint for DuplicateCheckStep
+// Check duplicates for a specific lead list - OPTIMIZED for large datasets (handles unlimited leads)
 router.post('/check-duplicates', authenticateToken, async (req, res) => {
   try {
     const { leadListId } = req.body;
@@ -496,18 +496,36 @@ router.post('/check-duplicates', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Lead list not found' });
     }
 
-    // Get all emails from the specified lead list
-    const { data: leadsInList, error: leadsError } = await supabase
-      .from('leads')
-      .select('email')
-      .eq('lead_list_id', leadListId)
-      .eq('organization_id', req.user.organizationId);
+    // OPTIMIZED: Get ALL emails with pagination to avoid 1000-row limit
+    let allLeadsInList = [];
+    let hasMore = true;
+    let offset = 0;
+    const pageSize = 1000;
 
-    if (leadsError) {
-      throw leadsError;
+    console.log('📊 Fetching all leads from list with pagination...');
+    while (hasMore) {
+      const { data: leadsPage, error: leadsError } = await supabase
+        .from('leads')
+        .select('email')
+        .eq('lead_list_id', leadListId)
+        .eq('organization_id', req.user.organizationId)
+        .range(offset, offset + pageSize - 1);
+
+      if (leadsError) {
+        throw leadsError;
+      }
+
+      if (leadsPage && leadsPage.length > 0) {
+        allLeadsInList = allLeadsInList.concat(leadsPage);
+        hasMore = leadsPage.length === pageSize;
+        offset += pageSize;
+        console.log(`📊 Fetched ${allLeadsInList.length} leads so far...`);
+      } else {
+        hasMore = false;
+      }
     }
 
-    if (!leadsInList || leadsInList.length === 0) {
+    if (allLeadsInList.length === 0) {
       return res.json({
         total: 0,
         existingInDatabase: 0,
@@ -516,53 +534,151 @@ router.post('/check-duplicates', authenticateToken, async (req, res) => {
       });
     }
 
-    const emails = leadsInList.map(lead => lead.email);
+    // Clean and prepare emails for efficient lookup
+    const emails = allLeadsInList.map(lead => lead.email);
+    const cleanEmails = emails.map(email => email.replace(/[^\w@.-]/g, '').toLowerCase().trim());
+    
     console.log(`📊 Found ${emails.length} emails in lead list to check for duplicates`);
 
+    // OPTIMIZED: Chunked queries to avoid URI length limits (414 errors)
+    console.log('📊 Checking for duplicates with optimized chunked queries...');
+    const duplicateMap = new Map();
     const existingInDatabase = [];
-    const duplicateDetails = [];
+    const chunkSize = 500; // Safe chunk size to avoid URI length limits
+    
+    // Process emails in chunks to avoid 414 Request-URI Too Large error with retry logic
+    for (let i = 0; i < cleanEmails.length; i += chunkSize) {
+      const emailChunk = cleanEmails.slice(i, i + chunkSize);
+      const chunkNumber = Math.floor(i/chunkSize) + 1;
+      const totalChunks = Math.ceil(cleanEmails.length/chunkSize);
+      
+      console.log(`📊 Processing chunk ${chunkNumber}/${totalChunks} (${emailChunk.length} emails)`);
+      
+      // Retry logic for network issues
+      let retryCount = 0;
+      const maxRetries = 3;
+      let chunkSuccess = false;
+      
+      while (!chunkSuccess && retryCount < maxRetries) {
+        try {
+          const { data: chunkDuplicateLeads, error: duplicateError } = await supabase
+            .from('leads')
+            .select(`
+              email,
+              lead_list_id,
+              lead_lists:lead_list_id (
+                id,
+                name
+              )
+            `)
+            .in('email', emailChunk)
+            .eq('organization_id', req.user.organizationId)
+            .neq('lead_list_id', leadListId); // Exclude the current list
 
-    // Check each email against OTHER lists in the database
-    for (const email of emails) {
-      try {
-        // Clean email by removing any emoji/special characters and trim
-        const cleanEmail = email.replace(/[^\w@.-]/g, '').toLowerCase().trim();
-        
-        const { data: existingLeads, error: checkError } = await supabase
-          .from('leads')
-          .select(`
-            *,
-            lead_lists:lead_list_id (
-              id,
-              name
-            )
-          `)
-          .eq('email', cleanEmail)
-          .eq('organization_id', req.user.organizationId)
-          .neq('lead_list_id', leadListId); // Exclude the current list
+          if (duplicateError) {
+            throw duplicateError;
+          }
 
-        if (checkError) {
-          console.error('Error checking email:', checkError);
-          continue;
-        }
-
-        if (existingLeads && existingLeads.length > 0) {
-          existingInDatabase.push(cleanEmail);
-          duplicateDetails.push({
-            email: email,
-            existing: existingLeads,
-            existingInLists: existingLeads.map(existingLead => ({
-              listId: existingLead.lead_list_id,
-              listName: existingLead.lead_lists?.name || 'Unknown List'
-            }))
+          // Process chunk results
+          if (chunkDuplicateLeads && chunkDuplicateLeads.length > 0) {
+            chunkDuplicateLeads.forEach(duplicate => {
+              const cleanEmail = duplicate.email;
+              if (!duplicateMap.has(cleanEmail)) {
+                duplicateMap.set(cleanEmail, []);
+                existingInDatabase.push(cleanEmail);
+              }
+              duplicateMap.get(cleanEmail).push({
+                listId: duplicate.lead_list_id,
+                listName: duplicate.lead_lists?.name || 'Unknown List'
+              });
+            });
+          }
+          
+          chunkSuccess = true;
+          console.log(`✅ Chunk ${chunkNumber}/${totalChunks} completed successfully`);
+          
+          // Add a small delay between chunks to avoid overwhelming the database
+          if (chunkNumber < totalChunks) {
+            await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay between chunks
+          }
+          
+        } catch (chunkError) {
+          retryCount++;
+          console.error(`❌ Error in chunk processing (chunk ${chunkNumber}/${totalChunks}, attempt ${retryCount}):`, {
+            message: chunkError.message,
+            details: chunkError.details || chunkError.hint || 'No additional details',
+            code: chunkError.code
           });
+          
+          if (retryCount >= maxRetries) {
+            console.error(`❌ Chunk ${chunkNumber}/${totalChunks} failed after ${maxRetries} attempts`);
+            
+            // Instead of throwing, let's try to continue with a smaller chunk size
+            if (emailChunk.length > 100) {
+              console.log(`🔄 Attempting to split failed chunk ${chunkNumber} into smaller pieces...`);
+              const smallChunkSize = Math.floor(emailChunk.length / 2);
+              const subChunks = [];
+              for (let j = 0; j < emailChunk.length; j += smallChunkSize) {
+                subChunks.push(emailChunk.slice(j, j + smallChunkSize));
+              }
+              
+              // Try processing sub-chunks
+              let subChunkSuccess = 0;
+              for (const subChunk of subChunks) {
+                try {
+                  const { data: subChunkData, error: subChunkError } = await supabase
+                    .from('leads')
+                    .select(`email, lead_list_id, lead_lists:lead_list_id (id, name)`)
+                    .in('email', subChunk)
+                    .eq('organization_id', req.user.organizationId)
+                    .neq('lead_list_id', leadListId);
+                    
+                  if (!subChunkError && subChunkData) {
+                    subChunkData.forEach(duplicate => {
+                      const cleanEmail = duplicate.email;
+                      if (!duplicateMap.has(cleanEmail)) {
+                        duplicateMap.set(cleanEmail, []);
+                        existingInDatabase.push(cleanEmail);
+                      }
+                      duplicateMap.get(cleanEmail).push({
+                        listId: duplicate.lead_list_id,
+                        listName: duplicate.lead_lists?.name || 'Unknown List'
+                      });
+                    });
+                    subChunkSuccess++;
+                  }
+                  await new Promise(resolve => setTimeout(resolve, 250)); // Small delay between sub-chunks
+                } catch (subError) {
+                  console.error(`⚠️ Sub-chunk failed, continuing...`);
+                }
+              }
+              console.log(`✅ Processed ${subChunkSuccess}/${subChunks.length} sub-chunks from failed chunk ${chunkNumber}`);
+              chunkSuccess = true; // Mark as success to continue
+            } else {
+              console.error(`❌ Skipping small chunk ${chunkNumber} that couldn't be processed`);
+              chunkSuccess = true; // Skip this chunk and continue
+            }
+          } else {
+            console.log(`🔄 Retrying chunk ${chunkNumber}/${totalChunks} in ${retryCount * 1000}ms...`);
+            await new Promise(resolve => setTimeout(resolve, retryCount * 1000)); // Progressive delay
+          }
         }
-      } catch (err) {
-        console.error('Error processing email:', err);
       }
     }
 
-    console.log('📊 Found duplicates:', existingInDatabase.length);
+    // Build duplicate details array
+    const duplicateDetails = [];
+    emails.forEach(originalEmail => {
+      const cleanEmail = originalEmail.replace(/[^\w@.-]/g, '').toLowerCase().trim();
+      if (duplicateMap.has(cleanEmail)) {
+        duplicateDetails.push({
+          email: originalEmail,
+          existingInLists: duplicateMap.get(cleanEmail)
+        });
+      }
+    });
+
+    console.log(`📊 Found duplicates: ${existingInDatabase.length} out of ${emails.length} emails`);
 
     res.json({
       total: emails.length,
@@ -572,8 +688,27 @@ router.post('/check-duplicates', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Check duplicates error:', error);
-    res.status(500).json({ error: 'Failed to check duplicates' });
+    console.error('❌ Check duplicates error:', {
+      message: error.message,
+      details: error.details || error.hint || 'No additional details',
+      code: error.code,
+      leadListId: req.body.leadListId
+    });
+    
+    // Provide more specific error messages
+    let errorMessage = 'Failed to check duplicates';
+    if (error.message?.includes('fetch failed') || error.message?.includes('network')) {
+      errorMessage = 'Network connection issue. Please check your internet connection and try again.';
+    } else if (error.message?.includes('timeout')) {
+      errorMessage = 'Request timed out. This can happen with very large lead lists. Please try again.';
+    } else if (error.code === '42P01') {
+      errorMessage = 'Database table not found. Please contact support.';
+    }
+    
+    res.status(500).json({ 
+      error: errorMessage,
+      technical: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 

@@ -21,14 +21,14 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Helper function to get actual lead count for a campaign
+// Helper function to get actual lead count for a campaign - FIXED: No more 1000-row limit
 const getLeadCount = async (leadListId, organizationId) => {
   if (!leadListId) return 0;
   
   try {
-    const { data, error } = await supabase
+    const { count, error } = await supabase
       .from('leads')
-      .select('id', { count: 'exact' })
+      .select('*', { count: 'exact', head: true })
       .eq('lead_list_id', leadListId)
       .eq('organization_id', organizationId)
       .eq('status', 'active');
@@ -38,7 +38,7 @@ const getLeadCount = async (leadListId, organizationId) => {
       return 0;
     }
     
-    return data?.length || 0;
+    return count || 0;
   } catch (error) {
     console.error('❌ Error in getLeadCount:', error);
     return 0;
@@ -822,7 +822,7 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
       console.log(`🆕 First time campaign launch - no existing emails found`);
     }
 
-    // Get leads for this campaign
+    // Get leads for this campaign - OPTIMIZED: No more 1000-row limit with pagination
     const leadListId = campaign.config?.leadListId;
     if (!leadListId) {
       return res.status(400).json({
@@ -831,29 +831,50 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
       });
     }
 
-    const { data: leads, error: leadsError } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('lead_list_id', leadListId)
-      .eq('organization_id', req.user.organizationId)
-      .eq('status', 'active');
+    // OPTIMIZED: Fetch ALL leads with pagination to avoid 1000-row limit
+    let allLeads = [];
+    let hasMore = true;
+    let offset = 0;
+    const pageSize = 1000;
 
-    if (leadsError) {
-      console.error('❌ Error fetching leads:', leadsError);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch leads'
-      });
+    console.log('📊 Fetching all leads for campaign with pagination...');
+    while (hasMore) {
+      const { data: leadsPage, error: leadsError } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('lead_list_id', leadListId)
+        .eq('organization_id', req.user.organizationId)
+        .eq('status', 'active')
+        .range(offset, offset + pageSize - 1);
+
+      if (leadsError) {
+        console.error('❌ Error fetching leads:', leadsError);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to fetch leads'
+        });
+      }
+
+      if (leadsPage && leadsPage.length > 0) {
+        allLeads = allLeads.concat(leadsPage);
+        hasMore = leadsPage.length === pageSize;
+        offset += pageSize;
+        console.log(`📊 Fetched ${allLeads.length} leads so far...`);
+      } else {
+        hasMore = false;
+      }
     }
 
-    if (!leads || leads.length === 0) {
+    if (!allLeads || allLeads.length === 0) {
       return res.status(400).json({
         success: false,
         error: 'No active leads found for this campaign'
       });
     }
 
-    console.log(`📊 Found ${leads.length} leads for campaign ${campaignId}`);
+    console.log(`📊 Found ${allLeads.length} leads for campaign ${campaignId} (unlimited processing)`);
+    
+    // Use allLeads instead of leads from here on
 
     // Create scheduled emails
     const emailAccounts = campaign.config?.emailAccounts || [];
@@ -891,7 +912,7 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
     console.log(`📧 Email sequence: ${allEmails.length} emails (1 initial + ${emailSequence.length} follow-ups)`);
 
     // Generate schedule respecting ALL campaign rules
-    const schedules = scheduler.scheduleEmails(leads, emailAccounts);
+    const schedules = scheduler.scheduleEmails(allLeads, emailAccounts);
     const scheduledEmails = [];
 
     schedules.forEach((schedule, scheduleIndex) => {
@@ -1705,29 +1726,48 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
       });
     }
 
-    const { data: leads, error: leadsError } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('lead_list_id', leadListId)
-      .eq('organization_id', organizationId)
-      .eq('status', 'active');
+    // OPTIMIZED: Fetch ALL leads with pagination for restart (no 1000-row limit)
+    let allLeadsForRestart = [];
+    let hasMore = true;
+    let offset = 0;
+    const pageSize = 1000;
 
-    if (leadsError) {
-      console.error('❌ Error fetching leads for restart:', leadsError);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch leads for rescheduling'
-      });
+    console.log('📊 Fetching all leads for restart with pagination...');
+    while (hasMore) {
+      const { data: leadsPage, error: leadsError } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('lead_list_id', leadListId)
+        .eq('organization_id', organizationId)
+        .eq('status', 'active')
+        .range(offset, offset + pageSize - 1);
+
+      if (leadsError) {
+        console.error('❌ Error fetching leads for restart:', leadsError);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to fetch leads for rescheduling'
+        });
+      }
+
+      if (leadsPage && leadsPage.length > 0) {
+        allLeadsForRestart = allLeadsForRestart.concat(leadsPage);
+        hasMore = leadsPage.length === pageSize;
+        offset += pageSize;
+        console.log(`📊 Fetched ${allLeadsForRestart.length} leads for restart so far...`);
+      } else {
+        hasMore = false;
+      }
     }
 
-    if (!leads || leads.length === 0) {
+    if (!allLeadsForRestart || allLeadsForRestart.length === 0) {
       return res.status(400).json({
         success: false,
         error: 'No active leads found for rescheduling'
       });
     }
 
-    console.log(`📊 Found ${leads.length} leads for rescheduling`);
+    console.log(`📊 Found ${allLeadsForRestart.length} leads for rescheduling (unlimited processing)`);
 
     // Step 2.3: Create fresh schedule starting from NOW (reuse existing logic)
     const emailAccounts = campaign.config?.emailAccounts || [];
@@ -1750,7 +1790,7 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
     });
 
     console.log(`📅 Creating fresh schedule starting from NOW...`);
-    const leadSchedules = scheduler.scheduleEmails(leads, emailAccounts);
+    const leadSchedules = scheduler.scheduleEmails(allLeadsForRestart, emailAccounts);
     
     // Step 2.4: Process in batches to handle large campaigns
     const BATCH_SIZE = 100;

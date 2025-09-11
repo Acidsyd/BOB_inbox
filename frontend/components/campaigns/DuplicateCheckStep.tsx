@@ -51,16 +51,28 @@ export default function DuplicateCheckStep({
     try {
       console.log('🔍 Checking for duplicates in list:', selectedLeadListId)
       
+      // Add timeout for large datasets (5 minutes)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 minutes
+      
       const response = await api.post('/leads/lists/check-duplicates', {
         leadListId: selectedLeadListId
+      }, {
+        signal: controller.signal,
+        timeout: 300000 // 5 minutes
       })
       
+      clearTimeout(timeoutId)
       console.log('✅ Duplicate check response:', response.data)
       setDuplicateResults(response.data)
       setHasChecked(true)
     } catch (error) {
       console.error('❌ Error checking duplicates:', error)
-      alert('Failed to check for duplicates. Please try again.')
+      if (error.name === 'AbortError') {
+        alert('Duplicate check timed out. This may happen with very large lead lists. The system has been optimized, but please try again or contact support if the issue persists.')
+      } else {
+        alert('Failed to check for duplicates. The system has been optimized for large datasets. Please try again.')
+      }
     } finally {
       setIsCheckingDuplicates(false)
     }
@@ -142,7 +154,7 @@ export default function DuplicateCheckStep({
                 {isCheckingDuplicates ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Checking...
+                    Checking {selectedLeadListCount.toLocaleString()} leads...
                   </>
                 ) : (
                   <>

@@ -171,3 +171,4 @@ yarn.lock
 .env.github
 .mcp.json
 .env.digitalocean
+.do/
