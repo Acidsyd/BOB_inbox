@@ -29,7 +29,7 @@ jobs:
         
     - name: Deploy to Digital Ocean
       run: |
-        echo "🚀 Starting deployment to Digital Ocean..."
+        echo "🚀 Starting deployment to Digital Ocean (SSH version)..."
         ssh -o StrictHostKeyChecking=no root@qquadro.com << 'EOF'
           # Remove set -e temporarily for better debugging
           
