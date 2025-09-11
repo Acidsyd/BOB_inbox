@@ -174,44 +174,6 @@ const MenuBar = ({ editor, variables }) => {
 
       <div className="w-px h-6 bg-gray-300 mx-2" />
 
-      {/* Text Alignment */}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => editor.chain().focus().setTextAlign('left').run()}
-        className={cn(
-          "h-10 w-10 p-0",
-          editor.isActive({ textAlign: 'left' }) && "bg-gray-200 shadow-inner"
-        )}
-        title="Align Left"
-      >
-        <AlignLeft className="h-5 w-5" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => editor.chain().focus().setTextAlign('center').run()}
-        className={cn(
-          "h-10 w-10 p-0",
-          editor.isActive({ textAlign: 'center' }) && "bg-gray-200 shadow-inner"
-        )}
-        title="Align Center"
-      >
-        <AlignCenter className="h-5 w-5" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => editor.chain().focus().setTextAlign('right').run()}
-        className={cn(
-          "h-10 w-10 p-0",
-          editor.isActive({ textAlign: 'right' }) && "bg-gray-200 shadow-inner"
-        )}
-        title="Align Right"
-      >
-        <AlignRight className="h-5 w-5" />
-      </Button>
-
       <div className="w-px h-6 bg-gray-300 mx-2" />
 
       {/* Lists */}
@@ -388,27 +350,8 @@ export function SimpleRichTextEditor({
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({
-        // Disable extensions we want to configure separately
-        link: false,
-        underline: false,
-        bulletList: {
-          keepMarks: true,
-          keepAttributes: false,
-        },
-        orderedList: {
-          keepMarks: true,
-          keepAttributes: false,
-        },
-        listItem: {},
-        heading: {
-          levels: [1, 2, 3]
-        }
-      }),
+      StarterKit,
       Underline,
-      TextAlign.configure({
-        types: ['heading', 'paragraph']
-      }),
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
@@ -421,29 +364,12 @@ export function SimpleRichTextEditor({
     ],
     content: content || '<p></p>',
     editable: !disabled,
-    immediatelyRender: false,
-    enableInputRules: true,
-    enablePasteRules: true,
-    editorProps: {
-      attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none',
-      },
-    },
     onUpdate: ({ editor }) => {
       const html = editor.getHTML()
       const text = editor.getText()
       onChange?.(html, text)
-    },
-    onCreate: ({ editor }) => {
-      // Editor initialized
-    },
-    onFocus: ({ editor }) => {
-      // Editor focused
-    },
-    onBlur: ({ editor }) => {
-      // Editor blurred
     }
-  }, [disabled, placeholder])
+  })
 
   useEffect(() => {
     if (editor && content !== undefined && !editor.isFocused) {
