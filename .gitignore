@@ -151,8 +151,9 @@ uploads/
 .tmp/
 .temp/
 
-# Lock files (keep package-lock.json but ignore other lock files)
+# Lock files - ignore all lock files for DigitalOcean compatibility
 yarn.lock
+package-lock.json
 
 # Build artifacts
 *.tar.gz
