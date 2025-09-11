@@ -47,9 +47,16 @@ jobs:
           fi
           
           echo "🔄 Cloning repository..."
-          echo "🔗 Repository URL: https://github.com/Acidsyd/BOB_inbox.git"
+          echo "🔗 Repository URL: git@github.com:Acidsyd/BOB_inbox.git (SSH)"
           
-          git clone https://github.com/Acidsyd/BOB_inbox.git mailsender
+          # Add GitHub to known hosts to prevent SSH verification prompts
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || echo "⚠️ Failed to add GitHub to known hosts"
+          
+          # Configure git to use SSH instead of HTTPS
+          git config --global url."git@github.com:".insteadOf "https://github.com/"
+          
+          # Clone using SSH
+          git clone git@github.com:Acidsyd/BOB_inbox.git mailsender
           clone_exit_code=$?
           
           if [ $clone_exit_code -ne 0 ]; then
@@ -64,9 +71,9 @@ jobs:
             echo "🔍 DNS lookup for github.com:"
             nslookup github.com || echo "⚠️ DNS lookup failed"
             
-            # Try with verbose git clone
-            echo "🔍 Attempting verbose git clone..."
-            git clone --verbose https://github.com/Acidsyd/BOB_inbox.git mailsender-debug
+            # Try with verbose git clone using SSH
+            echo "🔍 Attempting verbose git clone with SSH..."
+            git clone --verbose git@github.com:Acidsyd/BOB_inbox.git mailsender-debug
             
             exit 1
           fi
