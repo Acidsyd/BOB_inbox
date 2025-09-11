@@ -550,7 +550,7 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
         subject: emailData.subject,
         content_html: html || emailData.html, // Store the rich HTML content
         content_plain: content, // Store the plain text content
-        sent_at: new Date().toISOString(), // Add timestamp for sent messages
+        sent_at: new Date().toLocaleString('sv-SE').replace(' ', 'T') + 'Z', // Store local time as ISO format
         in_reply_to: threadingReference?.message_id_header, // Critical for threading
         message_references: threadingReference?.message_references || threadingReference?.message_id_header,
         organization_id: organizationId

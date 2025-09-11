@@ -25,9 +25,17 @@ self.addEventListener('install', (event) => {
   console.log('Service Worker installing...')
   
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
       console.log('Caching static assets')
-      return cache.addAll(STATIC_ASSETS)
+      // Cache each asset individually to handle failures gracefully
+      const cachePromises = STATIC_ASSETS.map(async (url) => {
+        try {
+          await cache.add(url)
+        } catch (error) {
+          console.warn(`Failed to cache ${url}:`, error)
+        }
+      })
+      await Promise.all(cachePromises)
     }).then(() => {
       // Force the waiting service worker to become active
       return self.skipWaiting()

@@ -141,7 +141,7 @@ EMAIL_ENCRYPTION_KEY=your-32-char-encryption-key
 # Required - Google OAuth2 (Primary for Gmail integration)
 GOOGLE_OAUTH2_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_OAUTH2_CLIENT_SECRET=your-client-secret
-GOOGLE_OAUTH2_REDIRECT_URI=http://localhost:4000/api/oauth2/auth/callback
+GOOGLE_OAUTH2_REDIRECT_URI=https://qquadro.com/api/oauth2/auth/callback
 
 # Optional - Microsoft OAuth2 (For Outlook integration)
 MICROSOFT_CLIENT_ID=your-microsoft-client-id
