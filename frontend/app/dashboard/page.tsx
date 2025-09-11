@@ -1,24 +1,24 @@
 'use client'
 
 import { useState } from 'react'
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import AppLayout from '@/components/layout/AppLayout'
-import { useAuth } from '@/lib/auth/context'
+import ProtectedRoute from '../../components/auth/ProtectedRoute'
+import AppLayout from '../../components/layout/AppLayout'
+import { useAuth } from '../../lib/auth/context'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '@/lib/api'
-import { Button } from '@/components/ui/button'
+import { api } from '../../lib/api'
+import { Button } from '../../components/ui/button'
 import { Mail, Users, TrendingUp, Activity, Inbox } from 'lucide-react'
 import Link from 'next/link'
-import { DashboardErrorBoundary } from '@/components/ui/error-boundary'
-import { useOffline } from '@/hooks/useOffline'
+import { DashboardErrorBoundary } from '../../components/ui/error-boundary'
+import { useOffline } from '../../hooks/useOffline'
 
 // Import new dashboard components
-import PeriodSelector from '@/components/dashboard/PeriodSelector'
-import MetricCard from '@/components/dashboard/MetricCard'
-import LabelChart from '@/components/dashboard/LabelChart'
-import ActivityChart from '@/components/dashboard/ActivityChart'
-import CampaignTable from '@/components/dashboard/CampaignTable'
-import LatestActivity from '@/components/dashboard/LatestActivity'
+import PeriodSelector from '../../components/dashboard/PeriodSelector'
+import MetricCard from '../../components/dashboard/MetricCard'
+import LabelChart from '../../components/dashboard/LabelChart'
+import ActivityChart from '../../components/dashboard/ActivityChart'
+import CampaignTable from '../../components/dashboard/CampaignTable'
+import LatestActivity from '../../components/dashboard/LatestActivity'
 
 interface DashboardData {
   period: { type: string; startDate: string; endDate: string }
