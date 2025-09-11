@@ -41,7 +41,7 @@ jobs:
     - name: Deploy to Digital Ocean
       run: |
         echo "🚀 Starting deployment to Digital Ocean (SSH version)..."
-        ssh -o StrictHostKeyChecking=no root@qquadro.com << 'EOF'
+        ssh -A -o StrictHostKeyChecking=no root@qquadro.com << 'EOF'
           # Remove set -e temporarily for better debugging
           
           echo "📂 Setting up application directory..."
@@ -60,8 +60,16 @@ jobs:
           echo "🔄 Cloning repository..."
           echo "🔗 Repository URL: git@github.com:Acidsyd/BOB_inbox.git (SSH)"
           
+          # Check if SSH agent is available
+          echo "🔍 Checking SSH agent..."
+          ssh-add -l || echo "⚠️ No SSH keys in agent"
+          
           # Add GitHub to known hosts to prevent SSH verification prompts
           ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || echo "⚠️ Failed to add GitHub to known hosts"
+          
+          # Test GitHub connection
+          echo "🔍 Testing GitHub SSH connection..."
+          ssh -T git@github.com 2>&1 || true
           
           # Configure git to use SSH instead of HTTPS
           git config --global url."git@github.com:".insteadOf "https://github.com/"
