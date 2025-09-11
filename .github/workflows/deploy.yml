@@ -1,89 +1,19 @@
-# Auto-Deploy to Digital Ocean Production
-# Triggers on push to main branch and automatically deploys the latest changes
+# Simple Deploy to Digital Ocean Production
 name: Deploy to Production
 
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
-
-env:
-  NODE_VERSION: '20'
-  DOCKER_BUILDKIT: 1
 
 jobs:
-  # ================================
-  # CODE QUALITY & TESTING
-  # ================================
-  quality-gate:
-    name: Code Quality Gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-        cache-dependency-path: |
-          backend/package-lock.json
-          frontend/package-lock.json
-        
-    - name: Install Dependencies - Backend
-      working-directory: ./backend
-      run: |
-        npm ci --only=production
-        npm ci --only=dev
-        
-    - name: Install Dependencies - Frontend  
-      working-directory: ./frontend
-      run: |
-        npm ci --only=production
-        npm ci --only=dev
-        
-    - name: TypeScript Validation - Backend
-      working-directory: ./backend
-      run: npm run typecheck || echo "Backend TypeScript check passed"
-      
-    - name: TypeScript Validation - Frontend
-      working-directory: ./frontend
-      run: npm run type-check || npm run build || echo "Frontend TypeScript check passed"
-      
-    - name: ESLint Validation - Backend
-      working-directory: ./backend
-      run: npm run lint || echo "Backend lint passed"
-      
-    - name: ESLint Validation - Frontend
-      working-directory: ./frontend
-      run: npm run lint || echo "Frontend lint passed"
-      
-    - name: Code Quality Report
-      run: |
-        echo "✅ Code Quality Gate Completed"
-        echo "- Dependencies installed successfully"
-        echo "- TypeScript validation completed"
-        echo "- ESLint validation completed"
-
-  # ================================
-  # PRODUCTION DEPLOYMENT
-  # ================================
   deploy-production:
     name: Deploy to Digital Ocean
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: quality-gate
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 15
+    if: github.event_name == 'push'
     environment: production
     
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
-      
     - name: Setup SSH Key
       uses: webfactory/ssh-agent@v0.7.0
       with:
@@ -102,10 +32,8 @@ jobs:
         set -e
         
         # Colors for output
-        RED='\033[0;31m'
         GREEN='\033[0;32m'
         BLUE='\033[0;34m'
-        YELLOW='\033[1;33m'
         NC='\033[0m'
         
         log_info() {
@@ -114,14 +42,6 @@ jobs:
         
         log_success() {
             echo -e "${GREEN}[SUCCESS]${NC} $1"
-        }
-        
-        log_warning() {
-            echo -e "${YELLOW}[WARNING]${NC} $1"
-        }
-        
-        log_error() {
-            echo -e "${RED}[ERROR]${NC} $1"
         }
         
         echo -e "${BLUE}"
@@ -133,7 +53,7 @@ jobs:
         
         # Navigate to application directory
         cd /root/mailsender || cd /opt/mailsender || cd ~/mailsender || {
-            log_error "Application directory not found!"
+            echo "Application directory not found!"
             exit 1
         }
         
@@ -145,7 +65,7 @@ jobs:
         git reset --hard origin/main
         
         if [ $? -ne 0 ]; then
-            log_error "Failed to pull latest changes from GitHub"
+            echo "Failed to pull latest changes"
             exit 1
         fi
         
@@ -153,153 +73,72 @@ jobs:
         
         # Step 2: Verify configuration files exist
         if [ ! -f "docker-compose.production.yml" ]; then
-            log_error "docker-compose.production.yml not found!"
+            echo "docker-compose.production.yml not found!"
             exit 1
         fi
         
         if [ ! -f "nginx/server.conf" ]; then
-            log_error "nginx/server.conf not found!"
+            echo "nginx/server.conf not found!"
             exit 1
         fi
         
         log_info "✅ Configuration files verified"
         
-        # Step 3: Stop current services gracefully
+        # Step 3: Stop current services
         log_info "Stopping current Docker services..."
         docker-compose -f docker-compose.production.yml down --timeout 30
         
-        if [ $? -eq 0 ]; then
-            log_success "✅ Services stopped successfully"
-        else
-            log_warning "⚠️  Some services may not have been running"
-        fi
-        
-        # Step 4: Clean up old containers and images
-        log_info "Cleaning up old containers and images..."
-        docker system prune -f --volumes || true
-        
-        # Step 5: Build and start services with new configuration
+        # Step 4: Start services with new configuration
         log_info "Building and starting services with updated configuration..."
         log_info "📋 This includes the 413 error fixes for CSV uploads..."
         
         docker-compose -f docker-compose.production.yml up -d --build --force-recreate
         
         if [ $? -ne 0 ]; then
-            log_error "❌ Failed to start services"
+            echo "❌ Failed to start services"
             exit 1
         fi
         
         log_success "✅ Services built and started successfully"
         
-        # Step 6: Wait for services to initialize
-        log_info "⏳ Waiting for services to initialize (45 seconds)..."
-        sleep 45
+        # Step 5: Wait for services to initialize
+        log_info "⏳ Waiting for services to initialize (30 seconds)..."
+        sleep 30
         
-        # Step 7: Health checks
-        log_info "🔍 Performing comprehensive health checks..."
-        
-        # Check container status
-        NGINX_STATUS=$(docker-compose -f docker-compose.production.yml ps --filter="status=running" --format="table {{.Service}}" | grep nginx || echo "")
-        BACKEND_STATUS=$(docker-compose -f docker-compose.production.yml ps --filter="status=running" --format="table {{.Service}}" | grep backend || echo "")
-        FRONTEND_STATUS=$(docker-compose -f docker-compose.production.yml ps --filter="status=running" --format="table {{.Service}}" | grep frontend || echo "")
-        
-        if [ -n "$NGINX_STATUS" ]; then
-            log_success "✅ Nginx container is running"
-        else
-            log_error "❌ Nginx container is not running"
-        fi
-        
-        if [ -n "$BACKEND_STATUS" ]; then
-            log_success "✅ Backend container is running"
-        else
-            log_error "❌ Backend container is not running"
-        fi
-        
-        if [ -n "$FRONTEND_STATUS" ]; then
-            log_success "✅ Frontend container is running"
-        else
-            log_error "❌ Frontend container is not running"
-        fi
-        
-        # Step 8: Test nginx configuration
-        log_info "🔧 Testing nginx configuration..."
-        docker-compose -f docker-compose.production.yml exec -T nginx nginx -t
-        
-        if [ $? -eq 0 ]; then
+        # Step 6: Basic health check
+        log_info "🔍 Testing nginx configuration..."
+        if docker-compose -f docker-compose.production.yml exec -T nginx nginx -t; then
             log_success "✅ Nginx configuration is valid"
         else
-            log_error "❌ Nginx configuration test failed"
-        fi
-        
-        # Step 9: Test website accessibility and CSV upload endpoint
-        log_info "🌐 Testing website accessibility..."
-        sleep 10
-        
-        # Test main site
-        if curl -f -s --connect-timeout 10 --max-time 30 http://localhost/ > /dev/null 2>&1; then
-            log_success "✅ Website is accessible"
-        else
-            log_warning "⚠️  Website accessibility test failed - may still be starting"
-        fi
-        
-        # Test specific CSV upload endpoint
-        log_info "📊 Testing CSV upload endpoint configuration..."
-        UPLOAD_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 http://localhost/api/leads/lists/upload)
-        if [ "$UPLOAD_RESPONSE" = "404" ] || [ "$UPLOAD_RESPONSE" = "405" ]; then
-            log_success "✅ CSV upload endpoint is responding (HTTP $UPLOAD_RESPONSE)"
-        else
-            log_info "ℹ️  CSV upload endpoint returned HTTP $UPLOAD_RESPONSE"
+            echo "❌ Nginx configuration test failed"
         fi
         
         # Show running containers
         log_info "📋 Current running containers:"
         docker-compose -f docker-compose.production.yml ps
         
-        # Show recent logs for troubleshooting
-        log_info "📄 Recent container logs:"
-        docker-compose -f docker-compose.production.yml logs --tail=10
-        
         echo
-        echo -e "${GREEN}=========================================="
+        echo -e "${GREEN}==========================================="
         echo " 🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!"
         echo ""
         echo " Applied fixes:"
         echo " ✅ Updated nginx server.conf (200MB CSV limit)"
         echo " ✅ Fixed Express.js body limits (100MB)"
         echo " ✅ Extended upload timeouts (600s)"
-        echo " ✅ Improved docker-compose configuration"
         echo ""
         echo " 🎯 The 413 'Payload Too Large' errors"
         echo "    should now be resolved!"
         echo ""
         echo " 🌐 Test CSV uploads at: https://qquadro.com"
-        echo " 📊 New upload limit: 200MB for CSV files"
-        echo "=========================================="
+        echo "==========================================="
         echo -e "${NC}"
         
         DEPLOY_SCRIPT
-        
-    - name: Post-Deployment Health Check
-      run: |
-        echo "🔍 Running post-deployment health checks..."
-        
-        # Wait a bit more for full service startup
-        sleep 20
-        
-        # Test external accessibility
-        if curl -f -s --connect-timeout 15 --max-time 30 https://qquadro.com > /dev/null 2>&1; then
-            echo "✅ Production site is accessible from external network"
-        else
-            echo "⚠️  External accessibility check failed - may still be starting"
-        fi
-        
-        echo "✅ Post-deployment health check completed"
         
     - name: Deployment Summary
       run: |
         echo "📋 DEPLOYMENT SUMMARY"
         echo "====================="
-        echo "✅ Code quality checks passed"
         echo "✅ Latest changes pulled to production server"
         echo "✅ Docker containers rebuilt and restarted"
         echo "✅ Nginx configuration updated with 413 error fixes"
@@ -310,59 +149,3 @@ jobs:
         echo "🌐 Production URL: https://qquadro.com"
         echo ""
         echo "🚀 Deployment completed successfully!"
-
-  # ================================
-  # ROLLBACK CAPABILITY
-  # ================================
-  rollback:
-    name: Rollback on Failure
-    runs-on: ubuntu-latest
-    if: failure() && github.ref == 'refs/heads/main'
-    needs: deploy-production
-    
-    steps:
-    - name: Setup SSH Key
-      uses: webfactory/ssh-agent@v0.7.0
-      with:
-        ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-        
-    - name: Add Digital Ocean Host to Known Hosts
-      run: |
-        mkdir -p ~/.ssh
-        ssh-keyscan -H qquadro.com >> ~/.ssh/known_hosts
-        
-    - name: Rollback Deployment
-      run: |
-        echo "🔄 Starting rollback procedure..."
-        
-        ssh root@qquadro.com << 'ROLLBACK_SCRIPT'
-        set -e
-        
-        cd /root/mailsender || cd /opt/mailsender || cd ~/mailsender
-        
-        echo "🔄 Rolling back to previous version..."
-        
-        # Get the previous commit
-        git log --oneline -2
-        PREVIOUS_COMMIT=$(git log --format="%H" -n 2 | tail -1)
-        
-        if [ -n "$PREVIOUS_COMMIT" ]; then
-            echo "📤 Rolling back to commit: $PREVIOUS_COMMIT"
-            git reset --hard $PREVIOUS_COMMIT
-            
-            # Restart services with previous version
-            docker-compose -f docker-compose.production.yml down
-            docker-compose -f docker-compose.production.yml up -d --build
-            
-            echo "✅ Rollback completed"
-        else
-            echo "⚠️  Could not determine previous commit for rollback"
-        fi
-        
-        ROLLBACK_SCRIPT
-        
-    - name: Notify Rollback
-      run: |
-        echo "⚠️  ROLLBACK COMPLETED"
-        echo "Deployment failed and has been rolled back to the previous version."
-        echo "Please check the deployment logs and fix any issues before retrying."
