@@ -6,7 +6,6 @@ import { Upload, FileText, AlertCircle, CheckCircle, X, ArrowRight, Download } f
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { api } from '@/lib/api'
@@ -28,12 +27,6 @@ interface CSVUploadResults {
     duplicates: number
     errors: number
   }
-  details?: {
-    duplicate_leads?: any[]
-    duplicateEmails?: string[]
-    errors?: string[]
-    stats?: any
-  }
 }
 
 interface CSVColumn {
@@ -46,24 +39,12 @@ interface FieldMapping {
   [fieldKey: string]: string | null
 }
 
-interface DuplicateDetail {
-  email: string
-  existing?: any // Raw database records from backend
-  existingInLists: Array<{
-    listId: string
-    listName: string
-  }>
-}
-
 interface CSVPreviewData {
   columns: CSVColumn[]
   rows: string[][]
-  allDataRows: string[][]  // Add this to store all CSV data for duplicate checking
+  allDataRows: string[][]  // Store all CSV data for CSV-level duplicate checking
   totalRows: number
   duplicates: number
-  databaseDuplicates: number
-  isCheckingDuplicates: boolean
-  duplicateDetails?: DuplicateDetail[]
 }
 
 
@@ -74,17 +55,143 @@ export default function CSVUploader() {
   const { addToast } = useToast()
   const [file, setFile] = useState<File | null>(null)
   const [listName, setListName] = useState('')
-  const [allowDuplicates, setAllowDuplicates] = useState(false)
   const [currentStep, setCurrentStep] = useState<UploadStep>('file')
   const [csvPreview, setCsvPreview] = useState<CSVPreviewData | null>(null)
   const [fieldMapping, setFieldMapping] = useState<FieldMapping | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [progressMessage, setProgressMessage] = useState('')
+  const [uploadId, setUploadId] = useState<string | null>(null)
+  const [eventSource, setEventSource] = useState<EventSource | null>(null)
+  const [batchInfo, setBatchInfo] = useState<{current: number, total: number, leadCount: number} | null>(null)
+  const [processedLeads, setProcessedLeads] = useState(0)
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number | null>(null)
+  const [startTime, setStartTime] = useState<number | null>(null)
   const [uploadResults, setUploadResults] = useState<CSVUploadResults | null>(null)
   const [error, setError] = useState<string>('')
   const [isDragOver, setIsDragOver] = useState(false)
-  const [isImportingDuplicates, setIsImportingDuplicates] = useState(false)
-  const [isManualCheckingDuplicates, setIsManualCheckingDuplicates] = useState(false)
+
+  // Clean up EventSource on unmount
+  React.useEffect(() => {
+    return () => {
+      if (eventSource) {
+        eventSource.close()
+      }
+    }
+  }, [eventSource])
+
+  // Enhanced progress tracking with polling and detailed feedback
+  const startProgressTracking = (uploadId: string) => {
+    console.log('🔄 Starting enhanced progress tracking for uploadId:', uploadId)
+    
+    const token = localStorage.getItem('token')
+    if (!token) {
+      console.error('❌ No auth token found for progress tracking')
+      return
+    }
+    
+    // Set start time for ETA calculation
+    setStartTime(Date.now())
+    
+    // Calculate estimated batch info from CSV data
+    if (csvPreview?.totalRows) {
+      const BATCH_SIZE = 200
+      const totalBatches = Math.ceil(csvPreview.totalRows / BATCH_SIZE)
+      setBatchInfo({
+        current: 0,
+        total: totalBatches,
+        leadCount: csvPreview.totalRows
+      })
+    }
+
+    // Try EventSource first, fallback to polling
+    const eventSourceUrl = `/api/leads/lists/upload-progress/${uploadId}?token=${encodeURIComponent(token)}`
+    const fullUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}${eventSourceUrl}`
+    console.log('🌐 EventSource URL:', fullUrl)
+    
+    const es = new EventSource(fullUrl)
+    let pollInterval: NodeJS.Timeout | null = null
+
+    es.onopen = () => {
+      console.log('✅ EventSource connection opened')
+      setProgressMessage('Connected to processing status...')
+    }
+
+    es.onmessage = (event) => {
+      try {
+        console.log('📨 Progress update received:', event.data)
+        const data = JSON.parse(event.data)
+        
+        updateProgressState(data)
+        
+        if (data.progress >= 100 || data.progress === -1) {
+          console.log('🏁 Progress complete, closing EventSource')
+          es.close()
+          setEventSource(null)
+          if (pollInterval) clearInterval(pollInterval)
+        }
+      } catch (error) {
+        console.error('❌ Error parsing SSE data:', error)
+      }
+    }
+
+    es.onerror = (error) => {
+      console.error('❌ SSE connection error, falling back to polling:', error)
+      es.close()
+      setEventSource(null)
+      
+      // Fallback to polling every 2 seconds
+      pollInterval = setInterval(async () => {
+        try {
+          const response = await api.get(`/leads/lists/upload-progress-poll/${uploadId}`)
+          const data = response.data
+          
+          updateProgressState(data)
+          
+          if (data.progress >= 100 || data.progress === -1) {
+            if (pollInterval) clearInterval(pollInterval)
+          }
+        } catch (pollError) {
+          console.error('❌ Polling error:', pollError)
+          // Don't clear interval on error, keep trying
+        }
+      }, 2000)
+    }
+
+    setEventSource(es)
+    console.log('🎯 Enhanced progress tracking set up')
+  }
+
+  // Helper function to update progress state
+  const updateProgressState = (data: any) => {
+    setUploadProgress(data.progress || 0)
+    setProgressMessage(data.message || '')
+    
+    // Extract batch information from message
+    if (data.message && data.message.includes('batch')) {
+      const batchMatch = data.message.match(/batch (\d+)\/(\d+)/)
+      if (batchMatch && batchInfo) {
+        setBatchInfo(prev => prev ? {
+          ...prev,
+          current: parseInt(batchMatch[1])
+        } : null)
+      }
+    }
+    
+    // Calculate processed leads and ETA
+    if (data.progress && csvPreview?.totalRows) {
+      const processed = Math.floor((data.progress / 100) * csvPreview.totalRows)
+      setProcessedLeads(processed)
+      
+      // Calculate ETA if we have enough data
+      if (startTime && data.progress > 5) {
+        const elapsed = Date.now() - startTime
+        const remainingProgress = 100 - data.progress
+        const estimatedRemaining = (elapsed / data.progress) * remainingProgress
+        setEstimatedTimeRemaining(Math.round(estimatedRemaining / 1000)) // Convert to seconds
+      }
+    }
+  }
 
   // Handle file selection
   const handleFileSelect = useCallback((selectedFile: File) => {
@@ -262,26 +369,13 @@ export default function CSVUploader() {
         const previewData: CSVPreviewData = {
           columns,
           rows: dataRows.slice(0, 5), // Show first 5 rows in preview
-          allDataRows: allDataRows, // Store all data rows for duplicate checking
+          allDataRows: allDataRows, // Store all data rows for CSV-level duplicate checking
           totalRows: lines.length - 1, // Exclude header
-          duplicates: duplicateCount,
-          databaseDuplicates: 0,
-          isCheckingDuplicates: true
+          duplicates: duplicateCount
         }
 
         setCsvPreview(previewData)
         setCurrentStep('preview')
-
-        // Check for database duplicates with a small delay to ensure authentication is ready
-        if (emailColumnIndex !== -1) {
-          // Add a small delay to ensure authentication tokens are available
-          setTimeout(() => {
-            checkDatabaseDuplicates(allDataRows, emailColumnIndex)
-          }, 100)
-        } else {
-          // No email column found, stop checking
-          setCsvPreview(prev => prev ? { ...prev, isCheckingDuplicates: false } : null)
-        }
       } catch (error) {
         setError('Failed to parse CSV file. Please check the format.')
       }
@@ -289,110 +383,6 @@ export default function CSVUploader() {
     reader.readAsText(file)
   }
 
-  // Check for duplicates in database
-  const checkDatabaseDuplicates = async (allDataRows: string[][], emailColumnIndex: number, isManualCheck = false) => {
-    try {
-      console.log('🔍 checkDatabaseDuplicates called with:', { allDataRows: allDataRows.length, emailColumnIndex, isManualCheck });
-      
-      // Check if authentication token is available
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.warn('⚠️ No authentication token available, skipping duplicate check');
-        if (isManualCheck) {
-          addToast({ type: 'warning', title: 'Please log in again to check for duplicates' })
-        }
-        setCsvPreview(prev => prev ? { ...prev, isCheckingDuplicates: false } : null)
-        return;
-      }
-      
-      console.log('🔑 Authentication token available:', token.substring(0, 20) + '...');
-      
-      // Set loading state based on whether this is a manual check
-      if (isManualCheck) {
-        setIsManualCheckingDuplicates(true)
-      }
-      
-      // Extract unique emails from CSV
-      const uniqueEmails = new Set<string>()
-      allDataRows.forEach((row, index) => {
-        const email = row[emailColumnIndex]?.toLowerCase().trim()
-        console.log(`📧 Row ${index}: email at column ${emailColumnIndex} = "${email}"`);
-        if (email && email.includes('@')) {
-          uniqueEmails.add(email)
-        }
-      })
-
-      console.log('📬 Unique emails extracted:', Array.from(uniqueEmails));
-
-      if (uniqueEmails.size === 0) {
-        console.log('❌ No valid emails found, stopping duplicate check');
-        if (isManualCheck) {
-          addToast({ type: 'warning', title: 'No valid email addresses found in the CSV file' })
-          setIsManualCheckingDuplicates(false)
-        }
-        setCsvPreview(prev => prev ? { ...prev, isCheckingDuplicates: false } : null)
-        return
-      }
-
-      console.log('🌐 Calling API to check duplicates for emails:', Array.from(uniqueEmails));
-      console.log('🔗 API endpoint: /leads/lists/check-duplicates');
-      console.log('📤 Request payload:', { emails: Array.from(uniqueEmails) });
-      
-      // Call API to check for existing emails
-      const response = await api.post('/leads/lists/check-duplicates', {
-        emails: Array.from(uniqueEmails)
-      })
-
-      console.log('📡 API response status:', response.status);
-      console.log('📡 API response data:', response.data);
-      console.log('📊 Database duplicates found:', response.data.existingInDatabase);
-
-      setCsvPreview(prev => prev ? {
-        ...prev,
-        databaseDuplicates: response.data.existingInDatabase,
-        duplicateDetails: response.data.duplicateDetails || [],
-        isCheckingDuplicates: false
-      } : null)
-
-      // Show success message for manual checks
-      if (isManualCheck) {
-        const duplicateCount = response.data.existingInDatabase
-        if (duplicateCount > 0) {
-          addToast({ 
-            type: 'info', 
-            title: `Found ${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''} in your existing lead lists` 
-          })
-        } else {
-          addToast({ 
-            type: 'success', 
-            title: `No duplicates found! All ${uniqueEmails.size} emails are unique` 
-          })
-        }
-      }
-
-    } catch (error) {
-      console.error('❌ Error checking database duplicates:', error)
-      if (error.response) {
-        console.error('📡 API Error Response:', error.response.data);
-      }
-      
-      // Show error message for manual checks
-      if (isManualCheck) {
-        addToast({ 
-          type: 'error', 
-          title: 'Failed to check for duplicates', 
-          description: error.response?.data?.message || 'Please try again or contact support' 
-        })
-        setIsManualCheckingDuplicates(false)
-      }
-      
-      setCsvPreview(prev => prev ? { ...prev, isCheckingDuplicates: false } : null)
-    } finally {
-      if (isManualCheck) {
-        setIsManualCheckingDuplicates(false)
-      }
-    }
-  }
 
   // Handle field mapping completion
   const handleMappingComplete = (mapping: FieldMapping) => {
@@ -438,27 +428,35 @@ export default function CSVUploader() {
     setError('')
 
     try {
+      console.log('🚀 Starting CSV upload:', { fileName: file.name, listName, mapping })
+      
       const formData = new FormData()
       formData.append('csvFile', file)  // Changed from 'file' to 'csvFile' to match backend
       formData.append('listName', listName)
-      formData.append('allowDuplicates', allowDuplicates.toString())
       
       // Include field mapping if provided
       if (mapping) {
         formData.append('fieldMapping', JSON.stringify(mapping))
+        console.log('📊 Field mapping included:', mapping)
       }
 
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => Math.min(prev + 10, 90))
-      }, 200)
-
+      console.log('📤 Making API request to /leads/lists/upload...')
       const response = await api.post('/leads/lists/upload', formData)
+      console.log('✅ Upload API response:', response.status, response.data)
 
-      clearInterval(progressInterval)
-      setUploadProgress(100)
+      // Start real-time progress tracking if uploadId is provided
+      if (response.data.uploadId) {
+        console.log('🔄 Starting progress tracking with uploadId:', response.data.uploadId)
+        setUploadId(response.data.uploadId)
+        startProgressTracking(response.data.uploadId)
+      } else {
+        console.log('⚡ No uploadId provided, completing immediately')
+        // Fallback to immediate completion if no uploadId
+        setUploadProgress(100)
+      }
 
       const results = response.data
+      console.log('📋 Processing results:', results)
       
       // Transform backend response to match frontend interface
       const transformedResults: CSVUploadResults = {
@@ -474,74 +472,25 @@ export default function CSVUploader() {
           imported: results.inserted,
           duplicates: results.duplicates,
           errors: results.errors
-        },
-        details: {
-          duplicate_leads: results.duplicate_leads || [],
-          errors: [] // results.errors is a number, not an array
         }
       }
       
+      console.log('✨ Upload complete, showing results:', transformedResults)
       setUploadResults(transformedResults)
       setCurrentStep('results')
 
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Upload failed')
+      console.error('❌ Upload failed:', error)
+      if (error.response) {
+        console.error('📡 API Error Response:', error.response.status, error.response.data)
+      }
+      setError(error.response?.data?.message || error.message || 'Upload failed')
     } finally {
       setIsUploading(false)
       setUploadProgress(0)
     }
   }
 
-  // Manual duplicate check function with improved email column detection
-  const handleManualDuplicateCheck = async () => {
-    if (!csvPreview?.allDataRows) {
-      addToast({ type: 'error', title: 'No CSV data available for duplicate checking' })
-      return
-    }
-
-    console.log('🔍 Manual duplicate check triggered');
-    console.log('📋 Available columns:', csvPreview.columns);
-    
-    // Find email column with improved logic
-    let emailColumnIndex = -1
-    
-    // Method 1: Look for column names containing "email"
-    emailColumnIndex = csvPreview.columns.findIndex(col => {
-      const name = col.name.toLowerCase()
-      return name.includes('email') || name === 'e-mail' || name === 'mail'
-    })
-    
-    // Method 2: If not found by name, look for columns with email-like content
-    if (emailColumnIndex === -1) {
-      for (let colIndex = 0; colIndex < csvPreview.columns.length; colIndex++) {
-        const column = csvPreview.columns[colIndex]
-        const emailLikeCount = column.sample.filter(value => 
-          value && value.includes('@') && value.includes('.')
-        ).length
-        
-        // If >50% of sample values look like emails, this is probably the email column
-        if (emailLikeCount > column.sample.length * 0.5) {
-          emailColumnIndex = colIndex
-          console.log(`📧 Found email column by content at index ${colIndex} (${column.name})`);
-          break
-        }
-      }
-    }
-    
-    if (emailColumnIndex === -1) {
-      addToast({ 
-        type: 'error', 
-        title: 'Cannot find email column', 
-        description: 'Please make sure your CSV has a column with email addresses' 
-      })
-      return
-    }
-    
-    console.log(`📧 Using email column: ${csvPreview.columns[emailColumnIndex].name} (index ${emailColumnIndex})`);
-    
-    // Start the duplicate check
-    await checkDatabaseDuplicates(csvPreview.allDataRows, emailColumnIndex, true)
-  }
 
   // Navigate to lead list
   const viewLeadList = (listId: string) => {
@@ -550,62 +499,6 @@ export default function CSVUploader() {
     router.push(`/leads/lists/${listId}`)
   }
 
-  // Import duplicates to existing list
-  const importDuplicates = async () => {
-    console.log('🔥 Import duplicates clicked!')
-    if (!uploadResults || !uploadResults.details?.duplicate_leads) {
-      setError('No duplicate leads available to import')
-      return
-    }
-
-    setIsImportingDuplicates(true)
-    setError('')
-
-    try {
-      // Send the duplicate leads data as JSON, not FormData
-      console.log('📤 Sending duplicate leads:', uploadResults.details.duplicate_leads);
-      
-      const response = await api.post(`/leads/lists/${uploadResults.leadList.id}/import-duplicates`, {
-        duplicateLeads: uploadResults.details.duplicate_leads
-      })
-      
-      // Show detailed feedback about the import process
-      if (response.data.success) {
-        if (response.data.imported > 0) {
-          addToast({ type: 'success', title: response.data.message || `Successfully imported ${response.data.imported} duplicate leads!` })
-        } else if (response.data.alreadyInList > 0) {
-          addToast({ type: 'info', title: response.data.message || `All leads from the CSV are already in this list.` })
-        } else if (response.data.notInDatabase > 0) {
-          addToast({ type: 'info', title: response.data.message || `No duplicate leads found. ${response.data.notInDatabase} leads don't exist in your database yet.` })
-        } else {
-          addToast({ type: 'info', title: 'No changes made to the lead list.' })
-        }
-        
-        // Update the upload results with new data
-        const newResults = {
-          ...uploadResults,
-          importResults: {
-            ...uploadResults.importResults,
-            imported: uploadResults.importResults.imported + response.data.imported,
-            duplicates: Math.max(0, uploadResults.importResults.duplicates - response.data.imported)
-          },
-          leadList: {
-            ...uploadResults.leadList,
-            totalLeads: response.data.newTotalCount
-          }
-        }
-        
-        setUploadResults(newResults)
-      } else {
-        addToast({ type: 'error', title: 'Failed to import duplicates' })
-      }
-      
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to import duplicates')
-    } finally {
-      setIsImportingDuplicates(false)
-    }
-  }
 
   // Download CSV template
   const downloadTemplate = () => {
@@ -646,6 +539,18 @@ export default function CSVUploader() {
     setError('')
     setUploadProgress(0)
     setIsUploading(false)
+    setProgressMessage('')
+    setBatchInfo(null)
+    setProcessedLeads(0)
+    setEstimatedTimeRemaining(null)
+    setStartTime(null)
+    setUploadId(null)
+    
+    // Close any active EventSource
+    if (eventSource) {
+      eventSource.close()
+      setEventSource(null)
+    }
   }
 
   // Render results step
@@ -666,13 +571,6 @@ export default function CSVUploader() {
             <p className="text-gray-600">
               {uploadResults.importResults.imported} leads imported
             </p>
-            <div className="mt-2">
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                allowDuplicates ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
-              }`}>
-                {allowDuplicates ? 'Duplicates Allowed' : 'Duplicates Blocked'}
-              </span>
-            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -686,9 +584,7 @@ export default function CSVUploader() {
               <div className="text-2xl font-bold text-yellow-600">
                 {uploadResults.importResults.duplicates}
               </div>
-              <div className="text-sm text-yellow-700">
-                {allowDuplicates ? 'Updated' : 'Duplicates Skipped'}
-              </div>
+              <div className="text-sm text-yellow-700">CSV Duplicates Removed</div>
             </div>
             <div className="text-center p-4 bg-red-50 rounded-lg">
               <div className="text-2xl font-bold text-red-600">
@@ -698,32 +594,10 @@ export default function CSVUploader() {
             </div>
           </div>
 
-          {uploadResults.details?.errors && uploadResults.details.errors.length > 0 && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-gray-500" />
-                <span className="text-sm font-medium text-gray-700">Import Notes:</span>
-              </div>
-              <div className="text-sm text-gray-600 mt-2">
-                {uploadResults.details.errors.length} item{uploadResults.details.errors.length > 1 ? 's' : ''} skipped due to processing requirements
-              </div>
-            </div>
-          )}
-
           <div className="flex justify-center gap-3">
             <Button onClick={() => viewLeadList(uploadResults.leadList.id)}>
               View Lead List
             </Button>
-            {uploadResults.importResults.duplicates > 0 && (
-              <Button 
-                variant="secondary" 
-                onClick={importDuplicates}
-                disabled={isImportingDuplicates}
-                className="bg-orange-100 text-orange-800 hover:bg-orange-200"
-              >
-                {isImportingDuplicates ? 'Adding...' : `Add Duplicates to List (${uploadResults.importResults.duplicates})`}
-              </Button>
-            )}
             <Button variant="outline" onClick={resetUpload}>
               Upload Another File
             </Button>
@@ -927,7 +801,7 @@ export default function CSVUploader() {
           </CardHeader>
           <CardContent className="space-y-6">
             {/* CSV Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center p-3 bg-blue-50 rounded-lg">
                 <div className="text-2xl font-bold text-blue-600">{csvPreview.columns.length}</div>
                 <div className="text-xs text-blue-700">Columns</div>
@@ -939,12 +813,6 @@ export default function CSVUploader() {
               <div className="text-center p-3 bg-yellow-50 rounded-lg">
                 <div className="text-2xl font-bold text-yellow-600">{csvPreview.duplicates}</div>
                 <div className="text-xs text-yellow-700">CSV Duplicates</div>
-              </div>
-              <div className="text-center p-3 bg-orange-50 rounded-lg">
-                <div className="text-2xl font-bold text-orange-600">
-                  {csvPreview.isCheckingDuplicates ? '...' : csvPreview.databaseDuplicates}
-                </div>
-                <div className="text-xs text-orange-700">In Database</div>
               </div>
               <div className="text-center p-3 bg-purple-50 rounded-lg">
                 <div className="text-lg font-bold text-purple-600 truncate">{file?.name}</div>
@@ -964,111 +832,19 @@ export default function CSVUploader() {
               />
             </div>
 
-            {/* Database Duplicates Handling */}
-            {csvPreview.databaseDuplicates > 0 && !csvPreview.isCheckingDuplicates && (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  <div className="space-y-3">
-                    <div>
-                      <strong>Duplicate Emails Found:</strong> {csvPreview.databaseDuplicates} email{csvPreview.databaseDuplicates > 1 ? 's' : ''} from your CSV already exist in your other lead lists.
-                    </div>
-                    <div className="text-sm text-gray-700 mb-4">
-                      • CSV internal duplicates are automatically removed<br/>
-                      • Choose what to do with the {csvPreview.databaseDuplicates} duplicate{csvPreview.databaseDuplicates > 1 ? 's' : ''}:
-                    </div>
-                    {csvPreview.duplicateDetails && csvPreview.duplicateDetails.length > 0 && (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <div className="text-sm text-blue-800 font-medium mb-2">Duplicates found in these lists:</div>
-                        <div className="text-sm text-blue-700 space-y-1">
-                          {(() => {
-                            console.log('🔍 Rendering duplicateDetails:', JSON.stringify(csvPreview.duplicateDetails, null, 2));
-                            const listCounts = new Map<string, number>();
-                            csvPreview.duplicateDetails.forEach(detail => {
-                              if (detail.existingInLists && Array.isArray(detail.existingInLists)) {
-                                detail.existingInLists.forEach(listInfo => {
-                                  const listName = typeof listInfo === 'string' ? listInfo : (listInfo?.listName || 'Unknown List');
-                                  listCounts.set(listName, (listCounts.get(listName) || 0) + 1);
-                                });
-                              }
-                            });
-                            return Array.from(listCounts.entries()).map(([listName, count], index) => 
-                              <div key={index}>• {listName} ({count} duplicate{count > 1 ? 's' : ''})</div>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    )}
-                    <div className="space-y-4">
-                      <div className="border rounded-lg p-4 bg-gray-50">
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="radio"
-                            id="skipAllDuplicates"
-                            name="duplicateHandling"
-                            checked={!allowDuplicates}
-                            onChange={() => setAllowDuplicates(false)}
-                            className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                          />
-                          <Label htmlFor="skipAllDuplicates" className="text-sm font-medium cursor-pointer flex-grow">
-                            🚫 <strong>Skip All Duplicates</strong>
-                          </Label>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-2 ml-7">
-                          Don't add any of the {csvPreview.databaseDuplicates} duplicate emails to this new list. Keep them in their current lists only.
-                        </p>
-                      </div>
-                      <div className="border rounded-lg p-4 bg-blue-50">
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="radio"
-                            id="copyAllDuplicates"
-                            name="duplicateHandling"
-                            checked={allowDuplicates}
-                            onChange={() => setAllowDuplicates(true)}
-                            className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                          />
-                          <Label htmlFor="copyAllDuplicates" className="text-sm font-medium cursor-pointer flex-grow">
-                            📋 <strong>Copy All to New List</strong>
-                          </Label>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-2 ml-7">
-                          Add copies of all {csvPreview.databaseDuplicates} duplicate emails to this new list. Original emails stay in their current lists too.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* No Duplicates Message */}
-            {csvPreview.databaseDuplicates === 0 && !csvPreview.isCheckingDuplicates && (
-              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                  <div>
-                    <div className="font-medium text-green-800">Ready to Import</div>
-                    <div className="text-sm text-green-700">
-                      No duplicate emails found in your existing lead lists. All {csvPreview.rows - csvPreview.duplicates} unique emails will be imported.
-                      {csvPreview.duplicates > 0 && ` (${csvPreview.duplicates} CSV internal duplicates were automatically removed)`}
-                    </div>
+            {/* CSV Info Message */}
+            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <div>
+                  <div className="font-medium text-green-800">Ready to Import</div>
+                  <div className="text-sm text-green-700">
+                    All {csvPreview.totalRows - csvPreview.duplicates} unique emails will be imported.
+                    {csvPreview.duplicates > 0 && ` (${csvPreview.duplicates} CSV internal duplicates were automatically removed)`}
                   </div>
                 </div>
               </div>
-            )}
-
-            {/* Checking Duplicates */}
-            {csvPreview.isCheckingDuplicates && (
-              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                  <div className="text-sm text-blue-700">
-                    Checking for existing emails in your database...
-                  </div>
-                </div>
-              </div>
-            )}
+            </div>
 
             {/* CSV Preview Table */}
             <div className="border rounded-lg overflow-hidden">
@@ -1119,13 +895,12 @@ export default function CSVUploader() {
                 <Button 
                   variant="outline" 
                   onClick={handleContinueToUpload}
-                  disabled={csvPreview?.isCheckingDuplicates}
                 >
-                  {csvPreview?.isCheckingDuplicates ? 'Checking Duplicates...' : 'Skip Field Mapping'}
+                  Skip Field Mapping
                 </Button>
                 <Button 
                   onClick={handleContinueToMapping}
-                  disabled={!listName || csvPreview?.isCheckingDuplicates}
+                  disabled={!listName}
                 >
                   Continue to Field Mapping
                 </Button>
@@ -1141,21 +916,99 @@ export default function CSVUploader() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5 animate-bounce" />
-              Processing CSV
+              Processing CSV - Batch Upload in Progress
             </CardTitle>
             <p className="text-sm text-gray-600">
-              Uploading and processing your CSV file...
+              Uploading and processing your CSV file using batch processing for optimal performance...
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="text-center py-8">
-              <div className="text-4xl font-bold text-blue-600 mb-2">
+            {/* Main Progress Display */}
+            <div className="text-center py-4">
+              <div className="text-5xl font-bold text-blue-600 mb-2">
                 {uploadProgress}%
               </div>
-              <Progress value={uploadProgress} className="h-3 mb-4" />
-              <p className="text-gray-600">
-                Processing {csvPreview?.totalRows ? Number(csvPreview.totalRows).toLocaleString() : 'your'} leads...
-              </p>
+              <Progress value={uploadProgress} className="h-4 mb-4" />
+              <div className="text-lg text-gray-700 font-medium">
+                {progressMessage || 'Starting batch processing...'}
+              </div>
+            </div>
+
+            {/* Detailed Progress Information */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Batch Progress */}
+              {batchInfo && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {batchInfo.current}/{batchInfo.total}
+                  </div>
+                  <div className="text-sm text-blue-700 font-medium">Batches Processed</div>
+                  <div className="text-xs text-blue-600 mt-1">
+                    ({Math.round((batchInfo.current / batchInfo.total) * 100)}% of batches)
+                  </div>
+                </div>
+              )}
+
+              {/* Leads Processed */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {processedLeads.toLocaleString()}
+                </div>
+                <div className="text-sm text-green-700 font-medium">Leads Processed</div>
+                <div className="text-xs text-green-600 mt-1">
+                  of {csvPreview?.totalRows ? Number(csvPreview.totalRows).toLocaleString() : '—'} total
+                </div>
+              </div>
+
+              {/* Estimated Time Remaining */}
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-orange-600">
+                  {estimatedTimeRemaining !== null ? (
+                    estimatedTimeRemaining > 60 ? 
+                      `${Math.ceil(estimatedTimeRemaining / 60)}m` : 
+                      `${estimatedTimeRemaining}s`
+                  ) : '—'}
+                </div>
+                <div className="text-sm text-orange-700 font-medium">Time Remaining</div>
+                <div className="text-xs text-orange-600 mt-1">
+                  {estimatedTimeRemaining !== null && estimatedTimeRemaining > 0 ? 'Estimated' : 'Calculating...'}
+                </div>
+              </div>
+            </div>
+
+            {/* Processing Status Messages */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <span className="text-sm font-medium text-gray-700">Processing Status</span>
+              </div>
+              <div className="space-y-1 text-sm text-gray-600">
+                <div>✅ CSV uploaded and validated successfully</div>
+                <div>🔄 Processing leads in batches of 200 for optimal performance</div>
+                {batchInfo && batchInfo.current > 0 && (
+                  <div>📊 Completed {batchInfo.current} of {batchInfo.total} batches</div>
+                )}
+                <div>🎯 Checking for duplicates and validating email addresses</div>
+                <div>💾 Storing leads in your database with organization isolation</div>
+              </div>
+            </div>
+
+            {/* Real-time Activity Log */}
+            {progressMessage && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="text-sm">
+                  <span className="font-medium text-blue-700">Latest Activity: </span>
+                  <span className="text-blue-600">{progressMessage}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Performance Note */}
+            <div className="text-center">
+              <div className="text-sm text-gray-500">
+                Large files are processed in batches to ensure optimal performance and reliability.
+                Please keep this tab open while processing completes.
+              </div>
             </div>
           </CardContent>
         </Card>

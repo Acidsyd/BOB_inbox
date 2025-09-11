@@ -14,7 +14,7 @@ const API_URL = getApiUrl()
 
 export const api = axios.create({
   baseURL: `${API_URL}/api`,
-  timeout: 120000, // Increased timeout to 120 seconds for sync operations
+  timeout: 600000, // Increased timeout to 600 seconds (10 minutes) for large CSV uploads
 })
 
 // Add logging for debugging

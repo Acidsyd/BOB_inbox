@@ -29,7 +29,7 @@ export interface ParseResult {
 export class CSVParser {
   private static readonly EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   private static readonly MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-  private static readonly MAX_ROWS = 10000;
+  private static readonly MAX_ROWS = 50000;
 
   /**
    * Parse CSV file and extract lead data

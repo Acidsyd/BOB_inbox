@@ -13,7 +13,7 @@ class PlanLimitsService {
         emailsPerDay: 50,
         campaigns: 1,
         leadLists: 3,
-        leadsPerList: 1000,
+        leadsPerList: 5000,
         features: ['basic_analytics', 'email_sequences']
       },
       basic: {

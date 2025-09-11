@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const jwt = require('jsonwebtoken');
+const batchProcessingService = require('../services/BatchProcessingService');
 const router = express.Router();
 
 // Initialize Supabase client
@@ -74,16 +75,25 @@ router.get('/', authenticateToken, async (req, res) => {
       
     if (error) throw error;
     
-    // Get lead counts for each list
+    // Get lead counts for each list using proper count queries
     const enhancedLists = await Promise.all(
       (lists || []).map(async (list) => {
-        const { data: leads, error: leadsError } = await supabase
+        // Get total count using count query (not limited to 1000)
+        const { count: totalLeads, error: totalError } = await supabase
           .from('leads')
-          .select('status')
+          .select('*', { count: 'exact', head: true })
           .eq('lead_list_id', list.id);
         
-        const totalLeads = leads?.length || 0;
-        const activeLeads = leads?.filter(lead => lead.status === 'active').length || 0;
+        // Get active count using count query (not limited to 1000)  
+        const { count: activeLeads, error: activeError } = await supabase
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('lead_list_id', list.id)
+          .eq('status', 'active');
+          
+        if (totalError || activeError) {
+          console.error(`Error counting leads for list ${list.id}:`, totalError || activeError);
+        }
         
         // Get last lead added date
         const { data: lastLead } = await supabase
@@ -93,12 +103,14 @@ router.get('/', authenticateToken, async (req, res) => {
           .order('created_at', { ascending: false })
           .limit(1);
         
+        console.log(`📊 List "${list.name}": ${totalLeads} total leads, ${activeLeads} active leads`);
+        
         return {
           id: list.id,
           name: list.name,
           description: list.description || '',
-          totalLeads,
-          activeLeads,
+          totalLeads: totalLeads || 0,
+          activeLeads: activeLeads || 0,
           createdAt: list.created_at,
           updatedAt: list.updated_at,
           lastLeadAdded: lastLead?.[0]?.created_at || null
@@ -148,7 +160,6 @@ router.post('/', authenticateToken, async (req, res) => {
 router.post('/:id/upload-csv', authenticateToken, upload.single('csvFile'), async (req, res) => {
   try {
     const { id: leadListId } = req.params;
-    const { allowDuplicates } = req.body;
     const csvFile = req.file;
 
     if (!csvFile) {
@@ -207,103 +218,34 @@ router.post('/:id/upload-csv', authenticateToken, upload.single('csvFile'), asyn
       });
     }
 
-    let duplicateCount = 0;
-    let insertedCount = 0;
-    let duplicateLeads = [];
+    // Generate unique upload ID for progress tracking
+    const uploadId = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Set up progress callback to track processing
+    const progressCallback = (progress, message) => {
+      batchProcessingService.updateProgress(uploadId, progress, message);
+    };
 
-    if (allowDuplicates === 'true') {
-      // Insert all leads without duplicate checking
-      for (const lead of results) {
-        try {
-          const { data, error } = await supabase
-            .from('leads')
-            .insert({
-              ...lead,
-              lead_list_id: leadListId,
-              organization_id: req.user.organizationId,
-              created_by: req.user.userId
-            })
-            .select()
-            .single();
+    // Start batch processing with progress tracking
+    console.log(`🚀 Starting batch processing for ${results.length} leads with uploadId: ${uploadId}`);
+    
+    const batchResults = await batchProcessingService.processBatchLeads(
+      results,
+      leadListId,
+      req.user.organizationId,
+      req.user.userId,
+      false,
+      progressCallback
+    );
 
-          if (error) {
-            if (error.code === '23505') {
-              // Duplicate key constraint violation - this lead already exists
-              duplicateCount++;
-              duplicateLeads.push(lead);
-            } else {
-              console.error('Error inserting lead:', error);
-            }
-          } else {
-            insertedCount++;
-          }
-        } catch (err) {
-          console.error('Error processing lead:', err);
-        }
-      }
-    } else {
-      // Check for duplicates before inserting
-      for (const lead of results) {
-        try {
-          // Check if email already exists in ANY of the user's lists in this organization
-          const { data: existingLeads, error: checkError } = await supabase
-            .from('leads')
-            .select(`
-              *,
-              lead_lists:lead_list_id (
-                id,
-                name
-              )
-            `)
-            .eq('email', lead.email)
-            .eq('organization_id', req.user.organizationId);
-
-          if (checkError) {
-            throw checkError;
-          }
-
-          if (existingLeads && existingLeads.length > 0) {
-            // Lead already exists in one or more lists
-            duplicateCount++;
-            const duplicateInfo = {
-              ...lead,
-              existingInLists: existingLeads.map(existingLead => ({
-                listId: existingLead.lead_list_id,
-                listName: existingLead.lead_lists?.name || 'Unknown List'
-              }))
-            };
-            duplicateLeads.push(duplicateInfo);
-          } else {
-            // Insert new lead
-            const { data, error } = await supabase
-              .from('leads')
-              .insert({
-                ...lead,
-                lead_list_id: leadListId,
-                organization_id: req.user.organizationId,
-                created_by: req.user.userId
-              })
-              .select()
-              .single();
-
-            if (error) {
-              if (error.code === '23505') {
-                // Duplicate key constraint violation - this lead already exists
-                duplicateCount++;
-                duplicateLeads.push(lead);
-              } else {
-                console.error('Error inserting lead:', error);
-              }
-            } else {
-              insertedCount++;
-            }
-          }
-        } catch (err) {
-          console.error('Error processing lead:', err);
-          // Individual errors logged to console, summary will be provided to user
-        }
-      }
-    }
+    const { 
+      total, 
+      inserted: insertedCount, 
+      duplicates: duplicateCount, 
+      duplicate_leads: duplicateLeads, 
+      failed: failedCount,
+      errors: processingErrors 
+    } = batchResults;
 
     // Clean up uploaded file
     try {
@@ -312,7 +254,6 @@ router.post('/:id/upload-csv', authenticateToken, upload.single('csvFile'), asyn
       console.error('Error cleaning up file:', cleanupError);
     }
 
-    const failedCount = results.length - insertedCount - duplicateCount;
     const summaryErrors = [];
     
     res.json({
@@ -415,7 +356,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     
     // Extract query parameters
     const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
+    const limit = Math.min(5000, Math.max(1, parseInt(req.query.limit) || 50));
     const search = req.query.search?.trim() || '';
     
     console.log(`📋 GET /api/leads/lists/${leadListId} - Page: ${page}, Limit: ${limit}, Search: "${search}"`);
@@ -444,14 +385,26 @@ router.get('/:id', authenticateToken, async (req, res) => {
       leadsQuery = leadsQuery.or(`email.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,company.ilike.%${search}%`);
     }
 
-    // Get total count for pagination
-    const { count: totalCount, error: countError } = await leadsQuery
-      .select('*', { count: 'exact', head: true });
+    // Get total count for pagination (create separate query to avoid conflicts)
+    let countQuery = supabase
+      .from('leads')
+      .select('*', { count: 'exact', head: true })
+      .eq('lead_list_id', leadListId)
+      .eq('organization_id', req.user.organizationId);
+
+    // Add same search filter as main query
+    if (search) {
+      countQuery = countQuery.or(`email.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,company.ilike.%${search}%`);
+    }
+
+    const { count: totalCount, error: countError } = await countQuery;
 
     if (countError) {
       console.error('Error getting total count:', countError);
       throw countError;
     }
+    
+    console.log(`📊 Count query result: ${totalCount} leads found`);
 
     // Get paginated leads
     const offset = (page - 1) * limit;
@@ -692,6 +645,60 @@ router.post('/check-duplicates-csv', authenticateToken, upload.single('csvFile')
   }
 });
 
+// SSE endpoint for upload progress tracking
+router.get('/upload-progress/:uploadId', (req, res) => {
+  const { uploadId } = req.params;
+  const { token } = req.query;
+
+  // Verify token for authentication
+  if (!token) {
+    return res.status(401).json({ error: 'Token required' });
+  }
+
+  try {
+    jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    return res.status(403).json({ error: 'Invalid or expired token' });
+  }
+  
+  // Set SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+
+  // Send initial message
+  res.write(`data: ${JSON.stringify({ progress: 0, message: 'Starting...' })}\n\n`);
+
+  // Check progress every 500ms
+  const interval = setInterval(() => {
+    const progressData = batchProcessingService.getProgress(uploadId);
+    
+    if (progressData.progress === -1) {
+      // Error occurred
+      res.write(`data: ${JSON.stringify(progressData)}\n\n`);
+      res.end();
+      clearInterval(interval);
+    } else if (progressData.progress >= 100) {
+      // Complete
+      res.write(`data: ${JSON.stringify(progressData)}\n\n`);
+      res.end();
+      clearInterval(interval);
+    } else {
+      // In progress
+      res.write(`data: ${JSON.stringify(progressData)}\n\n`);
+    }
+  }, 500);
+
+  // Clean up on client disconnect
+  req.on('close', () => {
+    clearInterval(interval);
+  });
+});
+
 // Upload endpoint that creates a new list or uploads to existing one
 router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, res) => {
   try {
@@ -700,7 +707,7 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
     console.log('📎 File:', req.file ? req.file.filename : 'No file');
     console.log('👤 User:', req.user);
     
-    const { listName, allowDuplicates, fieldMapping } = req.body;
+    const { listName, fieldMapping } = req.body;
     const csvFile = req.file;
 
     if (!csvFile) {
@@ -772,41 +779,56 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
       });
     }
 
-    let duplicateCount = 0;
-    let insertedCount = 0;
-    let duplicateLeads = [];
+    // Generate unique upload ID for progress tracking
+    const uploadId = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Set up progress callback to track processing
+    const progressCallback = (progress, message) => {
+      batchProcessingService.updateProgress(uploadId, progress, message);
+    };
 
-    if (allowDuplicates === 'true') {
-      // Insert all leads without duplicate checking
-      for (const lead of results) {
-        try {
-          const { data, error } = await supabase
-            .from('leads')
-            .insert({
-              ...lead,
-              lead_list_id: newList.id,
-              organization_id: req.user.organizationId,
-              created_by: req.user.userId
-            })
-            .select()
-            .single();
+    // Use batch processing for new list as well (performance optimization for large files)
+    console.log(`🚀 Starting batch processing for ${results.length} leads in new list with uploadId: ${uploadId}`);
+    
+    try {
+      const batchResults = await batchProcessingService.processBatchLeads(
+        results,
+        newList.id,
+        req.user.organizationId,
+        req.user.userId,
+        false,
+        progressCallback
+      );
 
-          if (error) {
-            if (error.code === '23505') {
-              // Duplicate key constraint violation
-              duplicateCount++;
-              duplicateLeads.push(lead);
-            } else {
-              console.error('Error inserting lead:', error);
-            }
-          } else {
-            insertedCount++;
-          }
-        } catch (err) {
-          console.error('Error processing lead:', err);
-        }
+      // Clean up uploaded file
+      try {
+        fs.unlinkSync(csvFile.path);
+      } catch (cleanupError) {
+        console.error('Error cleaning up file:', cleanupError);
       }
-    } else {
+
+      // Return batch processing results
+      return res.status(200).json({
+        message: 'CSV processing completed via batch processing',
+        uploadId,
+        listId: newList.id,
+        listName: newList.name,
+        total: results.length,
+        inserted: batchResults.inserted,
+        duplicates: batchResults.duplicates,
+        duplicate_leads: batchResults.duplicate_leads || [],
+        failed: batchResults.failed || 0,
+        errors: batchResults.errors || []
+      });
+    } catch (batchError) {
+      console.error('Batch processing failed, falling back to legacy processing:', batchError);
+      
+      // Fallback to legacy processing if batch processing fails
+      let duplicateCount = 0;
+      let insertedCount = 0;
+      let duplicateLeads = [];
+      let failedCount = 0;
+
       // Check for duplicates before inserting
       for (const lead of results) {
         try {
@@ -868,8 +890,7 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
           // Individual errors logged to console, summary will be provided to user
         }
       }
-    }
-
+    
     // Clean up uploaded file
     try {
       fs.unlinkSync(csvFile.path);
@@ -877,11 +898,12 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
       console.error('Error cleaning up file:', cleanupError);
     }
 
-    const failedCount = results.length - insertedCount - duplicateCount;
-    const summaryErrors = [];
-    
+    // Calculate failed count
+    failedCount = results.length - insertedCount - duplicateCount;
+
     const responseData = {
       message: 'CSV processing completed',
+      uploadId, // Include uploadId for progress tracking
       listId: newList.id,
       listName: newList.name,
       total: results.length,
@@ -889,11 +911,13 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
       duplicates: duplicateCount,
       duplicate_leads: duplicateLeads,
       failed: failedCount,
-      errors: summaryErrors
+      errors: errors || []
     };
     
     console.log('📤 Final response:', responseData);
     res.json(responseData);
+    
+    } // Close the catch (batchError) block
 
   } catch (error) {
     console.error('CSV upload error:', error);
@@ -1026,6 +1050,32 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     console.error('Error deleting lead list:', error);
     res.status(500).json({ error: 'Failed to delete lead list' });
   }
+});
+
+// Polling endpoint for upload progress (fallback for EventSource)
+router.get("/upload-progress-poll/:uploadId", authenticateToken, (req, res) => {
+  const { uploadId } = req.params;
+  
+  console.log("📊 Upload progress poll requested for uploadId:", uploadId);
+  
+  // Get progress from BatchProcessingService
+  const progressData = batchProcessingService.getProgress(uploadId);
+  
+  if (!progressData) {
+    return res.status(404).json({
+      error: "Upload ID not found",
+      progress: 0,
+      message: "Upload not found or expired"
+    });
+  }
+  
+  console.log("📈 Returning progress data:", progressData);
+  
+  res.json({
+    progress: progressData.progress,
+    message: progressData.message,
+    timestamp: progressData.timestamp
+  });
 });
 
 module.exports = router;

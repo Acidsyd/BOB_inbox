@@ -24,6 +24,10 @@ npm run cron:dev         # Email processor (every minute) - PRODUCTION-READY wit
 - **Bounce Detection Fixed**: Gmail-style folder system with proper bounce message filtering and display (September 2025)
 - **Frontend Timezone Alignment**: Removed UTC conversion in InboxMessageView.tsx formatDate() function (September 2025)
 - **Inbox Search Fixed**: Comprehensive search now properly queries sender names, email addresses, subjects, and content (October 2025)
+- **🚨 CRITICAL: Lead Count Limit Fixed (January 2025)**: Resolved Supabase 1000-row query limit issue in leadLists.js
+  - **Root Cause**: General lists endpoint was using `.data?.length` after fetching data instead of proper count queries
+  - **Solution**: Replaced with Supabase count queries using `{ count: 'exact', head: true }` 
+  - **Impact**: Now correctly displays unlimited lead counts (2605+ tested) instead of capping at 1000
 
 # 🚨 AUTOMATIC CRON PROCESSOR MANAGEMENT
 # The system now automatically starts the cron processor when campaigns are launched!
@@ -1003,6 +1007,8 @@ useEffect(() => {
 | ComposeEmailModal form not clearing | **FIXED**: Complete form state reset after successful email send with 2-second delay (September 2025) |
 | ComposeEmailModal continuous blinking | **FIXED**: Removed `animate-pulse` class from minimized button (September 2025) |
 | Email validation error with typed addresses | **FIXED**: Modified validateForm() to capture pending email from input field before validation (September 2025) |
+| Lead lists showing only 1000 leads maximum | **FIXED**: Replaced `leads?.length` counting with proper Supabase count queries in leadLists.js:78-96 (January 2025) |
+| CSV import working but frontend not showing all leads | **FIXED**: General lists endpoint now uses `{ count: 'exact', head: true }` instead of data fetching + length counting (January 2025) |
 
 ### Debug Patterns
 ```bash
@@ -1026,6 +1032,12 @@ SELECT COUNT(*) FROM conversation_messages WHERE organization_id = 'uuid';
 
 # Test plan limits API
 curl -H "Authorization: Bearer $token" http://localhost:4000/api/plans/status
+
+# Debug lead count issues
+# Check actual lead count in database vs API response
+SELECT COUNT(*) FROM leads WHERE lead_list_id = 'uuid' AND organization_id = 'uuid';
+# Compare with API endpoint response
+curl -H "Authorization: Bearer $token" http://localhost:4000/api/leads/lists
 ```
 
 ### Database Error Codes
