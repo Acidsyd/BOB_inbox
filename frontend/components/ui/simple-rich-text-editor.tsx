@@ -11,14 +11,14 @@ import {
   ListOrdered,
   Link
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover'
-import { cn } from '@/lib/utils'
+} from './ui/popover'
+import { cn } from '../lib/utils'
 
 interface SimpleRichTextEditorProps {
   content: string

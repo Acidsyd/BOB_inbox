@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect } from 'react'
 import { Search, Users, Calendar, AlertCircle, Database, FileText, CheckCircle, Loader2, Copy, X } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { Badge } from './ui/badge'
+import { Skeleton } from './ui/skeleton'
 import { formatDistanceToNow } from 'date-fns'
 import Link from 'next/link'
-import { api } from '@/lib/api'
+import { api } from '../lib/api'
 
 interface LeadList {
   id: string

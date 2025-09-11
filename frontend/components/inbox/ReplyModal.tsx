@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { Button } from './ui/button'
+import { Textarea } from './ui/textarea'
 import { X, Send } from 'lucide-react'
-import { api } from '@/lib/api'
+import { api } from '../lib/api'
 
 interface Conversation {
   id: string

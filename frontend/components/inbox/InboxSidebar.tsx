@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useState } from 'react'
-import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import useFolders, { type Folder } from '@/hooks/useFolders'
-import useEmailSync from '@/hooks/useEmailSync'
+import { cn } from '../lib/utils'
+import { Button } from './ui/button'
+import { Badge } from './ui/badge'
+import useFolders, { type Folder } from '../hooks/useFolders'
+import useEmailSync from '../hooks/useEmailSync'
 import AutoSyncControl from './AutoSyncControl'
 import { 
   Inbox, 

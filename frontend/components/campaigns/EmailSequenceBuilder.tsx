@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Checkbox } from './ui/checkbox'
 import { 
   Plus, 
   Trash2, 
@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 
 // Import SimpleRichTextEditor but upgrade it with enhanced features
-import { SimpleRichTextEditor } from '@/components/ui/simple-rich-text-editor'
+import { SimpleRichTextEditor } from './ui/simple-rich-text-editor'
 
 interface EmailSequence {
   id: number

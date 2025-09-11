@@ -43,23 +43,23 @@ import {
   Paperclip,
   Upload
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
+import { Button } from './ui/button'
+import { Separator } from './ui/separator'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from './ui/select'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { cn } from '@/lib/utils'
+} from './ui/popover'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { cn } from '../lib/utils'
 import { useCallback, useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 

@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -25,7 +25,7 @@ import EmailSequenceBuilder from './EmailSequenceBuilder'
 import CSVFieldMapper from './CSVFieldMapper'
 import EmailPreviewAndTest from './EmailPreviewAndTest'
 import ABTestingConfiguration from './ABTestingConfiguration'
-import { useEmailAccountsSelection } from '@/hooks/useEmailAccountsSelection'
+import { useEmailAccountsSelection } from '../hooks/useEmailAccountsSelection'
 
 interface CampaignData {
   // Basic Info

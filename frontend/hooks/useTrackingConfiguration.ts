@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
-import { api } from '@/lib/api'
-import { useToast } from '@/components/ui/toast'
+import { api } from '../lib/api'
+import { useToast } from '../components/ui/toast'
 
 export interface AccountTrackingHealth {
   accountId: string

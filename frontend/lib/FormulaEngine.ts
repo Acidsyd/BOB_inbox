@@ -3,7 +3,7 @@
  * Provides comprehensive expression parsing and built-in function library
  */
 
-import { Lead, ColumnDefinition } from '@/types/spreadsheet';
+import { Lead, ColumnDefinition } from '../types/spreadsheet';
 
 // Formula Types
 export interface FormulaAST {

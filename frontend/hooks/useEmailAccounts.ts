@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { api } from '@/lib/api'
-import { useAuth } from '@/lib/auth/context'
+import { api } from '../lib/api'
+import { useAuth } from '../lib/auth/context'
 
 // Enhanced interface for API responses
 interface EmailAccountResponse {

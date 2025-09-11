@@ -2,17 +2,17 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Badge } from './ui/badge'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from './ui/select'
 import { 
   X, 
   Minus, 
@@ -24,13 +24,13 @@ import {
   AlertCircle,
   CheckCircle2
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { useEmailAccounts } from '@/hooks/useEmailAccounts'
-import { api } from '@/lib/api'
-import { uploadAttachment } from '@/lib/attachment-upload'
+import { cn } from '../lib/utils'
+import { useEmailAccounts } from '../hooks/useEmailAccounts'
+import { api } from '../lib/api'
+import { uploadAttachment } from '../lib/attachment-upload'
 
 // Dynamic import for RichTextEditor to prevent SSR issues
-const RichTextEditor = dynamic(() => import('@/components/ui/rich-text-editor').then(mod => ({ default: mod.RichTextEditor })), { 
+const RichTextEditor = dynamic(() => import('./ui/rich-text-editor').then(mod => ({ default: mod.RichTextEditor })), { 
   ssr: false,
   loading: () => <div className="border rounded-lg h-64 bg-gray-50 animate-pulse" />
 })

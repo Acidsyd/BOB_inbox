@@ -6,10 +6,10 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ColumnDefinition, ColumnType, Lead } from '@/types/spreadsheet';
-import { cn } from '@/lib/utils';
-import ColumnTemplatesLibrary, { ColumnTemplate } from '@/lib/ColumnTemplates';
-import { columnValidator } from '@/lib/ColumnValidator';
+import { ColumnDefinition, ColumnType, Lead } from '../types/spreadsheet';
+import { cn } from '../lib/utils';
+import ColumnTemplatesLibrary, { ColumnTemplate } from '../lib/ColumnTemplates';
+import { columnValidator } from '../lib/ColumnValidator';
 import FormulaBuilder from './FormulaBuilder';
 import EnrichmentColumn from './columns/EnrichmentColumn';
 import AIColumn from './columns/AIColumn';
@@ -44,18 +44,18 @@ import {
 } from 'lucide-react';
 
 // UI Components
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Progress } from '@/components/ui/progress';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Button } from './ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Badge } from './ui/badge';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Textarea } from './ui/textarea';
+import { Switch } from './ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { ScrollArea } from './ui/scroll-area';
+import { Progress } from './ui/progress';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 
 // Wizard Types
 export interface WizardStep {

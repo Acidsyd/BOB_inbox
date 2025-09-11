@@ -25,4 +25,4 @@ export type {
   LeadStats,
   LeadStatsSummary,
   CampaignDistribution
-} from '@/types/leads';
+} from '../types/leads';

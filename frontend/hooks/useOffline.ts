@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useToast } from '@/components/ui/toast'
+import { useToast } from '../components/ui/toast'
 
 interface OfflineAction {
   id: string

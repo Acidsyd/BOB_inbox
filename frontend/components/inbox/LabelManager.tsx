@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Label, useLabels } from '@/hooks/useLabels'
+import { Label, useLabels } from '../hooks/useLabels'
 import { 
   Dialog, 
   DialogContent, 
@@ -9,11 +9,11 @@ import {
   DialogTitle, 
   DialogTrigger,
   DialogFooter 
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
+} from './ui/dialog'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { Textarea } from './ui/textarea'
+import { Badge } from './ui/badge'
 import { 
   Settings, 
   Plus, 

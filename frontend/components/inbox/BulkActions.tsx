@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button } from './ui/button'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from './ui/select'
 import { 
   CheckSquare, 
   Square, 
@@ -16,7 +16,7 @@ import {
   Trash2,
   MoreHorizontal
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { Badge } from './ui/badge'
 
 interface BulkActionsProps {
   selectedIds: string[]

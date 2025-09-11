@@ -1,6 +1,6 @@
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Badge } from './ui/badge'
+import { Button } from './ui/button'
+import { Checkbox } from './ui/checkbox'
 import { 
   Circle, 
   Star, 
@@ -11,10 +11,10 @@ import {
   MoreVertical 
 } from 'lucide-react'
 import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns'
-import { cn } from '@/lib/utils'
+import { cn } from '../lib/utils'
 import { ConversationLabelsCompact } from './ConversationLabels'
-import { Label } from '@/hooks/useLabels'
-import { useTimezone } from '@/contexts/TimezoneContext'
+import { Label } from '../hooks/useLabels'
+import { useTimezone } from '../contexts/TimezoneContext'
 
 interface Conversation {
   id: string

@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { api } from '@/lib/api'
-import { useAuth } from '@/lib/auth/context'
+import { api } from '../lib/api'
+import { useAuth } from '../lib/auth/context'
 import { 
   Lead, 
   LeadsResponse, 
@@ -12,7 +12,7 @@ import {
   BulkUpdateRequest,
   BulkUpdateResponse,
   LeadStats
-} from '@/types/leads'
+} from '../types/leads'
 
 /**
  * Return type for useLeads hook

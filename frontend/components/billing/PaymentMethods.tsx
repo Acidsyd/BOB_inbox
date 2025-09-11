@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Button } from './ui/button'
+import { Badge } from './ui/badge'
+import { Skeleton } from './ui/skeleton'
+import { Alert, AlertDescription, AlertTitle } from './ui/alert'
 import { 
   CreditCard, 
   Plus, 
@@ -16,8 +16,8 @@ import {
   Calendar,
   Globe
 } from 'lucide-react'
-import { PaymentMethod } from '@/types/billing'
-import { useBilling } from '@/hooks/useBilling'
+import { PaymentMethod } from '../types/billing'
+import { useBilling } from '../hooks/useBilling'
 
 interface PaymentMethodsProps {
   isLoading?: boolean

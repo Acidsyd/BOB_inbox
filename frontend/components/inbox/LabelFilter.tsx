@@ -1,16 +1,16 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Label, useLabels } from '@/hooks/useLabels'
+import { Label, useLabels } from '../hooks/useLabels'
 import { 
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
+} from './ui/popover'
+import { Button } from './ui/button'
+import { Badge } from './ui/badge'
+import { Checkbox } from './ui/checkbox'
+import { Input } from './ui/input'
 import { 
   Filter,
   Search,

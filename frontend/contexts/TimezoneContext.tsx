@@ -9,7 +9,7 @@ import {
   formatInboxMessageDate,
   formatConversationDate,
   getTimezoneInfo
-} from '@/lib/timezone';
+} from '../lib/timezone';
 
 interface TimezoneContextType {
   timezone: string;

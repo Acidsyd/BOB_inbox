@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { Textarea } from '@/components/ui/textarea'
+import { Button } from './ui/button'
+import { Badge } from './ui/badge'
+import { Separator } from './ui/separator'
+import { Textarea } from './ui/textarea'
 import dynamic from 'next/dynamic'
-import { stripTrackingElements } from '@/lib/strip-tracking-pixels'
+import { stripTrackingElements } from '../lib/strip-tracking-pixels'
 
-const RichTextEditor = dynamic(() => import('@/components/ui/rich-text-editor').then(mod => ({ default: mod.RichTextEditor })), {
+const RichTextEditor = dynamic(() => import('./ui/rich-text-editor').then(mod => ({ default: mod.RichTextEditor })), {
   ssr: false,
   loading: () => <div className="border rounded-lg p-4 min-h-[120px] bg-gray-50 animate-pulse">Loading editor...</div>
 })
-import { VariablePicker, VariableOption } from '@/components/ui/variable-picker'
+import { VariablePicker, VariableOption } from './ui/variable-picker'
 import { 
   X, 
   Archive, 
@@ -26,16 +26,16 @@ import {
   Type
 } from 'lucide-react'
 import { format } from 'date-fns'
-import { useInboxMessages } from '@/hooks/useInboxMessages'
-import { useTimezone } from '@/contexts/TimezoneContext'
-import { Label } from '@/hooks/useLabels'
+import { useInboxMessages } from '../hooks/useInboxMessages'
+import { useTimezone } from '../contexts/TimezoneContext'
+import { Label } from '../hooks/useLabels'
 import { LabelPicker } from './LabelPicker'
 import { ConversationLabelsFull } from './ConversationLabels'
-import { cn } from '@/lib/utils'
-import { api } from '@/lib/api'
-import { uploadImage } from '@/lib/image-upload'
-import { uploadAttachment } from '@/lib/attachment-upload'
-import { formatHtmlForEmail, replaceVariables, extractPlainText } from '@/lib/email-formatter'
+import { cn } from '../lib/utils'
+import { api } from '../lib/api'
+import { uploadImage } from '../lib/image-upload'
+import { uploadAttachment } from '../lib/attachment-upload'
+import { formatHtmlForEmail, replaceVariables, extractPlainText } from '../lib/email-formatter'
 
 interface Message {
   id: string

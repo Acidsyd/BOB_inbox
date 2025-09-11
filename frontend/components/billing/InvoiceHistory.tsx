@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Button } from './ui/button'
+import { Badge } from './ui/badge'
+import { Skeleton } from './ui/skeleton'
 import { 
   Receipt, 
   Download, 
@@ -17,8 +17,8 @@ import {
   FileText,
   Eye
 } from 'lucide-react'
-import { formatPrice, formatDate } from '@/lib/billing'
-import { Invoice } from '@/types/billing'
+import { formatPrice, formatDate } from '../lib/billing'
+import { Invoice } from '../types/billing'
 
 interface InvoiceHistoryProps {
   isLoading?: boolean

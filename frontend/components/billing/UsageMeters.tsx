@@ -1,12 +1,12 @@
 'use client'
 
 import React from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Progress } from './ui/progress'
+import { Badge } from './ui/badge'
+import { Button } from './ui/button'
+import { Skeleton } from './ui/skeleton'
+import { Alert, AlertDescription, AlertTitle } from './ui/alert'
 import { 
   Mail, 
   Users, 
@@ -18,8 +18,8 @@ import {
   ArrowUp,
   CheckCircle
 } from 'lucide-react'
-import { useUsageStats, useBilling } from '@/hooks/useBilling'
-import { formatDate } from '@/lib/billing'
+import { useUsageStats, useBilling } from '../hooks/useBilling'
+import { formatDate } from '../lib/billing'
 
 interface UsageMetersProps {
   isLoading?: boolean

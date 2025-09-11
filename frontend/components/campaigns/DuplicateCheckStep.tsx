@@ -2,10 +2,10 @@
 
 import React, { useState } from 'react'
 import { Search, Users, AlertTriangle, CheckCircle, Copy, Loader2, SkipForward, ArrowRight } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { api } from '@/lib/api'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { Button } from './ui/button'
+import { Badge } from './ui/badge'
+import { api } from '../lib/api'
 
 interface DuplicateDetail {
   email: string

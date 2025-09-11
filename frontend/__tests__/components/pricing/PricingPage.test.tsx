@@ -49,7 +49,7 @@ jest.mock('@stripe/react-stripe-js', () => ({
 }))
 
 // Mock auth context
-jest.mock('@/lib/auth/context', () => ({
+jest.mock('../../../lib/auth/context', () => ({
   useAuth: () => ({
     user: null,
     login: jest.fn(),
@@ -60,7 +60,7 @@ jest.mock('@/lib/auth/context', () => ({
 }))
 
 // Mock billing hooks
-jest.mock('@/hooks/useBilling', () => ({
+jest.mock('../../../hooks/useBilling', () => ({
   useBilling: () => ({
     plans: mockPlans,
     subscription: null,
@@ -75,12 +75,12 @@ jest.mock('@/hooks/useBilling', () => ({
   })
 }))
 
-import PricingPage from '@/app/pricing/page'
-import RegisterPage from '@/app/register/page'
-import { PricingCard } from '@/components/pricing/PricingCard'
-import { PlanSelection } from '@/components/billing/PlanSelection'
-import { PaymentMethodForm } from '@/components/billing/PaymentMethodForm'
-import { SubscriptionOverview } from '@/components/billing/SubscriptionOverview'
+import PricingPage from '../../../app/pricing/page'
+import RegisterPage from '../../../app/register/page'
+import { PricingCard } from '../../../components/pricing/PricingCard'
+import { PlanSelection } from '../../../components/billing/PlanSelection'
+import { PaymentMethodForm } from '../../../components/billing/PaymentMethodForm'
+import { SubscriptionOverview } from '../../../components/billing/SubscriptionOverview'
 
 // Test data
 const mockPlans = [
@@ -348,7 +348,7 @@ describe('RegisterPage Component', () => {
     const mockRegister = jest.fn().mockResolvedValue({ success: true })
 
     // Mock the register function
-    jest.mocked(require('@/lib/auth/context').useAuth).mockReturnValue({
+    jest.mocked(require('../../../lib/auth/context').useAuth).mockReturnValue({
       user: null,
       register: mockRegister,
       login: jest.fn(),
@@ -635,7 +635,7 @@ describe('Error Handling', () => {
   test('shows error messages in registration form', async () => {
     const mockRegister = jest.fn().mockRejectedValue(new Error('Registration failed'))
 
-    jest.mocked(require('@/lib/auth/context').useAuth).mockReturnValue({
+    jest.mocked(require('../../../lib/auth/context').useAuth).mockReturnValue({
       user: null,
       register: mockRegister,
       login: jest.fn(),

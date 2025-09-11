@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button } from './ui/button'
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 
 interface PeriodSelectorProps {

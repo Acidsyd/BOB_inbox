@@ -9,15 +9,15 @@ import {
   Clock,
   User
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button } from './ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
+} from './ui/dropdown-menu'
+import { Badge } from './ui/badge'
+import { cn } from '../lib/utils'
 
 interface Conversation {
   id: string

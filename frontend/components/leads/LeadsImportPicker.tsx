@@ -7,8 +7,8 @@ import {
   LeadImportsApiResponse, 
   LeadsImportPickerProps,
   ImportStatus 
-} from '@/types/spreadsheet';
-import { cn } from '@/lib/utils';
+} from '../types/spreadsheet';
+import { cn } from '../lib/utils';
 import { 
   Upload, 
   FileText, 
@@ -25,10 +25,10 @@ import {
   MoreHorizontal,
   RefreshCw
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Badge } from './ui/badge';
 
 const LeadsImportPicker: React.FC<LeadsImportPickerProps> = ({
   onImportSelected,
