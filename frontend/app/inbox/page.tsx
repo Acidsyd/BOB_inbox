@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import AppLayout from '@/components/layout/AppLayout'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
+import ProtectedRoute from '../../components/auth/ProtectedRoute'
+import AppLayout from '../../components/layout/AppLayout'
+import { Card } from '../../components/ui/card'
+import { Button } from '../../components/ui/button'
+import { Input } from '../../components/ui/input'
+import { Badge } from '../../components/ui/badge'
+import { Checkbox } from '../../components/ui/checkbox'
 import { 
   Search, 
   Archive, 
@@ -21,22 +21,22 @@ import {
   EyeOff,
   Tag
 } from 'lucide-react'
-import { useInbox } from '@/hooks/useInbox'
-import useFolders from '@/hooks/useFolders'
-import { useEmailSync } from '@/hooks/useEmailSync'
-import { useLabels } from '@/hooks/useLabels'
+import { useInbox } from '../../hooks/useInbox'
+import useFolders from '../../hooks/useFolders'
+import { useEmailSync } from '../../hooks/useEmailSync'
+import { useLabels } from '../../hooks/useLabels'
 import { 
   Select, 
   SelectContent, 
   SelectItem, 
   SelectTrigger, 
   SelectValue 
-} from '@/components/ui/select'
-import { api } from '@/lib/api'
-import { InboxSidebar } from '@/components/inbox/InboxSidebar'
-import { InboxConversationItem } from '@/components/inbox/InboxConversationItem'
-import { InboxMessageView } from '@/components/inbox/InboxMessageView'
-import { ComposeEmailModal } from '@/components/inbox/ComposeEmailModal'
+} from '../../components/ui/select'
+import { api } from '../../lib/api'
+import { InboxSidebar } from '../../components/inbox/InboxSidebar'
+import { InboxConversationItem } from '../../components/inbox/InboxConversationItem'
+import { InboxMessageView } from '../../components/inbox/InboxMessageView'
+import { ComposeEmailModal } from '../../components/inbox/ComposeEmailModal'
 
 function InboxContent() {
   // State
