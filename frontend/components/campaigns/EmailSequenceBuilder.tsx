@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,11 +18,8 @@ import {
   CheckCircle
 } from 'lucide-react'
 
-// Dynamic import for RichTextEditor to avoid SSR issues
-const RichTextEditor = dynamic(() => import('@/components/ui/rich-text-editor').then(mod => ({ default: mod.RichTextEditor })), { 
-  ssr: false,
-  loading: () => <div className="h-64 bg-gray-50 animate-pulse rounded-md"></div>
-})
+// Import SimpleRichTextEditor but upgrade it with enhanced features
+import { SimpleRichTextEditor } from '@/components/ui/simple-rich-text-editor'
 
 interface EmailSequence {
   id: number
@@ -199,16 +195,16 @@ export default function EmailSequenceBuilder({ campaignData, updateCampaignData 
       <div>
         <Label htmlFor="emailContent">Email Content *</Label>
         <div className="mt-1">
-          <RichTextEditor
+          <SimpleRichTextEditor
             content={campaignData.emailContent}
-            onChange={(html) => {
+            onChange={(html, text) => {
               updateCampaignData({ emailContent: html })
             }}
             placeholder="Hi {first_name},
 
 I hope this email finds you well..."
             variables={emailVariables}
-            className="min-h-[300px]"
+            minHeight="300px"
           />
         </div>
         <p className="mt-2 text-sm text-gray-500">
@@ -303,16 +299,16 @@ I hope this email finds you well..."
             <div>
               <Label>Email Content *</Label>
               <div className="mt-1">
-                <RichTextEditor
+                <SimpleRichTextEditor
                   content={email.content}
-                  onChange={(html) => {
+                  onChange={(html, text) => {
                     updateSequenceEmail(email.id, 'content', html)
                   }}
                   placeholder="Hi {first_name},
 
 I wanted to follow up on my previous email..."
                   variables={emailVariables}
-                  className="min-h-[250px]"
+                  minHeight="250px"
                 />
               </div>
             </div>

@@ -572,8 +572,8 @@ router.post('/check-duplicates', authenticateToken, async (req, res) => {
               )
             `)
             .in('email', emailChunk)
-            .eq('organization_id', req.user.organizationId)
-            .neq('lead_list_id', leadListId); // Exclude the current list
+            .eq('organization_id', req.user.organizationId);
+            // FIXED: Removed .neq('lead_list_id', leadListId) to include ALL duplicates
 
           if (duplicateError) {
             throw duplicateError;
@@ -666,25 +666,38 @@ router.post('/check-duplicates', authenticateToken, async (req, res) => {
       }
     }
 
-    // Build duplicate details array
+    // Build duplicate details array - count unique emails that have duplicates
     const duplicateDetails = [];
+    const uniqueDuplicateEmails = new Set();
+    
     emails.forEach(originalEmail => {
       const cleanEmail = originalEmail.replace(/[^\w@.-]/g, '').toLowerCase().trim();
       if (duplicateMap.has(cleanEmail)) {
-        duplicateDetails.push({
-          email: originalEmail,
-          existingInLists: duplicateMap.get(cleanEmail)
-        });
+        const instances = duplicateMap.get(cleanEmail);
+        
+        // Only count emails that appear MORE than once (have actual duplicates)
+        if (instances.length > 1) {
+          uniqueDuplicateEmails.add(cleanEmail);
+          duplicateDetails.push({
+            email: originalEmail,
+            existingInLists: instances
+          });
+        }
       }
     });
 
-    console.log(`📊 Found duplicates: ${existingInDatabase.length} out of ${emails.length} emails`);
+    console.log(`📊 Debug info:`);
+    console.log(`  - Emails in lead list: ${emails.length}`);
+    console.log(`  - Emails found in database: ${existingInDatabase.length}`);
+    console.log(`  - Unique duplicate emails: ${uniqueDuplicateEmails.size}`);
+    console.log(`  - Sample duplicateMap entries:`, Array.from(duplicateMap.entries()).slice(0, 3));
+    console.log(`📊 Found duplicates: ${uniqueDuplicateEmails.size} unique emails that have duplicates out of ${emails.length} emails`);
 
     res.json({
       total: emails.length,
-      existingInDatabase: existingInDatabase.length,
+      existingInDatabase: uniqueDuplicateEmails.size, // Count of unique emails that have duplicates
       duplicateDetails: duplicateDetails,
-      emails: existingInDatabase
+      emails: Array.from(uniqueDuplicateEmails)
     });
 
   } catch (error) {
