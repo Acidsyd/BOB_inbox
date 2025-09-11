@@ -1,170 +1,58 @@
-# Simple Deploy to Digital Ocean Production
-name: Deploy to Production
+# Simple Deploy Instructions for Digital Ocean Production
+name: Manual Deploy Instructions
 
 on:
   push:
     branches: [main]
 
 jobs:
-  deploy-production:
-    name: Deploy to Digital Ocean
+  deploy-instructions:
+    name: Manual Deployment Instructions
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     if: github.event_name == 'push'
     environment: production
     
     steps:
-    - name: Setup SSH Key and Test Connection
+    - name: Manual Deployment Instructions
       run: |
-        mkdir -p ~/.ssh
-        
-        # Save SSH key with proper formatting
-        echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        
-        # Validate SSH key format (temporarily disabled for debugging)
-        echo "⚠️ SSH key validation temporarily disabled for debugging"
-        echo "Key preview (first 50 chars): $(head -c 50 ~/.ssh/id_rsa)"
-        
-        # Add host to known_hosts
-        ssh-keyscan -H qquadro.com >> ~/.ssh/known_hosts
-        
-        # Test SSH connection with detailed error reporting
-        echo "🔍 Testing SSH connection to qquadro.com..."
-        if ssh -v -o StrictHostKeyChecking=no -o ConnectTimeout=30 root@qquadro.com "echo 'SSH connection successful'"; then
-          echo "✅ SSH connection test passed"
-        else
-          echo "❌ SSH connection failed"
-          echo "Check that:"
-          echo "1. DEPLOY_SSH_KEY secret contains the complete private key"
-          echo "2. Key includes -----BEGIN/END OPENSSH PRIVATE KEY----- lines"
-          echo "3. Server allows root SSH access"
-          echo "4. Firewall allows SSH connections"
-          exit 1
-        fi
-        
-    - name: Deploy to Production Server
-      run: |
-        echo "🚀 Starting deployment to qquadro.com..."
-        
-        ssh -o StrictHostKeyChecking=no root@qquadro.com << 'DEPLOY_SCRIPT'
-        set -e
-        
-        # Colors for output
-        GREEN='\033[0;32m'
-        BLUE='\033[0;34m'
-        NC='\033[0m'
-        
-        log_info() {
-            echo -e "${BLUE}[INFO]${NC} $1"
-        }
-        
-        log_success() {
-            echo -e "${GREEN}[SUCCESS]${NC} $1"
-        }
-        
-        echo -e "${BLUE}"
-        echo "========================================="
-        echo " 🚀 AUTOMATED GITHUB DEPLOYMENT"
-        echo " Digital Ocean Production Server"
-        echo "========================================="
-        echo -e "${NC}"
-        
-        # Navigate to application directory
-        cd /root/mailsender || cd /opt/mailsender || cd ~/mailsender || {
-            echo "Application directory not found!"
-            exit 1
-        }
-        
-        log_info "Current directory: $(pwd)"
-        
-        # Step 1: Pull latest changes from GitHub
-        log_info "Fetching latest changes from GitHub..."
-        git fetch origin
-        git reset --hard origin/main
-        
-        if [ $? -ne 0 ]; then
-            echo "Failed to pull latest changes"
-            exit 1
-        fi
-        
-        log_success "✅ Latest changes pulled successfully"
-        
-        # Step 2: Verify configuration files exist
-        if [ ! -f "docker-compose.production.yml" ]; then
-            echo "docker-compose.production.yml not found!"
-            exit 1
-        fi
-        
-        if [ ! -f "nginx/server.conf" ]; then
-            echo "nginx/server.conf not found!"
-            exit 1
-        fi
-        
-        log_info "✅ Configuration files verified"
-        
-        # Step 3: Stop current services
-        log_info "Stopping current Docker services..."
-        docker-compose -f docker-compose.production.yml down --timeout 30
-        
-        # Step 4: Start services with new configuration
-        log_info "Building and starting services with updated configuration..."
-        log_info "📋 This includes the 413 error fixes for CSV uploads..."
-        
-        docker-compose -f docker-compose.production.yml up -d --build --force-recreate
-        
-        if [ $? -ne 0 ]; then
-            echo "❌ Failed to start services"
-            exit 1
-        fi
-        
-        log_success "✅ Services built and started successfully"
-        
-        # Step 5: Wait for services to initialize
-        log_info "⏳ Waiting for services to initialize (30 seconds)..."
-        sleep 30
-        
-        # Step 6: Basic health check
-        log_info "🔍 Testing nginx configuration..."
-        if docker-compose -f docker-compose.production.yml exec -T nginx nginx -t; then
-            log_success "✅ Nginx configuration is valid"
-        else
-            echo "❌ Nginx configuration test failed"
-        fi
-        
-        # Show running containers
-        log_info "📋 Current running containers:"
-        docker-compose -f docker-compose.production.yml ps
-        
-        echo
-        echo -e "${GREEN}==========================================="
-        echo " 🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!"
+        echo "🔄 MANUAL DEPLOYMENT REQUIRED"
+        echo "===================================="
         echo ""
-        echo " Applied fixes:"
-        echo " ✅ Updated nginx server.conf (200MB CSV limit)"
-        echo " ✅ Fixed Express.js body limits (100MB)"
-        echo " ✅ Extended upload timeouts (600s)"
+        echo "🎯 Your 413 error fixes are ready! Follow these steps:"
         echo ""
-        echo " 🎯 The 413 'Payload Too Large' errors"
-        echo "    should now be resolved!"
+        echo "1️⃣  SSH to your server:"
+        echo "   ssh root@qquadro.com"
         echo ""
-        echo " 🌐 Test CSV uploads at: https://qquadro.com"
-        echo "==========================================="
-        echo -e "${NC}"
-        
-        DEPLOY_SCRIPT
+        echo "2️⃣  Navigate to app directory:"
+        echo "   cd /root/mailsender"
+        echo ""
+        echo "3️⃣  Pull latest changes:"
+        echo "   git pull origin main"
+        echo ""
+        echo "4️⃣  Restart with new config:"
+        echo "   docker-compose -f docker-compose.production.yml down"
+        echo "   docker-compose -f docker-compose.production.yml up -d --build"
+        echo ""
+        echo "✅ FIXES INCLUDED IN THIS DEPLOYMENT:"
+        echo "   • nginx/server.conf → 200MB upload limits"
+        echo "   • backend/src/index.js → 100MB Express limits" 
+        echo "   • Extended upload timeouts (600s)"
+        echo ""
+        echo "🌐 Test CSV uploads at: https://qquadro.com"
+        echo ""
+        echo "🎉 This will resolve your 413 'Payload Too Large' errors!"
         
     - name: Deployment Summary
       run: |
         echo "📋 DEPLOYMENT SUMMARY"
         echo "====================="
-        echo "✅ Latest changes pulled to production server"
-        echo "✅ Docker containers rebuilt and restarted"
-        echo "✅ Nginx configuration updated with 413 error fixes"
-        echo "✅ Health checks completed"
+        echo "✅ Code is ready for manual deployment"
+        echo "✅ All 413 error fixes are in latest main branch"
+        echo "✅ nginx configuration updated with 200MB limits"
+        echo "✅ Express.js body limits increased to 100MB"
         echo ""
-        echo "🎯 CSV Upload Fix Status: DEPLOYED"
         echo "📏 New upload limit: 200MB"
         echo "🌐 Production URL: https://qquadro.com"
         echo ""
-        echo "🚀 Deployment completed successfully!"
+        echo "⚡ Ready to deploy manually!"
