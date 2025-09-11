@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '../components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { WifiOff, RefreshCw, Home, Activity } from 'lucide-react'
 import Link from 'next/link'
-import { useOfflineQueue } from '@/hooks/useOffline'
+import { useOfflineQueue } from '../hooks/useOffline'
 
 export default function OfflinePage() {
   const [isOnline, setIsOnline] = useState(false)
