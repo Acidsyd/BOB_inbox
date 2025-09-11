@@ -3,10 +3,10 @@
 import React from 'react'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import AppLayout from '@/components/layout/AppLayout'
-import CSVUploader from '@/components/leads/CSVUploader'
-import { Button } from '@/components/ui/button'
+import ProtectedRoute from '../../../../components/auth/ProtectedRoute'
+import AppLayout from '../../../../components/layout/AppLayout'
+import CSVUploader from '../../../../components/leads/CSVUploader'
+import { Button } from '../../../../components/ui/button'
 
 function CSVUploadContent() {
   return (
