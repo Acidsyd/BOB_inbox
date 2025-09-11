@@ -23,6 +23,13 @@ class EmailSyncService {
   }
 
   /**
+   * Get UTC timestamp in consistent format
+   */
+  getUTCTimestamp() {
+    return new Date().toISOString();
+  }
+
+  /**
    * Universal sync trigger for an email account
    * @param {string} accountId - Account ID to sync
    * @param {string} organizationId - Organization ID
@@ -108,7 +115,7 @@ class EmailSyncService {
         syncedMessages: messages.length,
         newMessages,
         updatedMessages,
-        timestamp: new Date().toISOString(),
+        timestamp: this.getUTCTimestamp(),
         duration: Date.now() - syncStart
       };
 
@@ -210,7 +217,7 @@ class EmailSyncService {
           messageId,
           isRead,
           provider: account.provider,
-          syncedAt: new Date().toISOString()
+          syncedAt: this.getUTCTimestamp()
         };
       } else {
         throw new Error('Provider sync operation failed');
@@ -353,25 +360,18 @@ class EmailSyncService {
                 const inReplyTo = fullHeaders.find(h => h.name === 'In-Reply-To')?.value;
                 const references = fullHeaders.find(h => h.name === 'References')?.value;
                 
-                // Store the original Gmail time in local browser timezone format
-                let localTimestamp = null;
+                // Store the original Gmail time as UTC (consistent with database)
+                let utcTimestamp = null;
                 if (date) {
-                  // Parse Gmail date and convert to browser's local timezone
+                  // Parse Gmail date and store as UTC for database consistency
                   const dateObj = new Date(date);
-                  // Format using browser's local timezone (getHours() gives local browser time)
-                  localTimestamp = dateObj.getFullYear() + '-' + 
-                    String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + 
-                    String(dateObj.getDate()).padStart(2, '0') + 'T' + 
-                    String(dateObj.getHours()).padStart(2, '0') + ':' + 
-                    String(dateObj.getMinutes()).padStart(2, '0') + ':' + 
-                    String(dateObj.getSeconds()).padStart(2, '0');
+                  utcTimestamp = dateObj.toISOString();
                 }
                 
                 // DEBUG: Log original Gmail Date header vs parsed timestamp
                 console.log(`📅 Gmail Date Debug for "${subject?.substring(0, 30)}..."`);
                 console.log(`   Raw Gmail Date header: "${date}"`);
-                console.log(`   OLD (UTC): "${date ? new Date(date).toISOString() : 'null'}"`);
-                console.log(`   NEW (Local): "${localTimestamp}"`);
+                console.log(`   UTC Timestamp: "${utcTimestamp}"`);
                 console.log(`   Display time: "${date ? new Date(date).toLocaleString() : 'null'}"`);
                 console.log(`   Current sync time: "${new Date().toLocaleString()}"`);
                 console.log(`   Time difference: ${date ? ((new Date().getTime() - new Date(date).getTime()) / (1000 * 60)) : 0} minutes`);
@@ -402,7 +402,7 @@ class EmailSyncService {
                     this.unifiedInboxService = new UnifiedInboxService();
                   }
                   
-                  // Use the localTimestamp calculated above
+                  // Use the UTC timestamp for database consistency
                   
                   await this.unifiedInboxService.ingestEmail({
                     message_id_header: messageId,
@@ -411,8 +411,8 @@ class EmailSyncService {
                     subject: subject,
                     content_html: content.includes('<html>') ? content : null,
                     content_plain: content.includes('<html>') ? null : content,
-                    sent_at: direction === 'sent' ? localTimestamp : null,
-                    received_at: direction === 'received' ? localTimestamp : null,
+                    sent_at: direction === 'sent' ? utcTimestamp : null,
+                    received_at: direction === 'received' ? utcTimestamp : null,
                     in_reply_to: inReplyTo,
                     message_references: references,
                     organization_id: organizationId
@@ -438,7 +438,7 @@ class EmailSyncService {
         syncedMessages: syncCount,
         newMessages: newMessages,
         updatedStatus: updatedStatus,
-        timestamp: new Date().toISOString()
+        timestamp: this.getUTCTimestamp()
       };
 
     } catch (error) {
@@ -447,7 +447,7 @@ class EmailSyncService {
         success: false,
         provider: 'gmail',
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: this.getUTCTimestamp()
       };
     }
   }
@@ -466,7 +466,7 @@ class EmailSyncService {
         success: false,
         provider: 'outlook',
         error: 'Outlook sync not yet implemented',
-        timestamp: new Date().toISOString()
+        timestamp: this.getUTCTimestamp()
       };
 
     } catch (error) {
@@ -475,7 +475,7 @@ class EmailSyncService {
         success: false,
         provider: 'outlook',
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: this.getUTCTimestamp()
       };
     }
   }
@@ -504,7 +504,7 @@ class EmailSyncService {
           .update({ 
             provider_type: 'smtp',
             sync_status: 'local',
-            last_synced_at: new Date().toISOString()
+            last_synced_at: this.getUTCTimestamp()
           })
           .in('id', messages.map(m => m.id));
 
@@ -518,7 +518,7 @@ class EmailSyncService {
         provider: 'smtp',
         syncedMessages: updated,
         note: 'SMTP has limited sync capabilities - only local tagging',
-        timestamp: new Date().toISOString()
+        timestamp: this.getUTCTimestamp()
       };
 
     } catch (error) {
@@ -527,7 +527,7 @@ class EmailSyncService {
         success: false,
         provider: 'smtp',
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: this.getUTCTimestamp()
       };
     }
   }
@@ -540,7 +540,7 @@ class EmailSyncService {
       const updateData = {
         provider_type: provider,
         sync_status: syncStatus,
-        last_synced_at: new Date().toISOString()
+        last_synced_at: this.getUTCTimestamp()
       };
 
       // Add provider-specific message ID
@@ -815,7 +815,7 @@ class EmailSyncService {
         .from('conversation_messages')
         .update({ 
           is_read: isRead,
-          last_status_sync_at: new Date().toISOString()
+          last_status_sync_at: this.getUTCTimestamp()
         })
         .eq('id', messageId);
 
@@ -839,7 +839,7 @@ class EmailSyncService {
         .from('conversation_messages')
         .update({ 
           sync_status: syncStatus,
-          last_status_sync_at: new Date().toISOString()
+          last_status_sync_at: this.getUTCTimestamp()
         })
         .eq('id', messageId);
 
@@ -861,7 +861,7 @@ class EmailSyncService {
       
       const { error } = await supabase
         .from(table)
-        .update({ last_sync_at: new Date().toISOString() })
+        .update({ last_sync_at: this.getUTCTimestamp() })
         .eq('id', accountId);
 
       if (error) throw error;
@@ -890,7 +890,7 @@ class EmailSyncService {
           provider: account.provider,
           sync_type: syncType,
           status: 'started',
-          started_at: new Date().toISOString()
+          started_at: this.getUTCTimestamp()
         })
         .select('id')
         .single();
@@ -927,7 +927,7 @@ class EmailSyncService {
           messages_updated: messagesUpdated,
           sync_duration_ms: duration,
           error_message: errorMessage,
-          completed_at: new Date().toISOString()
+          completed_at: this.getUTCTimestamp()
         })
         .eq('id', syncHistoryId);
 
@@ -967,7 +967,7 @@ class EmailSyncService {
         organizationId,
         totalMessages,
         providerSummary: summary,
-        lastChecked: new Date().toISOString()
+        lastChecked: this.getUTCTimestamp()
       };
 
     } catch (error) {
