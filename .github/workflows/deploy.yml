@@ -15,20 +15,20 @@ jobs:
     
     steps:
     - name: Setup SSH Key
-      uses: webfactory/ssh-agent@v0.7.0
-      with:
-        ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-        
-    - name: Add Digital Ocean Host to Known Hosts
       run: |
         mkdir -p ~/.ssh
+        echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H qquadro.com >> ~/.ssh/known_hosts
+        
+        # Test SSH connection
+        ssh -o StrictHostKeyChecking=no root@qquadro.com "echo 'SSH connection successful'"
         
     - name: Deploy to Production Server
       run: |
         echo "🚀 Starting deployment to qquadro.com..."
         
-        ssh root@qquadro.com << 'DEPLOY_SCRIPT'
+        ssh -o StrictHostKeyChecking=no root@qquadro.com << 'DEPLOY_SCRIPT'
         set -e
         
         # Colors for output
