@@ -110,24 +110,30 @@ const steps = [
   },
   {
     id: 4,
+    name: 'Check for Duplicates',
+    description: 'Review and filter duplicates',
+    icon: AlertCircle
+  },
+  {
+    id: 5,
     name: 'Email Accounts',
     description: 'Configure sending accounts',
     icon: Settings
   },
   {
-    id: 5,
+    id: 6,
     name: 'Timing Settings',
     description: 'Configure sending frequency',
     icon: Calendar
   },
   {
-    id: 6,
+    id: 7,
     name: 'Advanced Settings',
     description: 'Campaign optimization',
     icon: Settings
   },
   {
-    id: 7,
+    id: 8,
     name: 'Review & Test',
     description: 'Final review and test email',
     icon: Play
@@ -359,12 +365,14 @@ function CampaignBuilderContent() {
       case 3:
         return !!campaignData.selectedLeadListId
       case 4:
-        return campaignData.emailAccounts.length > 0
+        return true // Duplicate check step - can skip or proceed
       case 5:
-        return campaignData.emailsPerDay > 0 && campaignData.sendingInterval > 0
+        return campaignData.emailAccounts.length > 0
       case 6:
-        return true
+        return campaignData.emailsPerDay > 0 && campaignData.sendingInterval > 0
       case 7:
+        return true
+      case 8:
         return true // Final review step - all validations already passed
       default:
         return false
@@ -543,6 +551,23 @@ function CampaignBuilderContent() {
           )}
 
           {currentStep === 4 && (
+            <DuplicateCheckStep
+              selectedLeadListId={campaignData.selectedLeadListId}
+              selectedLeadListName={campaignData.selectedLeadListName}
+              selectedLeadListCount={campaignData.selectedLeadListCount}
+              onDuplicateCheckComplete={(skipped, filteredCount) => {
+                if (filteredCount !== undefined) {
+                  updateCampaignData({
+                    selectedLeadListCount: filteredCount
+                  })
+                }
+                // Auto-advance to next step
+                nextStep()
+              }}
+            />
+          )}
+
+          {currentStep === 5 && (
             <div className="space-y-6">
               {/* Header */}
               <div className="text-center">
@@ -719,7 +744,7 @@ function CampaignBuilderContent() {
             </div>
           )}
 
-          {currentStep === 5 && (
+          {currentStep === 6 && (
             <div className="space-y-6">
               {/* Timezone Selection */}
               <div>
@@ -916,7 +941,7 @@ function CampaignBuilderContent() {
             </div>
           )}
 
-          {currentStep === 6 && (
+          {currentStep === 7 && (
             <div className="space-y-8">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Advanced Campaign Settings</h3>
@@ -1152,7 +1177,7 @@ function CampaignBuilderContent() {
             </div>
           )}
 
-          {currentStep === 7 && (
+          {currentStep === 8 && (
             <div className="space-y-6">
               {/* Email Preview and Test Component */}
               <EmailPreviewAndTest 
