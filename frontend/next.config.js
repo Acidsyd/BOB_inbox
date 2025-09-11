@@ -37,6 +37,9 @@ const nextConfig = {
   // Output for production deployment
   output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
 
+  // Fix monorepo workspace root detection
+  outputFileTracingRoot: require('path').join(__dirname, '../'),
+
   // API rewrites
   async rewrites() {
     return [
