@@ -26,7 +26,7 @@ import {
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useWorkflowNavigation } from '@/lib/navigation/context'
+import { useWorkflowNavigation } from '../../../lib/navigation/context'
 
 type SetupStep = 'provider-selection' | 'gmail-oauth2-setup' | 'microsoft-oauth2-setup' | 'smtp-setup'
 type Provider = 'gmail-oauth2' | 'microsoft-oauth2' | 'smtp'
