@@ -1,13 +1,13 @@
 'use client'
 
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import AppLayout from '@/components/layout/AppLayout'
+import ProtectedRoute from '../../../components/auth/ProtectedRoute'
+import AppLayout from '../../../components/layout/AppLayout'
 import { useParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { api } from '../../../lib/api'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
+import { Button } from '../../../components/ui/button'
+import { Badge } from '../../../components/ui/badge'
 import { 
   ArrowLeft, 
   Play, 
