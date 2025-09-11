@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import ProtectedRoute from '../components/auth/ProtectedRoute'
 
 export default function LeadsPage() {
   const router = useRouter()

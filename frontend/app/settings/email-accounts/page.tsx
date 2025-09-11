@@ -1,13 +1,13 @@
 'use client'
 
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import AppLayout from '@/components/layout/AppLayout'
-import { useEmailAccounts } from '@/hooks/useEmailAccounts'
-import { useToast } from '@/components/ui/toast'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
+import ProtectedRoute from '../../components/auth/ProtectedRoute'
+import AppLayout from '../../components/layout/AppLayout'
+import { useEmailAccounts } from '../../hooks/useEmailAccounts'
+import { useToast } from '../../components/ui/toast'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
+import { Button } from '../../components/ui/button'
+import { Badge } from '../../components/ui/badge'
+import { Skeleton } from '../../components/ui/skeleton'
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +15,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+} from '../../components/ui/dropdown-menu'
 import { 
   ArrowLeft, 
   Plus, 

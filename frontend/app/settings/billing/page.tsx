@@ -1,11 +1,11 @@
 'use client'
 
 import React, { useState } from 'react'
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import AppLayout from '@/components/layout/AppLayout'
-import { Button } from '@/components/ui/button'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Skeleton } from '@/components/ui/skeleton'
+import ProtectedRoute from '../components/auth/ProtectedRoute'
+import AppLayout from '../components/layout/AppLayout'
+import { Button } from '../components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
+import { Skeleton } from '../components/ui/skeleton'
 import { 
   ArrowLeft, 
   CreditCard, 
@@ -17,17 +17,17 @@ import {
 import Link from 'next/link'
 
 // Billing Components
-import SubscriptionOverview from '@/components/billing/SubscriptionOverview'
-import UsageMeters from '@/components/billing/UsageMeters'
-import PaymentMethods from '@/components/billing/PaymentMethods'
-import InvoiceHistory from '@/components/billing/InvoiceHistory'
-import BillingPortal from '@/components/billing/BillingPortal'
-import UpgradePrompts from '@/components/billing/UpgradePrompts'
-import UsageAnalytics from '@/components/billing/UsageAnalytics'
+import SubscriptionOverview from '../components/billing/SubscriptionOverview'
+import UsageMeters from '../components/billing/UsageMeters'
+import PaymentMethods from '../components/billing/PaymentMethods'
+import InvoiceHistory from '../components/billing/InvoiceHistory'
+import BillingPortal from '../components/billing/BillingPortal'
+import UpgradePrompts from '../components/billing/UpgradePrompts'
+import UsageAnalytics from '../components/billing/UsageAnalytics'
 // Removed enterprise billing dashboard for simplification
 
 // Hooks
-import { useBilling, useSubscriptionStatus } from '@/hooks/useBilling'
+import { useBilling, useSubscriptionStatus } from '../hooks/useBilling'
 
 interface TabButtonProps {
   active: boolean
