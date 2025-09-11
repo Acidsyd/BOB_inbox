@@ -3,14 +3,14 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Upload, Search, Filter } from 'lucide-react'
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import AppLayout from '@/components/layout/AppLayout'
-import LeadListCard from '@/components/leads/LeadListCard'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
-import { api } from '@/lib/api'
+import ProtectedRoute from '../../../components/auth/ProtectedRoute'
+import AppLayout from '../../../components/layout/AppLayout'
+import LeadListCard from '../../../components/leads/LeadListCard'
+import { Button } from '../../../components/ui/button'
+import { Input } from '../../../components/ui/input'
+import { Card, CardContent } from '../../../components/ui/card'
+import { Skeleton } from '../../../components/ui/skeleton'
+import { api } from '../../../lib/api'
 
 interface LeadList {
   id: string
