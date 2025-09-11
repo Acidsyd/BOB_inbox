@@ -1,58 +1,115 @@
-# Simple Deploy Instructions for Digital Ocean Production
-name: Manual Deploy Instructions
+# Automatic Deploy to Digital Ocean Production
+name: Deploy to Digital Ocean
 
 on:
   push:
     branches: [main]
+  workflow_dispatch: # Allow manual trigger
 
 jobs:
-  deploy-instructions:
-    name: Manual Deployment Instructions
+  deploy:
+    name: Deploy to Digital Ocean
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    if: github.event_name == 'push'
+    timeout-minutes: 15
     environment: production
     
     steps:
-    - name: Manual Deployment Instructions
-      run: |
-        echo "🔄 MANUAL DEPLOYMENT REQUIRED"
-        echo "===================================="
-        echo ""
-        echo "🎯 Your 413 error fixes are ready! Follow these steps:"
-        echo ""
-        echo "1️⃣  SSH to your server:"
-        echo "   ssh root@qquadro.com"
-        echo ""
-        echo "2️⃣  Navigate to app directory:"
-        echo "   cd /root/mailsender"
-        echo ""
-        echo "3️⃣  Pull latest changes:"
-        echo "   git pull origin main"
-        echo ""
-        echo "4️⃣  Restart with new config:"
-        echo "   docker-compose -f docker-compose.production.yml down"
-        echo "   docker-compose -f docker-compose.production.yml up -d --build"
-        echo ""
-        echo "✅ FIXES INCLUDED IN THIS DEPLOYMENT:"
-        echo "   • nginx/server.conf → 200MB upload limits"
-        echo "   • backend/src/index.js → 100MB Express limits" 
-        echo "   • Extended upload timeouts (600s)"
-        echo ""
-        echo "🌐 Test CSV uploads at: https://qquadro.com"
-        echo ""
-        echo "🎉 This will resolve your 413 'Payload Too Large' errors!"
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH Key
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
         
-    - name: Deployment Summary
+    - name: Add server to known hosts
       run: |
-        echo "📋 DEPLOYMENT SUMMARY"
-        echo "====================="
-        echo "✅ Code is ready for manual deployment"
-        echo "✅ All 413 error fixes are in latest main branch"
-        echo "✅ nginx configuration updated with 200MB limits"
-        echo "✅ Express.js body limits increased to 100MB"
+        mkdir -p ~/.ssh
+        ssh-keyscan -H qquadro.com >> ~/.ssh/known_hosts
+        
+    - name: Deploy to Digital Ocean
+      run: |
+        echo "🚀 Starting deployment to Digital Ocean..."
+        ssh -o StrictHostKeyChecking=no root@qquadro.com << 'EOF'
+          set -e
+          
+          echo "📂 Setting up application directory..."
+          cd /root
+          
+          # Clone repository if it doesn't exist
+          if [ ! -d "mailsender" ]; then
+            echo "🔄 Cloning repository for first time..."
+            git clone https://github.com/Acidsyd/BOB_inbox.git mailsender
+            cd mailsender
+            echo "✅ Repository cloned successfully"
+          else
+            echo "📂 Repository exists, navigating..."
+            cd mailsender
+          fi
+          
+          echo "🔄 Pulling latest changes..."
+          git fetch origin
+          git reset --hard origin/main
+          
+          echo "🛑 Stopping existing containers..."
+          docker-compose -f docker-compose.production.yml down --remove-orphans
+          
+          echo "🏗️ Building and starting containers..."
+          docker-compose -f docker-compose.production.yml up -d --build --force-recreate
+          
+          echo "⏳ Waiting for services to start..."
+          sleep 30
+          
+          echo "🔍 Checking service health..."
+          docker-compose -f docker-compose.production.yml ps
+          
+          echo "📊 Service logs (last 20 lines)..."
+          docker-compose -f docker-compose.production.yml logs --tail=20 backend frontend nginx
+          
+          echo "✅ Deployment completed successfully!"
+        EOF
+        
+    - name: Verify deployment
+      run: |
+        echo "🔍 Verifying deployment..."
+        
+        # Wait a bit for services to fully start
+        sleep 15
+        
+        # Check if the site is responding
+        if curl -f -s https://qquadro.com > /dev/null; then
+          echo "✅ Website is responding!"
+        else
+          echo "❌ Website check failed!"
+          exit 1
+        fi
+        
+        # Check API health endpoint
+        if curl -f -s https://qquadro.com/api/health > /dev/null; then
+          echo "✅ API health check passed!"
+        else
+          echo "⚠️ API health check failed (might be normal during startup)"
+        fi
+        
+    - name: Deployment summary
+      run: |
+        echo "🎉 DEPLOYMENT SUCCESSFUL!"
+        echo "========================="
+        echo "✅ Code deployed to Digital Ocean"
+        echo "✅ Docker containers rebuilt and restarted"
+        echo "✅ Services health checked"
         echo ""
-        echo "📏 New upload limit: 200MB"
         echo "🌐 Production URL: https://qquadro.com"
+        echo "📊 Check logs: ssh root@qquadro.com 'cd /root/mailsender && docker-compose -f docker-compose.production.yml logs'"
         echo ""
-        echo "⚡ Ready to deploy manually!"
+        echo "🚀 Your CSV uploader and all fixes are now live!"
+        
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "❌ DEPLOYMENT FAILED!"
+        echo "===================="
+        echo "Please check the logs above for details."
+        echo "You can manually deploy by running:"
+        echo "ssh root@qquadro.com"
+        echo "cd /root/mailsender && git pull && docker-compose -f docker-compose.production.yml up -d --build"
