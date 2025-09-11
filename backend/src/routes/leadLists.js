@@ -540,14 +540,53 @@ router.post('/check-duplicates', authenticateToken, async (req, res) => {
     
     console.log(`📊 Found ${emails.length} emails in lead list to check for duplicates`);
 
-    // OPTIMIZED: Chunked queries to avoid URI length limits (414 errors)
-    console.log('📊 Checking for duplicates with optimized chunked queries...');
+    // OPTIMIZED: Use a single query with organization-wide duplicate detection
+    console.log('📊 Checking for duplicates with single optimized query...');
     const duplicateMap = new Map();
     const existingInDatabase = [];
-    const chunkSize = 500; // Safe chunk size to avoid URI length limits
     
-    // Process emails in chunks to avoid 414 Request-URI Too Large error with retry logic
-    for (let i = 0; i < cleanEmails.length; i += chunkSize) {
+    // Get ALL leads for the organization (this will be cached/efficient on Supabase side)
+    const { data: allOrgLeads, error: allLeadsError } = await supabase
+      .from('leads')
+      .select('email, lead_list_id, lead_lists:lead_list_id (id, name)')
+      .eq('organization_id', req.user.organizationId)
+      .eq('status', 'active');
+    
+    if (allLeadsError) {
+      throw allLeadsError;
+    }
+    
+    console.log(`📊 Retrieved ${allOrgLeads.length} total leads for organization`);
+    
+    // Create a map of email -> list of occurrences for efficient lookups
+    const orgEmailMap = new Map();
+    allOrgLeads.forEach(lead => {
+      const cleanEmail = lead.email.replace(/[^\w@.-]/g, '').toLowerCase().trim();
+      if (!orgEmailMap.has(cleanEmail)) {
+        orgEmailMap.set(cleanEmail, []);
+      }
+      orgEmailMap.get(cleanEmail).push({
+        listId: lead.lead_list_id,
+        listName: lead.lead_lists?.name || 'Unknown List'
+      });
+    });
+    
+    // Now check each email from our current list against the org map
+    emails.forEach(originalEmail => {
+      const cleanEmail = originalEmail.replace(/[^\w@.-]/g, '').toLowerCase().trim();
+      const occurrences = orgEmailMap.get(cleanEmail) || [];
+      
+      if (occurrences.length > 1) {
+        // This email appears multiple times across the organization
+        duplicateMap.set(cleanEmail, occurrences);
+        existingInDatabase.push(cleanEmail);
+      }
+    });
+    
+    console.log(`📊 Found ${existingInDatabase.length} emails with duplicates using single query approach`);
+
+    // Skip to duplicate details processing (old chunked code removed for efficiency)
+    // Old chunked processing removed - now using single query approach above
       const emailChunk = cleanEmails.slice(i, i + chunkSize);
       const chunkNumber = Math.floor(i/chunkSize) + 1;
       const totalChunks = Math.ceil(cleanEmails.length/chunkSize);
