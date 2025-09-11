@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Upload, FileText, AlertCircle, CheckCircle, X, ArrowRight, Download } from 'lucide-react'
+import { Upload, FileText, CheckCircle, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,44 +11,21 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { api } from '@/lib/api'
 import { Progress } from '@/components/ui/progress'
 import { useToast } from '@/components/ui/toast'
-import FieldMapper from './FieldMapper'
 
 interface CSVUploadResults {
   leadList: {
     id: string
     name: string
-    description: string
     totalLeads: number
-    createdAt: string
   }
   importResults: {
-    totalProcessed: number
     imported: number
-    duplicates: number
+    duplicatesRemoved: number
     errors: number
   }
 }
 
-interface CSVColumn {
-  name: string
-  sample: string[]
-  index: number
-}
-
-interface FieldMapping {
-  [fieldKey: string]: string | null
-}
-
-interface CSVPreviewData {
-  columns: CSVColumn[]
-  rows: string[][]
-  allDataRows: string[][]  // Store all CSV data for CSV-level duplicate checking
-  totalRows: number
-  duplicates: number
-}
-
-
-type UploadStep = 'file' | 'preview' | 'mapping' | 'uploading' | 'results'
+type UploadStep = 'file' | 'uploading' | 'results'
 
 export default function CSVUploader() {
   const router = useRouter()

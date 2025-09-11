@@ -21,10 +21,12 @@ const nextConfig = {
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 
+  // Typed routes
+  typedRoutes: true,
+  
   // Bundle optimization
   experimental: {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu'],
-    typedRoutes: true,
     optimizeCss: true,
     scrollRestoration: true,
     optimizeServerReact: true,
@@ -169,6 +171,7 @@ const nextConfig = {
 
   // Output configuration for deployment
   output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
+  outputFileTracingRoot: process.env.NODE_ENV === 'production' ? '/Users/gianpierodifelice/Cloude code Global/Mailsender' : undefined,
 
   // TypeScript configuration
   typescript: {
