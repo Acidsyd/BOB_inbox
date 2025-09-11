@@ -1,206 +1,137 @@
-# 🚀 GitHub Actions Auto-Deployment Setup
+# 🚀 GitHub Actions Auto-Deploy Setup Guide
 
-This document explains how to set up automatic deployment to Digital Ocean using GitHub Actions.
+## Overview
+Your repository is now configured for automatic deployment to Digital Ocean whenever you push to the `main` branch.
 
-## 📋 Overview
+## 📋 Setup Checklist
 
-The GitHub Actions workflow (`/.github/workflows/deploy.yml`) automatically:
-- ✅ Runs code quality checks (TypeScript, ESLint)
-- ✅ Deploys to Digital Ocean production server on `main` branch pushes  
-- ✅ Performs health checks after deployment
-- ✅ Automatically rolls back if deployment fails
-- ✅ Includes the 413 error fixes for CSV uploads
+### 1. GitHub Repository Secrets (REQUIRED)
+You need to add your SSH private key to GitHub secrets:
 
-## 🔑 Required GitHub Secrets
+1. Go to your GitHub repository
+2. Click **Settings** → **Secrets and variables** → **Actions**
+3. Click **New repository secret**
+4. Name: `DEPLOY_SSH_KEY`
+5. Value: Your SSH private key content (the one you use to SSH to root@qquadro.com)
 
-You need to configure one GitHub secret for the deployment to work:
+### 2. SSH Key Format
+Your SSH key should look like this:
+```
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAlwAAAAdzc2gtcn
+...
+-----END OPENSSH PRIVATE KEY-----
+```
 
-### 1. DEPLOY_SSH_KEY
-
-This is the private SSH key that allows GitHub Actions to connect to your Digital Ocean server.
-
-**To set this up:**
-
-1. **Generate SSH key pair** (if you don't have one):
-   ```bash
-   ssh-keygen -t rsa -b 4096 -C "github-actions@qquadro.com"
-   # Save as: ~/.ssh/github_actions_key (or any name you prefer)
-   ```
-
-2. **Add public key to Digital Ocean server**:
-   ```bash
-   # Copy the public key
-   cat ~/.ssh/github_actions_key.pub
-   
-   # On your Digital Ocean server, add it to authorized_keys
-   ssh root@qquadro.com
-   echo "your-public-key-content" >> ~/.ssh/authorized_keys
-   ```
-
-3. **Add private key to GitHub Secrets**:
-   - Go to your GitHub repository
-   - Click **Settings** → **Secrets and variables** → **Actions**
-   - Click **New repository secret**
-   - Name: `DEPLOY_SSH_KEY`
-   - Value: Copy the **entire private key** content:
-     ```bash
-     cat ~/.ssh/github_actions_key
-     # Copy everything including -----BEGIN OPENSSH PRIVATE KEY-----
-     ```
-
-## 🏗️ Production Server Setup
-
-Make sure your Digital Ocean server has the following:
-
-### 1. Application Directory Structure
+### 3. Testing the SSH Key
+To verify your SSH key works:
 ```bash
-# The workflow looks for your app in one of these locations:
-/root/mailsender/          # Primary location
-/opt/mailsender/           # Alternative location  
-~/mailsender/              # Fallback location
+ssh -i ~/.ssh/your_key root@qquadro.com
 ```
 
-### 2. Required Files
-- `docker-compose.production.yml` - Production Docker configuration
-- `nginx/server.conf` - Nginx configuration with 413 error fixes
-- Git repository with `origin` remote pointing to GitHub
+## 🔄 How Auto-Deployment Works
 
-### 3. Dependencies Installed
-```bash
-# Make sure these are installed on your server:
-docker --version
-docker-compose --version
-git --version
-curl --version
-```
-
-## 🔧 GitHub Environment Setup
-
-1. **Create Production Environment**:
-   - Go to **Settings** → **Environments**
-   - Click **New environment**
-   - Name: `production`
-   - (Optional) Add protection rules like requiring reviews
-
-## ⚡ How It Works
-
-### Automatic Deployment Trigger
-```yaml
-on:
-  push:
-    branches: [main]  # Deploys when you push to main branch
-```
+### Triggers
+- **Automatic**: Every push to `main` branch
+- **Manual**: Via GitHub Actions "Run workflow" button
 
 ### Deployment Process
-1. **Code Quality Gate** - TypeScript & ESLint validation
-2. **SSH Connection** - Connects to qquadro.com using SSH key
-3. **Git Pull** - Fetches latest changes from GitHub
-4. **Docker Rebuild** - Stops, rebuilds, and starts containers
-5. **Health Checks** - Verifies all services are running
-6. **CSV Upload Test** - Tests the 413 error fixes
-7. **Rollback** - If anything fails, automatically reverts
+1. Checkout latest code
+2. SSH to your Digital Ocean server (qquadro.com)
+3. Navigate to `/root/mailsender`
+4. Pull latest changes with `git reset --hard origin/main`
+5. Stop existing Docker containers
+6. Rebuild and restart containers with latest code
+7. Verify deployment health
+8. Report success/failure
 
-### 📊 What Gets Fixed
-- ✅ **Nginx limits**: 200MB upload limit for CSV files
-- ✅ **Express.js limits**: 100MB body size limit
-- ✅ **Timeout settings**: Extended to 600 seconds
-- ✅ **Docker configuration**: Proper mounting and service management
+### What Gets Deployed
+- All code changes from `main` branch
+- Rebuilt Docker images (frontend, backend, nginx, redis, cron processor)
+- Updated configurations (nginx, environment variables)
+- Your CSV uploader fixes and 200MB upload limits
 
-## 🧪 Testing the Setup
+## 🛡️ Security Features
 
-1. **Push to main branch**:
-   ```bash
-   git add .
-   git commit -m "test: trigger auto-deployment"
-   git push origin main
-   ```
+### Safe Deployment
+- Uses `git reset --hard` to ensure clean deployments
+- Removes orphaned containers with `--remove-orphans`
+- Force recreates containers with `--force-recreate`
+- Health checks verify deployment success
 
-2. **Monitor deployment**:
-   - Go to **Actions** tab in GitHub
-   - Watch the "Deploy to Production" workflow
-   - Check logs for any issues
+### Error Handling
+- Deployment fails fast on any error
+- Provides detailed logs for troubleshooting
+- Includes manual deployment commands as fallback
 
-3. **Verify CSV upload fix**:
-   - Visit https://qquadro.com
-   - Try uploading a large CSV file (up to 200MB)
-   - Should no longer get 413 errors
+## 📊 Monitoring
 
-## 🔍 Troubleshooting
+### GitHub Actions
+- View deployment status in GitHub Actions tab
+- See real-time logs during deployment
+- Get notified of deployment success/failure
+
+### Server Health Checks
+- Website availability check (https://qquadro.com)
+- API health endpoint verification
+- Docker container status monitoring
+
+## 🚨 Troubleshooting
 
 ### Common Issues
 
-**1. SSH Connection Failed**
+1. **SSH Connection Failed**
+   ```
+   Solution: Verify DEPLOY_SSH_KEY secret is correct
+   Test: ssh -i ~/.ssh/your_key root@qquadro.com
+   ```
+
+2. **Docker Build Failed**
+   ```
+   Check server logs: ssh root@qquadro.com 'cd /root/mailsender && docker-compose logs'
+   Manual fix: SSH to server and run deployment commands manually
+   ```
+
+3. **Service Health Check Failed**
+   ```
+   Services might be starting up - check after 1-2 minutes
+   Manual check: curl -f https://qquadro.com/api/health
+   ```
+
+### Manual Deployment (Fallback)
+If auto-deployment fails, you can deploy manually:
 ```bash
-# Test SSH connection manually:
-ssh -i ~/.ssh/github_actions_key root@qquadro.com
-
-# If this fails, check:
-# - SSH key is correct
-# - Public key is in authorized_keys
-# - Server allows SSH connections
-```
-
-**2. Application Directory Not Found**
-```bash
-# Make sure your app is in one of these locations:
-ls -la /root/mailsender/
-ls -la /opt/mailsender/
-ls -la ~/mailsender/
-```
-
-**3. Docker Compose Fails**
-```bash
-# Check if docker-compose.production.yml exists:
-cat docker-compose.production.yml
-
-# Check Docker is running:
-docker ps
-systemctl status docker
-```
-
-**4. Still Getting 413 Errors**
-```bash
-# Check nginx configuration is loaded:
-docker-compose -f docker-compose.production.yml exec nginx nginx -t
-docker-compose -f docker-compose.production.yml exec nginx cat /etc/nginx/conf.d/default.conf
-
-# Restart nginx container specifically:
-docker-compose -f docker-compose.production.yml restart nginx
-```
-
-## 🎯 Manual Deployment (Fallback)
-
-If GitHub Actions isn't working, you can deploy manually:
-
-```bash
-# SSH into your server
 ssh root@qquadro.com
-
-# Navigate to app directory
-cd /root/mailsender  # or wherever your app is
-
-# Run the deployment script
-chmod +x production-deploy.sh
-./production-deploy.sh
+cd /root/mailsender
+git pull origin main
+docker-compose -f docker-compose.production.yml down
+docker-compose -f docker-compose.production.yml up -d --build
 ```
 
-## 📈 Monitoring
+## 🎯 Next Steps
 
-The workflow provides detailed logging:
-- 🔍 **Health checks** for all containers
-- 📊 **CSV upload endpoint testing**
-- 🌐 **Website accessibility verification**
-- 📋 **Container status monitoring**
-- 📄 **Recent logs display**
+1. **Add the SSH key secret to GitHub** (most important!)
+2. **Test deployment**: Make a small change and push to `main`
+3. **Monitor first deployment**: Watch GitHub Actions tab
+4. **Verify deployment**: Check https://qquadro.com works
 
-## 🔐 Security Notes
+## 🔍 Environment Setup
 
-- ✅ SSH keys are stored securely in GitHub Secrets
-- ✅ Environment protection rules can require approvals
-- ✅ Workflow only runs on `main` branch pushes
-- ✅ Rollback mechanism protects against failed deployments
-- ✅ All connections use SSH with key authentication
+Your Digital Ocean server should have:
+- Git repository cloned to `/root/mailsender`
+- Docker and Docker Compose installed
+- Environment variables configured in `.env` file
+- SSL certificates configured for HTTPS
+
+## 📝 Post-Deployment
+
+After each deployment:
+- ✅ Website loads at https://qquadro.com
+- ✅ CSV upload works (200MB limit)
+- ✅ All application features functional
+- ✅ No errors in browser console
+- ✅ Backend API responding
 
 ---
 
-**🎉 Once configured, every push to `main` will automatically deploy your 413 error fixes to production!**
+**🎉 You're all set!** Every push to `main` will now automatically deploy to your Digital Ocean server.
