@@ -21,7 +21,7 @@ import {
 
 // Dynamic import for RichTextEditor to avoid SSR issues
 const RichTextEditor = dynamic(
-  () => import('@/components/ui/simple-rich-text-editor').then(mod => ({ default: mod.SimpleRichTextEditor })),
+  () => import('@/components/ui/simple-rich-text-editor').then(mod => mod.SimpleRichTextEditor),
   {
     ssr: false,
     loading: () => (
