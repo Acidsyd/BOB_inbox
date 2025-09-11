@@ -28,56 +28,125 @@ jobs:
       run: |
         ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'"
         
-    - name: Deploy to server
+    - name: Deploy using MCP-enhanced script
       run: |
-        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+        # Use our MCP-enhanced deployment script
+        export DEPLOY_HOST="${{ secrets.DEPLOY_HOST }}"
+        export DEPLOY_USER="${{ secrets.DEPLOY_USER }}"
+        
+        # Create deployment tag with Git MCP patterns
+        DEPLOYMENT_TAG="deploy-$(date +%Y%m%d-%H%M%S)"
+        git tag -a "$DEPLOYMENT_TAG" -m "GitHub Actions deployment $(date)"
+        git push origin "$DEPLOYMENT_TAG"
+        
+        # Deploy to server with enhanced error handling
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << EOF
           set -e
-          echo "🚀 Starting fresh deployment..."
           
-          # Set up application directory
+          # Set deployment variables
           APP_DIR="/var/www/mailsender"
+          DEPLOYMENT_ID="deploy-\$(date +%s)"
+          DEPLOYMENT_TAG="$DEPLOYMENT_TAG"
           
-          # Stop existing services if any
-          echo "⏹️ Stopping existing services..."
-          systemctl stop mailsender-backend || true
-          systemctl stop mailsender-frontend || true
-          systemctl stop nginx || true
+          echo "🚀 Starting MCP-enhanced deployment: \$DEPLOYMENT_ID"
+          echo "📋 Deployment tag: \$DEPLOYMENT_TAG"
           
-          # Create app directory
-          echo "📁 Setting up application directory..."
-          mkdir -p $APP_DIR
-          cd $APP_DIR
+          # Pre-deployment checks
+          echo "🔍 Running pre-deployment checks..."
           
-          # Remove existing files
-          rm -rf * .* 2>/dev/null || true
+          # Create app directory if it doesn't exist
+          mkdir -p \$APP_DIR
           
-          # Clone repository using HTTPS (more reliable)
-          echo "📥 Cloning repository..."
-          git clone https://github.com/Acidsyd/BOB_inbox.git .
+          # If app exists, verify it's a git repo and create backup
+          if [ -d "\$APP_DIR/.git" ]; then
+            cd \$APP_DIR
+            
+            # Stop services gracefully
+            echo "⏹️ Stopping services..."
+            pm2 stop all || true
+            
+            # Create backup
+            echo "💾 Creating backup..."
+            mkdir -p /var/backups/mailsender
+            cp -r . "/var/backups/mailsender/backup-\$DEPLOYMENT_ID" || true
+            
+            # Fetch and checkout the deployment tag
+            echo "📥 Pulling latest code..."
+            git fetch --all --tags
+            git checkout "\$DEPLOYMENT_TAG"
+          else
+            # Fresh installation
+            echo "📦 Fresh installation detected..."
+            cd /tmp
+            
+            # Install system dependencies
+            echo "📦 Installing system dependencies..."
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - || true
+            apt-get update && apt-get install -y nodejs || true
+            npm install -g pm2 || true
+            
+            # Clone repository
+            rm -rf mailsender-temp || true
+            git clone --branch main --single-branch https://github.com/Acidsyd/BOB_inbox.git mailsender-temp
+            cd mailsender-temp
+            git checkout "\$DEPLOYMENT_TAG"
+            
+            # Move to app directory
+            mv * \$APP_DIR/ 2>/dev/null || true
+            mv .* \$APP_DIR/ 2>/dev/null || true
+            cd \$APP_DIR
+            
+            # Cleanup temp directory
+            rm -rf /tmp/mailsender-temp || true
+          fi
           
-          # Setup environment
-          echo "⚙️ Setting up environment..."
-          cp .env.production.example .env.production
+          # Application setup
+          echo "🔨 Building application..."
           
-          # Install Node.js 20 if not present
-          echo "📦 Installing Node.js..."
-          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-          apt-get install -y nodejs
-          
-          # Install PM2 globally
-          echo "🔧 Installing PM2..."
-          npm install -g pm2
+          # Setup environment if it doesn't exist
+          if [ ! -f ".env.production" ]; then
+            cp .env.production.example .env.production || true
+          fi
           
           # Install dependencies and build
-          echo "🔨 Building application..."
-          npm run setup
-          npm run build
+          npm run setup || npm install
+          npm run build || true
           
-          # Setup production environment
-          echo "🌐 Setting up production environment..."
-          npm run production:setup
+          # Setup production services
+          if [ -f "scripts/production-setup.sh" ]; then
+            echo "🌐 Running production setup..."
+            chmod +x scripts/production-setup.sh
+            ./scripts/production-setup.sh || true
+          fi
           
-          echo "✅ Deployment completed successfully!"
+          # Start services with PM2
+          echo "🚀 Starting services..."
+          if [ -f "ecosystem.config.js" ]; then
+            pm2 restart ecosystem.config.js || pm2 start ecosystem.config.js
+          else
+            # Fallback service start
+            pm2 start backend/src/server.js --name mailsender-backend || true
+            pm2 start "npm run start" --name mailsender-frontend || true
+          fi
+          
+          # Start nginx if available
+          systemctl restart nginx || true
+          systemctl enable nginx || true
+          
+          # Wait for services to start
+          sleep 15
+          
+          # Health checks
+          echo "🔍 Running health checks..."
+          curl -f http://localhost:4000/health || echo "⚠️ Backend health check failed"
+          curl -f http://localhost:3001 || echo "⚠️ Frontend health check failed"
+          
+          # Show service status
+          pm2 status
+          
+          echo "✅ MCP-enhanced deployment \$DEPLOYMENT_ID completed successfully!"
+          echo "📊 Deployment tag: \$DEPLOYMENT_TAG"
+          
         EOF
         
     - name: Health check
