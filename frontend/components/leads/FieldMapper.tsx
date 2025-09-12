@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { ArrowRight, CheckCircle, AlertCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, AlertCircle, FileText } from 'lucide-react'
+
 import { Button } from '../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
@@ -18,9 +19,9 @@ interface FieldMapping {
 }
 
 interface FieldMapperProps {
-  csvColumns: CSVColumn[]
+  file: File
   onMappingComplete: (mapping: FieldMapping) => void
-  onSkip: () => void
+  onBack: () => void
 }
 
 const REQUIRED_FIELDS = [
@@ -32,9 +33,82 @@ const REQUIRED_FIELDS = [
   { key: 'title', label: 'Job Title', required: false, description: 'Job title or position' }
 ]
 
-export default function FieldMapper({ csvColumns, onMappingComplete, onSkip }: FieldMapperProps) {
+export default function FieldMapper({ file, onMappingComplete, onBack }: FieldMapperProps) {
   const [mapping, setMapping] = useState<FieldMapping>({})
   const [autoMapped, setAutoMapped] = useState<string[]>([])
+  const [csvColumns, setCsvColumns] = useState<CSVColumn[]>([])
+  const [csvRows, setCsvRows] = useState<string[][]>([])
+  const [error, setError] = useState<string>('')
+
+  // Proper CSV parsing function that handles quoted fields
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = []
+    let current = ''
+    let inQuotes = false
+    let i = 0
+
+    while (i < line.length) {
+      const char = line[i]
+      const nextChar = line[i + 1]
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          // Escaped quote
+          current += '"'
+          i += 2
+        } else {
+          // Toggle quotes
+          inQuotes = !inQuotes
+          i++
+        }
+      } else if (char === ',' && !inQuotes) {
+        // Field separator
+        result.push(current.trim())
+        current = ''
+        i++
+      } else {
+        current += char
+        i++
+      }
+    }
+
+    // Add the last field
+    result.push(current.trim())
+    return result
+  }
+
+  useEffect(() => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = e.target?.result as string
+      if (!text) return
+
+      try {
+        const lines = text.split('\n').filter(line => line.trim())
+        if (lines.length < 2) {
+          setError('CSV file must have at least a header row and one data row')
+          return
+        }
+
+        const headers = parseCSVLine(lines[0])
+        const allDataRows = lines.slice(1).map(line => parseCSVLine(line))
+        const dataRows = allDataRows.slice(0, 10)
+
+        const columns: CSVColumn[] = headers.map((header, index) => ({
+          name: header,
+          index,
+          sample: dataRows.map(row => row[index] || '').filter(Boolean).slice(0, 5)
+        }))
+
+        setCsvColumns(columns)
+        setCsvRows(dataRows)
+
+      } catch (error) {
+        setError('Failed to parse CSV file. Please check the format.')
+      }
+    }
+    reader.readAsText(file)
+  }, [file])
 
   // Auto-detect common field mappings
   useEffect(() => {
@@ -118,35 +192,65 @@ export default function FieldMapper({ csvColumns, onMappingComplete, onSkip }: F
   const unmappedColumns = getUnmappedColumns()
 
   return (
-    <div className="space-y-6">
-      <Card>
+    <div className="space-y-8">
+      <Card className="border shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ArrowRight className="h-5 w-5" />
+          <CardTitle className="text-xl">
             Map CSV Fields
           </CardTitle>
-          <p className="text-sm text-gray-600">
+          <p className="text-gray-600">
             Map your CSV columns to the correct fields. Email is required, other fields are optional.
           </p>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Mapping Summary */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center p-3 bg-blue-50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-600">{csvColumns.length}</div>
-              <div className="text-xs text-blue-700">CSV Columns</div>
+        <CardContent className="p-8 space-y-8">
+          {/* Enhanced Mapping Summary */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="text-center p-6 bg-gray-50 rounded-xl border border-gray-200">
+              <div className="text-3xl font-bold text-gray-900 mb-1">{csvColumns.length}</div>
+              <div className="text-sm font-medium text-gray-700">CSV Columns</div>
             </div>
-            <div className="text-center p-3 bg-green-50 rounded-lg">
-              <div className="text-2xl font-bold text-green-600">{summary.total}</div>
-              <div className="text-xs text-green-700">Mapped</div>
+            <div className="text-center p-6 bg-gradient-to-br from-green-50 to-green-100 rounded-xl border border-green-200">
+              <div className="text-3xl font-bold text-green-600 mb-1">{summary.total}</div>
+              <div className="text-sm font-medium text-green-700">Mapped</div>
             </div>
-            <div className="text-center p-3 bg-purple-50 rounded-lg">
-              <div className="text-2xl font-bold text-purple-600">{autoMapped.length}</div>
-              <div className="text-xs text-purple-700">Auto-detected</div>
+            <div className="text-center p-6 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl border border-purple-200">
+              <div className="text-3xl font-bold text-purple-600 mb-1">{autoMapped.length}</div>
+              <div className="text-sm font-medium text-purple-700">Auto-detected</div>
             </div>
-            <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-gray-600">{summary.unmapped}</div>
-              <div className="text-xs text-gray-700">Unmapped</div>
+            <div className="text-center p-6 bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl border border-orange-200">
+              <div className="text-3xl font-bold text-orange-600 mb-1">{summary.unmapped}</div>
+              <div className="text-sm font-medium text-orange-700">Unmapped</div>
+            </div>
+          </div>
+
+          {/* CSV Preview Table */}
+          <div className="border rounded-lg overflow-hidden">
+            <div className="bg-gray-50 p-3 border-b">
+              <h4 className="font-medium text-gray-900">Data Preview (first 10 rows)</h4>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100">
+                  <tr>
+                    {csvColumns.map((column, index) => (
+                      <th key={index} className="px-3 py-2 text-left text-xs font-medium text-gray-700 border-r">
+                        {column.name}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {csvRows.map((row, rowIndex) => (
+                    <tr key={rowIndex} className="border-b">
+                      {row.map((cell, cellIndex) => (
+                        <td key={cellIndex} className="px-3 py-2 text-sm text-gray-600 border-r max-w-xs truncate">
+                          {cell || '-'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -166,10 +270,10 @@ export default function FieldMapper({ csvColumns, onMappingComplete, onSkip }: F
                   </div>
                   <div className="flex items-center gap-2">
                     {mapping[field.key] && (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span>(v)</span>
                     )}
                     {field.required && !mapping[field.key] && (
-                      <AlertCircle className="h-4 w-4 text-red-500" />
+                      <span>(!)</span>
                     )}
                   </div>
                 </div>
@@ -215,36 +319,20 @@ export default function FieldMapper({ csvColumns, onMappingComplete, onSkip }: F
             ))}
           </div>
 
-          {/* Unmapped Columns */}
-          {unmappedColumns.length > 0 && (
-            <div className="border-t pt-4">
-              <h4 className="font-medium text-gray-900 mb-3">Unmapped Columns</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {unmappedColumns.map(column => (
-                  <div key={column.index} className="p-3 bg-gray-50 rounded-lg">
-                    <div className="font-medium text-gray-900">{column.name}</div>
-                    <div className="text-sm text-gray-600 mt-1">
-                      {column.sample.slice(0, 2).join(', ')}
-                      {column.sample.length > 2 && '...'}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="text-sm text-gray-500 mt-2">
-                These columns will be ignored during import.
-              </p>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex justify-between items-center pt-4 border-t">
-            <Button variant="outline" onClick={onSkip}>
-              Skip Mapping
+          {/* Enhanced Actions */}
+          <div className="flex justify-between items-center pt-8 border-t border-gray-200">
+            <Button 
+              variant="outline" 
+              onClick={onBack}
+              className="h-12 px-6 flex items-center gap-2"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Back to Upload
             </Button>
             
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               {!isValidMapping() && (
-                <div className="flex items-center gap-2 text-red-600 text-sm">
+                <div className="flex items-center gap-2 text-red-600 text-sm font-medium bg-red-50 px-4 py-2 rounded-lg">
                   <AlertCircle className="h-4 w-4" />
                   Email field is required
                 </div>
@@ -252,8 +340,11 @@ export default function FieldMapper({ csvColumns, onMappingComplete, onSkip }: F
               <Button 
                 onClick={() => onMappingComplete(mapping)}
                 disabled={!isValidMapping()}
+                className="h-12 px-8 bg-blue-600 hover:bg-blue-700 text-lg font-medium flex items-center gap-2"
+                size="lg"
               >
-                Continue with Mapping
+                Start Import
+                <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
