@@ -3,6 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
+const validateEnvironmentVariables = require('./config/validateEnv');
+
+// Validate environment variables
+const envValidation = validateEnvironmentVariables();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -60,8 +64,15 @@ app.use('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📍 Health check available at: http://localhost:${PORT}/health`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Show environment validation status
+  if (!envValidation.isValid) {
+    console.log('⚠️  Server started with missing environment variables');
+    console.log('   Some features may not work properly.');
+  }
   
   // Start async bounce detection
   if (process.env.NODE_ENV !== 'test') {
