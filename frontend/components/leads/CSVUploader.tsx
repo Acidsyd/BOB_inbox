@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Upload, FileText, CheckCircle, Info } from 'lucide-react'
+import { Upload, FileText, CheckCircle, Info, ArrowRight, Download } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
