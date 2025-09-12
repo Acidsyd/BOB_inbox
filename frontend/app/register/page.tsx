@@ -3,9 +3,9 @@
 import Link from 'next/link'
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useAuth } from '../lib/auth/context'
+import { useAuth } from '../../lib/auth/context'
 import { ArrowRight, Mail, Lock, User, Building, CheckCircle, AlertCircle } from 'lucide-react'
-import { Alert, AlertDescription } from '../components/ui/alert'
+import { Alert, AlertDescription } from '../../components/ui/alert'
 
 interface RegisterFormData {
   firstName: string

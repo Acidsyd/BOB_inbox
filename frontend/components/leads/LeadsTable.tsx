@@ -20,19 +20,19 @@ import {
   Edit3
 } from 'lucide-react'
 
-import { useLeads } from '../hooks/useLeads'
+import { useLeads } from '../../hooks/useLeads'
 import { Lead, LeadFilters, LeadStatus, LeadSortableColumn } from '../types/leads'
-import { Button } from './ui/button'
-import { Input } from './ui/input'
-import { Badge } from './ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { Badge } from '../ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
 import { 
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from './ui/select'
+} from '../ui/select'
 import { 
   Table,
   TableBody,
@@ -40,8 +40,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from './ui/table'
-import { Skeleton } from './ui/skeleton'
+} from '../ui/table'
+import { Skeleton } from '../ui/skeleton'
 
 /**
  * Props for the LeadsTable component

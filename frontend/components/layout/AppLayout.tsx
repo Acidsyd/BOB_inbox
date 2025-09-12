@@ -1,6 +1,6 @@
 'use client'
 
-import { useAuth } from '../lib/auth/context'
+import { useAuth } from '../../lib/auth/context'
 import { Menu, X, Bell, Search, ChevronRight, Home } from 'lucide-react'
 import { useState, useMemo, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'

@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Button } from './ui/button'
-import { Skeleton } from './ui/skeleton'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { Button } from '../ui/button'
+import { Skeleton } from '../ui/skeleton'
 import { 
   TrendingUp, 
   Calendar, 
@@ -16,8 +16,8 @@ import {
   Download,
   RefreshCw
 } from 'lucide-react'
-import { formatDate } from '../lib/billing'
-import { UsageStats } from '../types/billing'
+import { formatDate } from '../../lib/billing'
+import { UsageStats } from '../../types/billing'
 
 interface UsageAnalyticsProps {
   isLoading?: boolean

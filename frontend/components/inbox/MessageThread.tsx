@@ -17,14 +17,14 @@ import {
   ChevronUp,
   ExternalLink
 } from 'lucide-react'
-import { Button } from './ui/button'
-import { Badge } from './ui/badge'
-import { Separator } from './ui/separator'
-import { Textarea } from './ui/textarea'
-import { useInboxMessages } from '../hooks/useInboxMessages'
-import { cn } from '../lib/utils'
-import { api } from '../lib/api'
-import { stripTrackingElements } from '../lib/strip-tracking-pixels'
+import { Button } from '../ui/button'
+import { Badge } from '../ui/badge'
+import { Separator } from '../ui/separator'
+import { Textarea } from '../ui/textarea'
+import { useInboxMessages } from '../../hooks/useInboxMessages'
+import { cn } from '../../lib/utils'
+import { api } from '../../lib/api'
+import { stripTrackingElements } from '../../lib/strip-tracking-pixels'
 
 interface Message {
   id: string

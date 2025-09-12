@@ -1,10 +1,10 @@
 'use client'
 
 import React from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Badge } from './ui/badge'
-import { Button } from './ui/button'
-import { Skeleton } from './ui/skeleton'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { Badge } from '../ui/badge'
+import { Button } from '../ui/button'
+import { Skeleton } from '../ui/skeleton'
 import { 
   Calendar, 
   CreditCard, 
@@ -15,9 +15,9 @@ import {
   Crown,
   XCircle
 } from 'lucide-react'
-import { useSubscriptionStatus } from '../hooks/useBilling'
-import { formatPrice, formatDate, daysUntilPeriodEnd } from '../lib/billing'
-import { OrganizationSubscription, SubscriptionPlan } from '../types/billing'
+import { useSubscriptionStatus } from '../../hooks/useBilling'
+import { formatPrice, formatDate, daysUntilPeriodEnd } from '../../lib/billing'
+import { OrganizationSubscription, SubscriptionPlan } from '../../types/billing'
 
 interface SubscriptionOverviewProps {
   isLoading?: boolean

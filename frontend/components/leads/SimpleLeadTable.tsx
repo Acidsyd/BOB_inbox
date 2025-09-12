@@ -14,10 +14,10 @@ import {
   X,
   Trash2
 } from 'lucide-react'
-import { Input } from './ui/input'
-import { Button } from './ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Badge } from './ui/badge'
+import { Input } from '../ui/input'
+import { Button } from '../ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { Badge } from '../ui/badge'
 import { 
   Table,
   TableBody,
@@ -25,15 +25,15 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from './ui/table'
+} from '../ui/table'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from './ui/select'
-import { Skeleton } from './ui/skeleton'
+} from '../ui/select'
+import { Skeleton } from '../ui/skeleton'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,7 +44,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from './ui/alert-dialog'
+} from '../ui/alert-dialog'
 
 interface Lead {
   id: string

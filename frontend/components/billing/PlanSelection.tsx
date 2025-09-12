@@ -1,11 +1,11 @@
 'use client'
 
 import React from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Badge } from './ui/badge'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { Badge } from '../ui/badge'
 import { Check, Crown, Zap, Infinity, Rocket } from 'lucide-react'
-import { SubscriptionPlan, PromotionValidation } from '../types/billing'
-import { formatPrice } from '../lib/billing'
+import { SubscriptionPlan, PromotionValidation } from '../../types/billing'
+import { formatPrice } from '../../lib/billing'
 
 interface PlanSelectionProps {
   selectedPlanCode: string

@@ -1,10 +1,10 @@
 'use client'
 
 import React from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Button } from './ui/button'
-import { Badge } from './ui/badge'
-import { Alert, AlertDescription, AlertTitle } from './ui/alert'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { Button } from '../ui/button'
+import { Badge } from '../ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { 
   ArrowUp, 
   Zap, 
@@ -18,8 +18,8 @@ import {
   Clock,
   CheckCircle
 } from 'lucide-react'
-import { useBilling, useUsageStats } from '../hooks/useBilling'
-import { formatPrice, calculateSavings } from '../lib/billing'
+import { useBilling, useUsageStats } from '../../hooks/useBilling'
+import { formatPrice, calculateSavings } from '../../lib/billing'
 
 interface UpgradePromptsProps {
   isLoading?: boolean

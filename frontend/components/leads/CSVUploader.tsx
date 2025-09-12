@@ -3,14 +3,14 @@
 import React, { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Upload, FileText, CheckCircle, Info } from 'lucide-react'
-import { Button } from './ui/button'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { Alert, AlertDescription } from './ui/alert'
-import { api } from '../lib/api'
-import { Progress } from './ui/progress'
-import { useToast } from './ui/toast'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'
+import { Alert, AlertDescription } from '../ui/alert'
+import { api } from '../../lib/api'
+import { Progress } from '../ui/progress'
+import { useToast } from '../ui/toast'
 
 interface CSVUploadResults {
   leadList: {

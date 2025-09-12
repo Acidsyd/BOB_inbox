@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Button } from './ui/button'
-import { Switch } from './ui/switch'
+import { Button } from '../ui/button'
+import { Switch } from '../ui/switch'
 import { RefreshCw, Activity, AlertTriangle, CheckCircle } from 'lucide-react'
-import { useEmailSync } from '../hooks/useEmailSync'
+import { useEmailSync } from '../../hooks/useEmailSync'
 
 interface AutoSyncControlProps {
   className?: string

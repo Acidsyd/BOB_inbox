@@ -1,21 +1,21 @@
 import { useState } from 'react'
-import { Button } from './ui/button'
+import { Button } from '../ui/button'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from './ui/select'
+} from '../ui/select'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from './ui/popover'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
-import { Textarea } from './ui/textarea'
-import { Badge } from './ui/badge'
+} from '../ui/popover'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
+import { Textarea } from '../ui/textarea'
+import { Badge } from '../ui/badge'
 import { 
   FileText, 
   Eye,
@@ -25,7 +25,7 @@ import {
   MessageSquare,
   UserCheck
 } from 'lucide-react'
-import { useReplyTemplates } from '../hooks/useReplyTemplates'
+import { useReplyTemplates } from '../../hooks/useReplyTemplates'
 
 interface ReplyTemplateSelectorProps {
   onSelectTemplate: (subject: string, content_html: string, content_plain?: string) => void

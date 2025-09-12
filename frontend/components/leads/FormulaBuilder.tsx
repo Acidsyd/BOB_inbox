@@ -13,9 +13,9 @@ import {
   FunctionDefinition, 
   FormulaError,
   FormulaContext 
-} from '../lib/FormulaEngine';
+} from '../../lib/FormulaEngine';
 import { Lead, ColumnDefinition } from '../types/spreadsheet';
-import { cn } from '../lib/utils';
+import { cn } from '../../lib/utils';
 
 // Icons
 import {
@@ -41,12 +41,12 @@ import {
 } from 'lucide-react';
 
 // UI Components
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { ScrollArea } from './ui/scroll-area';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { ScrollArea } from '../ui/scroll-area';
 
 interface FormulaBuilderProps {
   columns: ColumnDefinition[];

@@ -9,11 +9,11 @@ import {
   CardCvcElement,
   CardElement
 } from '@stripe/react-stripe-js'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Button } from './ui/button'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
-import { Alert, AlertDescription } from './ui/alert'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { Button } from '../ui/button'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
+import { Alert, AlertDescription } from '../ui/alert'
 import { CreditCard, Lock, AlertCircle } from 'lucide-react'
 
 interface PaymentMethodFormProps {

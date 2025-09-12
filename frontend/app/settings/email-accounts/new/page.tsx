@@ -1,12 +1,12 @@
 'use client'
 
-import ProtectedRoute from '../../../components/auth/ProtectedRoute'
-import AppLayout from '../../../components/layout/AppLayout'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
-import { Button } from '../../../components/ui/button'
-import { Input } from '../../../components/ui/input'
-import { Label } from '../../../components/ui/label'
-import { useToast } from '../../../components/ui/toast'
+import ProtectedRoute from '../../../../components/auth/ProtectedRoute'
+import AppLayout from '../../../../components/layout/AppLayout'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../../components/ui/card'
+import { Button } from '../../../../components/ui/button'
+import { Input } from '../../../../components/ui/input'
+import { Label } from '../../../../components/ui/label'
+import { useToast } from '../../../../components/ui/toast'
 import { 
   ArrowLeft, 
   Shield,
@@ -26,7 +26,7 @@ import {
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useWorkflowNavigation } from '../../../lib/navigation/context'
+import { useWorkflowNavigation } from '../../../../lib/navigation/context'
 
 type SetupStep = 'provider-selection' | 'gmail-oauth2-setup' | 'microsoft-oauth2-setup' | 'smtp-setup'
 type Provider = 'gmail-oauth2' | 'microsoft-oauth2' | 'smtp'

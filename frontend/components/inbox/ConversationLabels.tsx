@@ -1,8 +1,8 @@
 'use client'
 
 import React from 'react'
-import { Label } from '../hooks/useLabels'
-import { Badge } from './ui/badge'
+import { Label } from '../../hooks/useLabels'
+import { Badge } from '../ui/badge'
 import { X } from 'lucide-react'
 
 interface ConversationLabelsProps {

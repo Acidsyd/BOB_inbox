@@ -1,9 +1,9 @@
 'use client'
 
-import ProtectedRoute from '../components/auth/ProtectedRoute'
-import AppLayout from '../components/layout/AppLayout'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
-import { Button } from '../components/ui/button'
+import ProtectedRoute from '../../components/auth/ProtectedRoute'
+import AppLayout from '../../components/layout/AppLayout'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
+import { Button } from '../../components/ui/button'
 import { 
   Mail, 
   Building, 

@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Button } from './ui/button'
-import { Alert, AlertDescription, AlertTitle } from './ui/alert'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
+import { Button } from '../ui/button'
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert'
 import { 
   ExternalLink, 
   Settings, 
@@ -13,7 +13,7 @@ import {
   ArrowRight,
   Info
 } from 'lucide-react'
-import { billingAPI } from '../lib/billing'
+import { billingAPI } from '../../lib/billing'
 
 interface BillingPortalProps {
   isLoading?: boolean

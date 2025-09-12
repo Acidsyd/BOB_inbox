@@ -1,17 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from './ui/button'
+import { Button } from '../ui/button'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from './ui/popover'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
-import { Badge } from './ui/badge'
+} from '../ui/popover'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
+import { Badge } from '../ui/badge'
 import { Variable, Search, Plus, User, Building, Mail, Phone, Calendar, MapPin, Hash, FileText } from 'lucide-react'
-import { cn } from '../lib/utils'
+import { cn } from '../../lib/utils'
 
 export interface VariableOption {
   key: string
