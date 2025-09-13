@@ -18,8 +18,13 @@ import {
   CheckCircle
 } from 'lucide-react'
 
-// Import SimpleRichTextEditor but upgrade it with enhanced features
-import { SimpleRichTextEditor } from '../ui/simple-rich-text-editor'
+// Import RichTextEditor with dynamic loading to prevent SSR issues
+import dynamic from 'next/dynamic'
+
+const RichTextEditor = dynamic(() => import('../ui/rich-text-editor').then(mod => ({ default: mod.RichTextEditor })), {
+  ssr: false,
+  loading: () => <div className="border rounded-lg h-64 bg-gray-50 animate-pulse" />
+})
 
 interface EmailSequence {
   id: number
@@ -195,7 +200,7 @@ export default function EmailSequenceBuilder({ campaignData, updateCampaignData 
       <div>
         <Label htmlFor="emailContent">Email Content *</Label>
         <div className="mt-1">
-          <SimpleRichTextEditor
+          <RichTextEditor
             content={campaignData.emailContent}
             onChange={(html, text) => {
               updateCampaignData({ emailContent: html })
@@ -299,7 +304,7 @@ I hope this email finds you well..."
             <div>
               <Label>Email Content *</Label>
               <div className="mt-1">
-                <SimpleRichTextEditor
+                <RichTextEditor
                   content={email.content}
                   onChange={(html, text) => {
                     updateSequenceEmail(email.id, 'content', html)

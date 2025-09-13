@@ -1,7 +1,13 @@
+'use client'
+
 import Link from 'next/link'
 import { ArrowRight, CheckCircle, Zap, Shield, Users, BarChart3, Mail, Globe, Sparkles, TrendingUp } from 'lucide-react'
 
 export default function LandingPage() {
+  const handleButtonClick = (buttonName: string) => {
+    console.log(`🔍 HOMEPAGE CLICK TEST: ${buttonName}`)
+  }
+
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
@@ -9,8 +15,8 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center space-x-4">
-              <img src="/bobinbox-icon.png" alt="BOBinbox" className="w-12 h-12 rounded-xl shadow-md" />
-              <span className="text-3xl font-bold gradient-text">BOBinbox</span>
+              <img src="/mailsender-icon.png" alt="Mailsender" className="w-12 h-12 rounded-xl shadow-md" />
+              <span className="text-3xl font-bold gradient-text">Mailsender</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
               <Link href="/features" className="text-gray-600 hover:text-gray-900 transition">Features</Link>
@@ -48,12 +54,18 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
               <Link href="/register">
-                <button className="btn-primary text-lg px-8 py-4 flex items-center justify-center">
+                <button 
+                  className="btn-primary text-lg px-8 py-4 flex items-center justify-center"
+                  onClick={() => handleButtonClick('Hero CTA - Start Free Trial')}
+                >
                   Start 14-Day Free Trial
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </button>
               </Link>
-              <button className="btn-secondary text-lg px-8 py-4">
+              <button 
+                className="btn-secondary text-lg px-8 py-4"
+                onClick={() => handleButtonClick('Hero CTA - Watch Demo')}
+              >
                 Watch 2-Min Demo
               </button>
             </div>
@@ -213,7 +225,7 @@ export default function LandingPage() {
                 ))}
               </div>
               <p className="text-gray-700 mb-4">
-                "BOBinbox transformed our outreach. We went from 20 meetings/month to 150+ in just 3 months."
+                "Mailsender transformed our outreach. We went from 20 meetings/month to 150+ in just 3 months."
               </p>
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-purple-100 rounded-full mr-3"></div>

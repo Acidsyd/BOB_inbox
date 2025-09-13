@@ -58,12 +58,12 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
   };
 
   const formatDate = (date: string | Date | undefined | null, formatString?: string) => {
-    if (!isClient) return 'Loading...';
+    if (!isClient) return '';
     return formatDateInTimezone(date, formatString, timezone);
   };
 
   const formatMessageDate = (date: string | Date | undefined | null) => {
-    if (!isClient) return 'Loading...';
+    if (!isClient) return '';
     return formatInboxMessageDate(date);
   };
 
@@ -81,11 +81,6 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
     timezoneInfo: isClient ? getTimezoneInfo() : null,
     refreshTimezone
   };
-
-  // Don't render children until client-side hydration is complete
-  if (!isClient) {
-    return <div>Loading timezone...</div>;
-  }
 
   return (
     <TimezoneContext.Provider value={contextValue}>
@@ -112,7 +107,7 @@ export function useFormatDate() {
       if (typeof window !== 'undefined') {
         return formatDateInTimezone(date, formatString);
       }
-      return 'Loading...';
+      return '';
     };
   }
   

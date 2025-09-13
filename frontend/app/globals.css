@@ -187,6 +187,24 @@
   border-color: #9333ea !important;
 }
 
+/* Fix potential click issues */
+* {
+  pointer-events: auto !important;
+}
+
+/* Ensure buttons and links are clickable */
+button, a, [role="button"] {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  user-select: none !important;
+}
+
+/* Prevent transform interference */
+.card-hover, .btn-primary, .btn-secondary {
+  will-change: transform !important;
+  backface-visibility: hidden !important;
+}
+
 /* Improved mobile responsiveness */
 @media (max-width: 768px) {
   .pricing-card {

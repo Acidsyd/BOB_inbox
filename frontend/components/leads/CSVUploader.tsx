@@ -27,7 +27,7 @@ interface CSVUploadResults {
   }
 }
 
-type UploadStep = 'upload' | 'mapping' | 'uploading' | 'completed'
+type UploadStep = 'upload' | 'duplicates' | 'mapping' | 'uploading' | 'completed'
 
 export default function CSVUploader() {
   const router = useRouter()
@@ -49,6 +49,7 @@ export default function CSVUploader() {
   const [uploadResults, setUploadResults] = useState<CSVUploadResults | null>(null)
   const [error, setError] = useState<string>('')
   const [isDragOver, setIsDragOver] = useState(false)
+  const [allowDuplicates, setAllowDuplicates] = useState(false)
 
   // Clean up EventSource on unmount
   React.useEffect(() => {
@@ -237,8 +238,12 @@ export default function CSVUploader() {
 
   const handleNext = () => {
     if (file && listName) {
-      setCurrentStep('mapping')
+      setCurrentStep('duplicates')
     }
+  }
+
+  const handleDuplicatesNext = () => {
+    setCurrentStep('mapping')
   }
 
   
@@ -261,6 +266,7 @@ export default function CSVUploader() {
       const formData = new FormData()
       formData.append('csvFile', file)  // Changed from 'file' to 'csvFile' to match backend
       formData.append('listName', listName)
+      formData.append('allowDuplicates', allowDuplicates.toString())
       
       // Include field mapping if provided
       if (mapping) {
