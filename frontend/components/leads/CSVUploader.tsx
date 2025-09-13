@@ -175,16 +175,21 @@ export default function CSVUploader() {
 
   // Handle file selection
   const handleFileSelect = useCallback((selectedFile: File) => {
+    console.log('📁 File selected:', selectedFile.name, 'Size:', selectedFile.size, 'Type:', selectedFile.type);
+
     if (selectedFile.type !== 'text/csv' && !selectedFile.name.toLowerCase().endsWith('.csv')) {
+      console.warn('❌ Invalid file type:', selectedFile.type);
       setError('Please select a valid CSV file')
       return
     }
 
     if (selectedFile.size > 10 * 1024 * 1024) { // 10MB limit
+      console.warn('❌ File too large:', selectedFile.size);
       setError('File size must be less than 10MB')
       return
     }
 
+    console.log('✅ File validation passed, setting file state');
     setFile(selectedFile)
     setError('')
     setUploadResults(null)
@@ -196,10 +201,25 @@ export default function CSVUploader() {
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target?.result as string;
-      if (!text) return;
-      const lines = text.split('\n').filter(line => line.trim());
-      setTotalRows(lines.length - 1);
+      try {
+        console.log('📄 FileReader onload triggered');
+        const text = e.target?.result as string;
+        console.log('📊 File content length:', text?.length);
+        if (!text) {
+          console.warn('⚠️ No text content found');
+          return;
+        }
+        const lines = text.split('\n').filter(line => line.trim());
+        console.log('📈 Total rows calculated:', lines.length - 1);
+        setTotalRows(lines.length - 1);
+      } catch (error) {
+        console.error('❌ Error processing file:', error);
+        setError('Error reading file content');
+      }
+    };
+    reader.onerror = (error) => {
+      console.error('❌ FileReader error:', error);
+      setError('Failed to read file');
     };
     reader.readAsText(selectedFile);
   }, [])
