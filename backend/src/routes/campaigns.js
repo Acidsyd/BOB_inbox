@@ -378,7 +378,7 @@ router.post('/test-email', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/campaigns - List all campaigns
+// GET /api/campaigns - List all campaigns (OPTIMIZED - no individual metrics per campaign)
 router.get('/', authenticateToken, async (req, res) => {
   try {
     console.log('📋 GET /api/campaigns called');
@@ -402,8 +402,9 @@ router.get('/', authenticateToken, async (req, res) => {
 
     console.log(`📊 Found ${userCampaigns?.length || 0} campaigns for organization ${req.user.organizationId}`);
 
-    // Expand config field for frontend compatibility with real lead counts and metrics
-    const expandedCampaigns = await Promise.all((userCampaigns || []).map(async campaign => {
+    // PERFORMANCE OPTIMIZATION: Return campaigns with basic data only
+    // Individual metrics will be fetched on-demand when viewing specific campaign
+    const expandedCampaigns = (userCampaigns || []).map(campaign => {
       const expanded = {
         id: campaign.id,
         name: campaign.name,
@@ -417,32 +418,27 @@ router.get('/', authenticateToken, async (req, res) => {
         // Ensure type field exists
         type: campaign.config?.type || 'outbound',
         // Keep original config for reference
-        _config: campaign.config
+        _config: campaign.config,
+        // Set default metrics (will be loaded on demand)
+        leads: 0,
+        sent: 0,
+        delivered: 0,
+        opened: 0,
+        clicked: 0,
+        replied: 0,
+        bounced: 0,
+        openRate: 0,
+        clickRate: 0,
+        replyRate: 0,
+        bounceRate: 0
       };
       
-      // Get actual lead count from database
-      const actualLeadCount = await getLeadCount(campaign.config?.leadListId, req.user.organizationId);
-      
-      // Get real campaign metrics from scheduled_emails table
-      const metrics = await getCampaignMetrics(campaign.id, req.user.organizationId);
-      
-      // Add metrics with real data
-      expanded.leads = actualLeadCount;
-      expanded.sent = metrics.sent;
-      expanded.delivered = metrics.delivered;
-      expanded.opened = metrics.opened;
-      expanded.clicked = metrics.clicked;
-      expanded.replied = metrics.replied;
-      expanded.bounced = metrics.bounced;
-      expanded.openRate = metrics.openRate;
-      expanded.clickRate = metrics.clickRate;
-      expanded.replyRate = metrics.replyRate;
-      expanded.bounceRate = metrics.bounceRate;
-      
-      console.log(`📊 Campaign ${campaign.name}: ${actualLeadCount} leads, ${metrics.sent} sent from list ${campaign.config?.leadListId}`);
+      console.log(`📊 Campaign ${campaign.name}: metrics will load on demand`);
       
       return expanded;
-    }));
+    });
+
+    console.log(`⚡ OPTIMIZED: Returned ${expandedCampaigns.length} campaigns in minimal time (no individual DB calls)`);
 
     res.json({
       success: true,
@@ -1030,28 +1026,50 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
       return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
-    // Insert scheduled emails into database
-    console.log(`🔍 Step 4: Creating ${scheduledEmails.length} scheduled email records...`);
+    // Insert scheduled emails into database using batches to avoid Supabase 1000-row limit
+    console.log(`🔍 Step 4: Creating ${scheduledEmails.length} scheduled email records in batches...`);
     console.log('📝 Sample scheduled email record:', JSON.stringify(scheduledEmails[0], null, 2));
-    const { error: insertError } = await supabase
-      .from('scheduled_emails')
-      .insert(scheduledEmails);
-    console.log('✅ Step 4 complete: Scheduled emails inserted into database');
 
-    if (insertError) {
-      console.error('❌ Error inserting scheduled emails:', insertError);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to schedule emails',
-        details: insertError.message
-      });
+    const BATCH_SIZE = 10; // Ultra-small batches to avoid production database timeout
+    let totalInserted = 0;
+
+    for (let i = 0; i < scheduledEmails.length; i += BATCH_SIZE) {
+      const batch = scheduledEmails.slice(i, i + BATCH_SIZE);
+      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(scheduledEmails.length / BATCH_SIZE);
+
+      console.log(`📦 Inserting batch ${batchNumber}/${totalBatches}: ${batch.length} emails`);
+
+      const { error: batchError } = await supabase
+        .from('scheduled_emails')
+        .insert(batch);
+
+      if (batchError) {
+        console.error(`❌ Error inserting batch ${batchNumber}:`, batchError);
+        return res.status(500).json({
+          success: false,
+          error: `Failed to schedule emails in batch ${batchNumber}`,
+          details: batchError.message
+        });
+      }
+
+      totalInserted += batch.length;
+      console.log(`✅ Batch ${batchNumber} complete: ${batch.length} emails inserted (${totalInserted}/${scheduledEmails.length} total)`);
+
+      // Add a longer delay between batches to reduce production database load
+      if (batchNumber < totalBatches) {
+        console.log('⏱️ Waiting 500ms before next batch...');
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
     }
+
+    console.log('✅ Step 4 complete: All scheduled emails inserted into database');
 
     // Campaign status was already atomically updated to 'active' earlier to prevent race conditions
     // No need to update status again here
 
     console.log('🎉 Campaign started successfully:', campaignId);
-    console.log(`📧 Scheduled ${scheduledEmails.length} emails`);
+    console.log(`📧 Scheduled ${totalInserted} emails`);
     console.log(`⏰ First email will send at: ${scheduledEmails[0]?.send_at}`);
     console.log(`⏰ Last email will send at: ${scheduledEmails[scheduledEmails.length - 1]?.send_at}`);
     
