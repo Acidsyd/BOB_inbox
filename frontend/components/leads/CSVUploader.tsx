@@ -27,7 +27,7 @@ interface CSVUploadResults {
   }
 }
 
-type UploadStep = 'upload' | 'duplicates' | 'mapping' | 'uploading' | 'completed'
+type UploadStep = 'upload' | 'mapping' | 'uploading' | 'completed'
 
 export default function CSVUploader() {
   const router = useRouter()
@@ -258,12 +258,8 @@ export default function CSVUploader() {
 
   const handleNext = () => {
     if (file && listName) {
-      setCurrentStep('duplicates')
+      setCurrentStep('mapping')
     }
-  }
-
-  const handleDuplicatesNext = () => {
-    setCurrentStep('mapping')
   }
 
   
