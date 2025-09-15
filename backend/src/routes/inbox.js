@@ -158,15 +158,17 @@ router.get('/conversations/:id/messages', authenticateToken, async (req, res) =>
       if (message.sent_at) {
         try {
           const sentAtDate = new Date(message.sent_at);
-          convertedMessage.sent_at_display = sentAtDate.toLocaleString('en-US', {
+          // Use a more reliable timezone conversion method
+          const options = {
             timeZone: timezone,
             year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
             minute: '2-digit',
-            second: '2-digit'
-          });
+            hour12: true
+          };
+          convertedMessage.sent_at_display = sentAtDate.toLocaleString('en-US', options);
         } catch (error) {
           console.warn(`⚠️ Error converting sent_at timestamp: ${message.sent_at}`, error);
           convertedMessage.sent_at_display = message.sent_at; // Fallback to original
@@ -177,15 +179,17 @@ router.get('/conversations/:id/messages', authenticateToken, async (req, res) =>
       if (message.received_at) {
         try {
           const receivedAtDate = new Date(message.received_at);
-          convertedMessage.received_at_display = receivedAtDate.toLocaleString('en-US', {
+          // Use a more reliable timezone conversion method
+          const options = {
             timeZone: timezone,
             year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
             minute: '2-digit',
-            second: '2-digit'
-          });
+            hour12: true
+          };
+          convertedMessage.received_at_display = receivedAtDate.toLocaleString('en-US', options);
         } catch (error) {
           console.warn(`⚠️ Error converting received_at timestamp: ${message.received_at}`, error);
           convertedMessage.received_at_display = message.received_at; // Fallback to original
