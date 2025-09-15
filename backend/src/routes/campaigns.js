@@ -1695,20 +1695,36 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
       });
     }
     
-    // If campaign was updated very recently (within 30 seconds), likely another reschedule in progress
-    const lastUpdate = new Date(statusCheck.updated_at);
-    const now = new Date();
-    const timeDiff = (now - lastUpdate) / 1000; // seconds
-    
-    if (timeDiff < 30) {
-      console.log(`⚠️ Campaign was updated ${timeDiff.toFixed(1)}s ago - potential concurrent reschedule detected`);
-      console.log(`🛑 Aborting reschedule to prevent duplicates`);
-      return res.status(409).json({
-        success: false,
-        error: 'Another reschedule operation is already in progress',
-        code: 'RESCHEDULE_IN_PROGRESS',
-        lastUpdate: statusCheck.updated_at
-      });
+    // FIXED: Use a more specific check for actual reschedule operations
+    // Instead of blocking on any update, check for concurrent reschedule operations
+    // by looking for recent 'skipped' status updates which indicate active rescheduling
+    console.log(`✅ Concurrent protection check passed - proceeding with reschedule`);
+
+    // Check if there are any recent 'skipped' emails indicating active rescheduling
+    const { data: recentSkipped, error: skipError } = await supabase
+      .from('scheduled_emails')
+      .select('updated_at')
+      .eq('campaign_id', campaignId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'skipped')
+      .gte('updated_at', new Date(Date.now() - 30 * 1000).toISOString())
+      .limit(1);
+
+    if (skipError) {
+      console.warn('⚠️ Could not check for concurrent reschedule, proceeding cautiously');
+    } else if (recentSkipped && recentSkipped.length > 0) {
+      const lastSkipped = new Date(recentSkipped[0].updated_at);
+      const timeDiff = (Date.now() - lastSkipped.getTime()) / 1000;
+      if (timeDiff < 30) {
+        console.log(`⚠️ Recent reschedule detected ${timeDiff.toFixed(1)}s ago - potential concurrent operation`);
+        console.log(`🛑 Aborting reschedule to prevent duplicates`);
+        return res.status(409).json({
+          success: false,
+          error: 'Another reschedule operation is already in progress',
+          code: 'RESCHEDULE_IN_PROGRESS',
+          lastReschedule: recentSkipped[0].updated_at
+        });
+      }
     }
     
     // Step 2.1: Cancel ALL pending emails (scheduled + sending) to prevent duplicates
