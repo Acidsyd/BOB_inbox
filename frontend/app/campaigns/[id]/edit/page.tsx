@@ -4,35 +4,55 @@ import ProtectedRoute from '../../../../components/auth/ProtectedRoute'
 import AppLayout from '../../../../components/layout/AppLayout'
 import React, { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, ArrowLeft, Save } from 'lucide-react'
+import { Loader2, ArrowLeft, Save, Settings, AlertCircle, Calendar, Users, Play, Check } from 'lucide-react'
 import { Button } from '../../../../components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '../../../../components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../../components/ui/card'
 import { Input } from '../../../../components/ui/input'
 import { Label } from '../../../../components/ui/label'
 import { api } from '../../../../lib/api'
 import EmailSequenceBuilder from '../../../../components/campaigns/EmailSequenceBuilder'
+import { useEmailAccountsSelection } from '../../../../hooks/useEmailAccountsSelection'
+import LeadListSelector from '../../../../components/campaigns/LeadListSelector'
 
 interface Campaign {
   id: string
   name: string
   status: string
   config: {
+    description?: string
     emailSubject: string
     emailContent: string
+    followUpEnabled: boolean
     emailSequence: any[]
     leadListId: string
+    leadListName?: string
+    leadListCount?: number
     emailAccounts: string[]
+    scheduleType: 'immediate' | 'scheduled'
+    scheduledDate?: Date
+    dailyLimit: number
     emailsPerDay: number
     emailsPerHour: number
+    emailsPerMinute: number
     sendingInterval: number
     activeDays: string[]
     sendingHours: { start: number; end: number }
     timezone: string
-    trackOpens: boolean
-    trackClicks: boolean
-    stopOnReply: boolean
     enableJitter: boolean
     jitterMinutes: number
+    stopOnReply: boolean
+    stopOnClick: boolean
+    stopOnOpen: boolean
+    sendPlainText: boolean
+    trackOpens: boolean
+    trackClicks: boolean
+    companyLevelPause: boolean
+    domainLevelPause: boolean
+    aiEmailMatching: boolean
+    aiLeadCategorization: boolean
+    bounceProtection: boolean
+    domainRateLimit: boolean
+    includeUnsubscribe: boolean
   }
 }
 
@@ -46,7 +66,10 @@ function EditCampaignPageContent({
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isRestarting, setIsRestarting] = useState(false)
   const [error, setError] = useState('')
+  const [currentTab, setCurrentTab] = useState('basic')
+  const { accounts: emailAccounts, loading: accountsLoading, error: accountsError } = useEmailAccountsSelection()
 
   // Form data matching campaign config structure
   const [campaignData, setCampaignData] = useState({
@@ -64,7 +87,7 @@ function EditCampaignPageContent({
     emailsPerDay: 50,
     emailsPerHour: 10,
     emailsPerMinute: 1,
-    sendingInterval: 5,
+    sendingInterval: 15,
     activeDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
     sendingHours: { start: 9, end: 17 },
     csvData: [],
@@ -72,12 +95,31 @@ function EditCampaignPageContent({
     leadListName: '',
     leadListCount: 0,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    enableJitter: true,
+    jitterMinutes: 3,
+    stopOnReply: true,
+    stopOnClick: false,
+    stopOnOpen: false,
+    sendPlainText: false,
     trackOpens: true,
     trackClicks: true,
-    stopOnReply: true,
-    enableJitter: true,
-    jitterMinutes: 2
+    companyLevelPause: true,
+    domainLevelPause: false,
+    aiEmailMatching: true,
+    aiLeadCategorization: false,
+    bounceProtection: true,
+    domainRateLimit: false,
+    includeUnsubscribe: true
   })
+
+  const tabs = [
+    { id: 'basic', name: 'Basic Info', icon: Settings },
+    { id: 'sequence', name: 'Email Sequence', icon: Settings },
+    { id: 'leads', name: 'Lead List', icon: Users },
+    { id: 'accounts', name: 'Email Accounts', icon: Settings },
+    { id: 'timing', name: 'Timing Settings', icon: Calendar },
+    { id: 'advanced', name: 'Advanced Settings', icon: Settings }
+  ]
 
   useEffect(() => {
     fetchCampaign()
@@ -108,7 +150,7 @@ function EditCampaignPageContent({
           emailsPerDay: fetchedCampaign.config?.emailsPerDay || 50,
           emailsPerHour: fetchedCampaign.config?.emailsPerHour || 10,
           emailsPerMinute: fetchedCampaign.config?.emailsPerMinute || 1,
-          sendingInterval: fetchedCampaign.config?.sendingInterval || 5,
+          sendingInterval: fetchedCampaign.config?.sendingInterval || 15,
           activeDays: fetchedCampaign.config?.activeDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
           sendingHours: fetchedCampaign.config?.sendingHours || { start: 9, end: 17 },
           csvData: fetchedCampaign.config?.csvData || [],
@@ -116,11 +158,21 @@ function EditCampaignPageContent({
           leadListName: fetchedCampaign.config?.leadListName || '',
           leadListCount: fetchedCampaign.config?.leadListCount || 0,
           timezone: fetchedCampaign.config?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+          enableJitter: fetchedCampaign.config?.enableJitter ?? true,
+          jitterMinutes: fetchedCampaign.config?.jitterMinutes || 3,
+          stopOnReply: fetchedCampaign.config?.stopOnReply ?? true,
+          stopOnClick: fetchedCampaign.config?.stopOnClick ?? false,
+          stopOnOpen: fetchedCampaign.config?.stopOnOpen ?? false,
+          sendPlainText: fetchedCampaign.config?.sendPlainText ?? false,
           trackOpens: fetchedCampaign.config?.trackOpens ?? true,
           trackClicks: fetchedCampaign.config?.trackClicks ?? true,
-          stopOnReply: fetchedCampaign.config?.stopOnReply ?? true,
-          enableJitter: fetchedCampaign.config?.enableJitter ?? true,
-          jitterMinutes: fetchedCampaign.config?.jitterMinutes || 2
+          companyLevelPause: fetchedCampaign.config?.companyLevelPause ?? true,
+          domainLevelPause: fetchedCampaign.config?.domainLevelPause ?? false,
+          aiEmailMatching: fetchedCampaign.config?.aiEmailMatching ?? true,
+          aiLeadCategorization: fetchedCampaign.config?.aiLeadCategorization ?? false,
+          bounceProtection: fetchedCampaign.config?.bounceProtection ?? true,
+          domainRateLimit: fetchedCampaign.config?.domainRateLimit ?? false,
+          includeUnsubscribe: fetchedCampaign.config?.includeUnsubscribe ?? true
         })
       } else {
         setError('Campaign not found')
@@ -131,6 +183,10 @@ function EditCampaignPageContent({
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const updateCampaignData = (data: any) => {
+    setCampaignData(prev => ({ ...prev, ...data }))
   }
 
   const handleSaveCampaign = async () => {
@@ -161,17 +217,41 @@ function EditCampaignPageContent({
           leadListName: campaignData.leadListName,
           leadListCount: campaignData.leadListCount,
           timezone: campaignData.timezone,
+          enableJitter: campaignData.enableJitter,
+          jitterMinutes: campaignData.jitterMinutes,
+          stopOnReply: campaignData.stopOnReply,
+          stopOnClick: campaignData.stopOnClick,
+          stopOnOpen: campaignData.stopOnOpen,
+          sendPlainText: campaignData.sendPlainText,
           trackOpens: campaignData.trackOpens,
           trackClicks: campaignData.trackClicks,
-          stopOnReply: campaignData.stopOnReply,
-          enableJitter: campaignData.enableJitter,
-          jitterMinutes: campaignData.jitterMinutes
+          companyLevelPause: campaignData.companyLevelPause,
+          domainLevelPause: campaignData.domainLevelPause,
+          aiEmailMatching: campaignData.aiEmailMatching,
+          aiLeadCategorization: campaignData.aiLeadCategorization,
+          bounceProtection: campaignData.bounceProtection,
+          domainRateLimit: campaignData.domainRateLimit,
+          includeUnsubscribe: campaignData.includeUnsubscribe
         }
       }
 
       const response = await api.put(`/campaigns/${id}`, updateData)
 
       if (response.data.success) {
+        // Campaign restart functionality - restart if campaign was running
+        if (campaign?.status === 'running') {
+          setIsRestarting(true)
+          try {
+            await api.post(`/campaigns/${id}/restart`)
+            console.log('Campaign restarted successfully with new configuration')
+          } catch (restartError) {
+            console.error('Failed to restart campaign:', restartError)
+            // Continue anyway - config was saved
+          } finally {
+            setIsRestarting(false)
+          }
+        }
+
         router.push(`/campaigns/${id}`)
       } else {
         setError(response.data.error || 'Failed to update campaign')
@@ -235,7 +315,7 @@ function EditCampaignPageContent({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto py-8 px-4">
+      <div className="max-w-6xl mx-auto py-8 px-4">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-6">
@@ -254,46 +334,688 @@ function EditCampaignPageContent({
           </div>
         </div>
 
-        {/* Campaign Edit Form */}
+        {/* Tab Navigation */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              {tabs.map((tab) => {
+                const Icon = tab.icon
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setCurrentTab(tab.id)}
+                    className={`group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm ${
+                      currentTab === tab.id
+                        ? 'border-purple-500 text-purple-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <Icon className={`-ml-0.5 mr-2 h-5 w-5 ${
+                      currentTab === tab.id ? 'text-purple-500' : 'text-gray-400 group-hover:text-gray-500'
+                    }`} />
+                    {tab.name}
+                  </button>
+                )
+              })}
+            </nav>
+          </div>
+        </div>
+
+        {/* Tab Content */}
         <div className="space-y-6">
-          {/* Campaign Name */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Campaign Name</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
+          {/* Basic Info Tab */}
+          {currentTab === 'basic' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Basic Campaign Information</CardTitle>
+                <CardDescription>Configure the basic details of your campaign</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
                 <div>
-                  <Label htmlFor="campaignName">Name</Label>
+                  <Label htmlFor="campaignName">Campaign Name *</Label>
                   <Input
                     id="campaignName"
                     value={campaignData.name}
-                    onChange={(e) => setCampaignData(prev => ({ ...prev, name: e.target.value }))}
+                    onChange={(e) => updateCampaignData({ name: e.target.value })}
                     placeholder="Enter campaign name"
-                    className="w-full"
+                    className="mt-1"
                   />
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+                <div>
+                  <Label htmlFor="description">Description (optional)</Label>
+                  <textarea
+                    id="description"
+                    value={campaignData.description}
+                    onChange={(e) => updateCampaignData({ description: e.target.value })}
+                    placeholder="Describe your campaign objectives..."
+                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500"
+                    rows={3}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Email Sequence */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Email Sequence</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {campaignData.emailSubject !== undefined && (
+          {/* Email Sequence Tab */}
+          {currentTab === 'sequence' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Email Sequence</CardTitle>
+                <CardDescription>Configure your email content and follow-up sequence</CardDescription>
+              </CardHeader>
+              <CardContent>
                 <EmailSequenceBuilder
                   campaignData={campaignData}
-                  updateCampaignData={(data) => setCampaignData(prev => ({ ...prev, ...data }))}
+                  updateCampaignData={updateCampaignData}
                 />
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Lead List Tab */}
+          {currentTab === 'leads' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Lead List Selection</CardTitle>
+                <CardDescription>Choose which lead list to use for this campaign</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <LeadListSelector
+                  selectedListId={campaignData.leadListId}
+                  onListSelect={(listId, list, filteredCount) => {
+                    updateCampaignData({
+                      leadListId: listId,
+                      leadListName: list.name,
+                      leadListCount: filteredCount !== undefined ? filteredCount : list.activeLeads
+                    })
+                  }}
+                  onClearSelection={() => {
+                    updateCampaignData({
+                      leadListId: '',
+                      leadListName: '',
+                      leadListCount: 0
+                    })
+                  }}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Email Accounts Tab */}
+          {currentTab === 'accounts' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Email Accounts</CardTitle>
+                <CardDescription>Select which email accounts to use for sending</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {accountsLoading && (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading email accounts...</p>
+                  </div>
+                )}
+
+                {accountsError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
+                      <span className="text-red-800 font-medium">Error loading accounts: {accountsError}</span>
+                    </div>
+                  </div>
+                )}
+
+                {!accountsLoading && !accountsError && emailAccounts.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="text-sm text-gray-600 mb-3">
+                      Select one or more accounts for sending. Multiple accounts will rotate automatically.
+                    </div>
+
+                    <div className="space-y-3">
+                      {emailAccounts.map((account) => (
+                        <div
+                          key={account.id}
+                          className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <input
+                              type="checkbox"
+                              id={`account-${account.id}`}
+                              checked={campaignData.emailAccounts.includes(account.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  updateCampaignData({
+                                    emailAccounts: [...campaignData.emailAccounts, account.id]
+                                  });
+                                } else {
+                                  updateCampaignData({
+                                    emailAccounts: campaignData.emailAccounts.filter(id => id !== account.id)
+                                  });
+                                }
+                              }}
+                              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                              disabled={account.warmup_status !== 'active'}
+                            />
+
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <Label htmlFor={`account-${account.id}`} className="font-medium">
+                                    {account.display_name || account.email}
+                                  </Label>
+                                  {account.display_name && (
+                                    <div className="text-sm text-gray-500">{account.email}</div>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center space-x-4 text-sm">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    account.provider === 'gmail' ? 'bg-red-100 text-red-800' :
+                                    account.provider === 'outlook' ? 'bg-blue-100 text-blue-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {account.provider.charAt(0).toUpperCase() + account.provider.slice(1)}
+                                  </span>
+
+                                  <div className="flex items-center">
+                                    <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
+                                      account.health_score >= 90 ? 'bg-green-500' :
+                                      account.health_score >= 70 ? 'bg-yellow-500' :
+                                      'bg-red-500'
+                                    }`}></span>
+                                    <span className="text-gray-600">Health: {account.health_score}%</span>
+                                  </div>
+
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    account.warmup_status === 'active' ? 'bg-green-100 text-green-800' :
+                                    account.warmup_status === 'warming' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {account.warmup_status === 'active' ? 'Ready' :
+                                     account.warmup_status === 'warming' ? 'Warming' :
+                                     account.warmup_status}
+                                  </span>
+
+                                  <span className="text-gray-600">
+                                    Limit: {account.daily_limit}/day
+                                  </span>
+                                </div>
+                              </div>
+
+                              {account.warmup_status !== 'active' && (
+                                <div className="mt-2 text-sm text-orange-600">
+                                  This account is not ready for campaigns yet.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {campaignData.emailAccounts.length > 0 && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 className="font-medium text-blue-900 mb-2">Selection Summary</h4>
+                        <div className="text-sm text-blue-800 space-y-1">
+                          <div>{campaignData.emailAccounts.length} account(s) selected</div>
+                          <div>
+                            Combined daily limit: {
+                              emailAccounts
+                                .filter(acc => campaignData.emailAccounts.includes(acc.id))
+                                .reduce((sum, acc) => sum + acc.daily_limit, 0)
+                            } emails/day
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!accountsLoading && !accountsError && emailAccounts.length === 0 && (
+                  <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
+                    <Settings className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Email Accounts Available</h3>
+                    <p className="text-gray-500 mb-4">
+                      You need to configure at least one email account before editing campaigns.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Timing Settings Tab */}
+          {currentTab === 'timing' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Timing Settings</CardTitle>
+                <CardDescription>Configure when and how frequently emails are sent</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Timezone Selection */}
+                <div>
+                  <Label className="text-base font-semibold">Timezone</Label>
+                  <div className="mt-3">
+                    <select
+                      value={campaignData.timezone || 'UTC'}
+                      onChange={(e) => updateCampaignData({ timezone: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500"
+                    >
+                      <option value="UTC">UTC (Coordinated Universal Time)</option>
+                      <option value="America/New_York">Eastern Time (ET)</option>
+                      <option value="America/Chicago">Central Time (CT)</option>
+                      <option value="America/Denver">Mountain Time (MT)</option>
+                      <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                      <option value="Europe/London">London (GMT/BST)</option>
+                      <option value="Europe/Paris">Paris (CET/CEST)</option>
+                      <option value="Europe/Berlin">Berlin (CET/CEST)</option>
+                      <option value="Europe/Rome">Rome (CET/CEST)</option>
+                      <option value="Asia/Tokyo">Tokyo (JST)</option>
+                      <option value="Asia/Shanghai">Shanghai (CST)</option>
+                      <option value="Asia/Mumbai">Mumbai (IST)</option>
+                      <option value="Australia/Sydney">Sydney (AEST/AEDT)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Sending Frequency */}
+                <div>
+                  <Label className="text-base font-semibold">Sending Frequency</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+                    <div>
+                      <Label htmlFor="emailsPerDay">Emails per day</Label>
+                      <Input
+                        id="emailsPerDay"
+                        type="number"
+                        value={campaignData.emailsPerDay}
+                        onChange={(e) => updateCampaignData({ emailsPerDay: parseInt(e.target.value) || 0 })}
+                        className="mt-1"
+                        min="1"
+                        max="500"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="emailsPerHour">Emails per hour</Label>
+                      <Input
+                        id="emailsPerHour"
+                        type="number"
+                        value={campaignData.emailsPerHour}
+                        onChange={(e) => updateCampaignData({ emailsPerHour: parseInt(e.target.value) || 0 })}
+                        className="mt-1"
+                        min="1"
+                        max="50"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="sendingInterval">Interval (minutes)</Label>
+                      <Input
+                        id="sendingInterval"
+                        type="number"
+                        value={campaignData.sendingInterval}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 5;
+                          updateCampaignData({ sendingInterval: Math.max(5, value) });
+                        }}
+                        className="mt-1"
+                        min="5"
+                        max="60"
+                        placeholder="Minimum 5 minutes"
+                      />
+                      {campaignData.sendingInterval < 5 && (
+                        <p className="text-sm text-red-500 mt-1">
+                          Minimum interval is 5 minutes for optimal deliverability
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Human-like Timing */}
+                <div>
+                  <Label className="text-base font-semibold">Natural Timing</Label>
+                  <div className="space-y-4 mt-3">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        id="enableJitter"
+                        type="checkbox"
+                        checked={campaignData.enableJitter}
+                        onChange={(e) => updateCampaignData({ enableJitter: e.target.checked })}
+                        className="rounded border-gray-300"
+                      />
+                      <Label htmlFor="enableJitter" className="text-sm">
+                        Add random variation to appear more natural
+                      </Label>
+                    </div>
+
+                    {campaignData.enableJitter && (
+                      <div>
+                        <Label htmlFor="jitterMinutes">Maximum variation (minutes)</Label>
+                        <Input
+                          id="jitterMinutes"
+                          type="number"
+                          value={campaignData.jitterMinutes}
+                          onChange={(e) => updateCampaignData({ jitterMinutes: Math.min(3, Math.max(1, parseInt(e.target.value) || 3)) })}
+                          className="mt-1 max-w-20"
+                          min="1"
+                          max="3"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          E.g: 15min interval → 9:02, 9:14, 9:32, 9:47 instead of 9:00, 9:15, 9:30, 9:45
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sending Hours */}
+                <div>
+                  <Label className="text-base font-semibold">Sending Hours</Label>
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div>
+                      <Label htmlFor="startHour">Start hour</Label>
+                      <select
+                        id="startHour"
+                        value={campaignData.sendingHours.start}
+                        onChange={(e) => updateCampaignData({
+                          sendingHours: { ...campaignData.sendingHours, start: parseInt(e.target.value) }
+                        })}
+                        className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500"
+                      >
+                        {Array.from({length: 24}, (_, i) => (
+                          <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <Label htmlFor="endHour">End hour</Label>
+                      <select
+                        id="endHour"
+                        value={campaignData.sendingHours.end}
+                        onChange={(e) => updateCampaignData({
+                          sendingHours: { ...campaignData.sendingHours, end: parseInt(e.target.value) }
+                        })}
+                        className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500"
+                      >
+                        {Array.from({length: 24}, (_, i) => (
+                          <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Active Days */}
+                <div>
+                  <Label className="text-base font-semibold">Active Days</Label>
+                  <div className="grid grid-cols-4 md:grid-cols-7 gap-2 mt-3">
+                    {[
+                      {value: 'monday', label: 'Mon'},
+                      {value: 'tuesday', label: 'Tue'},
+                      {value: 'wednesday', label: 'Wed'},
+                      {value: 'thursday', label: 'Thu'},
+                      {value: 'friday', label: 'Fri'},
+                      {value: 'saturday', label: 'Sat'},
+                      {value: 'sunday', label: 'Sun'}
+                    ].map(day => (
+                      <div key={day.value} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id={day.value}
+                          checked={campaignData.activeDays.includes(day.value)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              updateCampaignData({
+                                activeDays: [...campaignData.activeDays, day.value]
+                              });
+                            } else {
+                              updateCampaignData({
+                                activeDays: campaignData.activeDays.filter(d => d !== day.value)
+                              });
+                            }
+                          }}
+                          className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                        />
+                        <Label htmlFor={day.value} className="text-sm">{day.label}</Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Advanced Settings Tab */}
+          {currentTab === 'advanced' && (
+            <div className="space-y-6">
+              {/* Stop Conditions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <span>Stop Conditions</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Automatically pause sending to leads when they engage with your emails
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="stopOnReply"
+                      checked={campaignData.stopOnReply}
+                      onChange={(e) => updateCampaignData({ stopOnReply: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="stopOnReply" className="flex-1">
+                      <div className="font-medium">Stop when lead replies</div>
+                      <div className="text-sm text-gray-500">Prevent sending follow-ups to engaged prospects</div>
+                      <div className="text-xs text-green-600 mt-1">✅ Working - Automatically stops follow-up emails when leads reply</div>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="stopOnClick"
+                      checked={campaignData.stopOnClick}
+                      onChange={(e) => updateCampaignData({ stopOnClick: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="stopOnClick" className="flex-1">
+                      <div className="font-medium">Stop when lead clicks links</div>
+                      <div className="text-sm text-gray-500">Pause sequence when leads show interest</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Feature not implemented</div>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="stopOnOpen"
+                      checked={campaignData.stopOnOpen}
+                      onChange={(e) => updateCampaignData({ stopOnOpen: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="stopOnOpen" className="flex-1">
+                      <div className="font-medium">Stop when lead opens email</div>
+                      <div className="text-sm text-gray-500">Less aggressive - stops on first open</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Feature not implemented</div>
+                    </Label>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Email Delivery Optimization */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Email Delivery Optimization</CardTitle>
+                  <CardDescription>
+                    Improve deliverability and inbox placement rates
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="sendPlainText"
+                      checked={campaignData.sendPlainText}
+                      onChange={(e) => updateCampaignData({ sendPlainText: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="sendPlainText" className="flex-1">
+                      <div className="font-medium">Send emails in plain text</div>
+                      <div className="text-sm text-gray-500">Better deliverability but no HTML formatting</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Feature not implemented</div>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="aiEmailMatching"
+                      checked={campaignData.aiEmailMatching}
+                      onChange={(e) => updateCampaignData({ aiEmailMatching: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="aiEmailMatching" className="flex-1">
+                      <div className="font-medium">AI Email Provider Matching</div>
+                      <div className="text-sm text-gray-500">Gmail to Gmail, Outlook to Outlook for better delivery</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - AI feature not implemented</div>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="bounceProtection"
+                      checked={campaignData.bounceProtection}
+                      onChange={(e) => updateCampaignData({ bounceProtection: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="bounceProtection" className="flex-1">
+                      <div className="font-medium">High Bounce Rate Protection</div>
+                      <div className="text-sm text-gray-500">Auto-pause campaign if bounce rate exceeds 5%</div>
+                    </Label>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Tracking & Analytics */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Tracking & Analytics</CardTitle>
+                  <CardDescription>
+                    Configure what to track for campaign analytics
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="trackOpens"
+                      checked={campaignData.trackOpens}
+                      onChange={(e) => updateCampaignData({ trackOpens: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="trackOpens" className="flex-1">
+                      <div className="font-medium">Track email opens</div>
+                      <div className="text-sm text-gray-500">See when leads open your emails</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Tracking not implemented</div>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="trackClicks"
+                      checked={campaignData.trackClicks}
+                      onChange={(e) => updateCampaignData({ trackClicks: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="trackClicks" className="flex-1">
+                      <div className="font-medium">Track link clicks</div>
+                      <div className="text-sm text-gray-500">Monitor which links leads click</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Tracking not implemented</div>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="aiLeadCategorization"
+                      checked={campaignData.aiLeadCategorization}
+                      onChange={(e) => updateCampaignData({ aiLeadCategorization: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="aiLeadCategorization" className="flex-1">
+                      <div className="font-medium">AI Lead Response Categorization</div>
+                      <div className="text-sm text-gray-500">Automatically categorize replies as interested/not interested</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - AI feature not implemented</div>
+                    </Label>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Company-Level Controls */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Company-Level Controls</CardTitle>
+                  <CardDescription>
+                    Advanced controls for better lead management
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="companyLevelPause"
+                      checked={campaignData.companyLevelPause}
+                      onChange={(e) => updateCampaignData({ companyLevelPause: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="companyLevelPause" className="flex-1">
+                      <div className="font-medium">Company-Level Auto-Pause</div>
+                      <div className="text-sm text-gray-500">Stop messaging everyone at a company when someone replies</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Feature not implemented</div>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="domainRateLimit"
+                      checked={campaignData.domainRateLimit}
+                      onChange={(e) => updateCampaignData({ domainRateLimit: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="domainRateLimit" className="flex-1">
+                      <div className="font-medium">Domain-Level Rate Limiting</div>
+                      <div className="text-sm text-gray-500">Control sending speed per domain for better delivery</div>
+                      <div className="text-xs text-orange-600 mt-1">⚠️ Not working - Feature not implemented</div>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="includeUnsubscribe"
+                      checked={campaignData.includeUnsubscribe}
+                      onChange={(e) => updateCampaignData({ includeUnsubscribe: e.target.checked })}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <Label htmlFor="includeUnsubscribe" className="flex-1">
+                      <div className="font-medium">Include Unsubscribe Link</div>
+                      <div className="text-sm text-gray-500">Add unsubscribe option to comply with regulations</div>
+                      <div className="text-xs text-green-600 mt-1">✅ Working - Secure token-based unsubscribe links</div>
+                    </Label>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Save Button */}
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-200">
             <Button
               onClick={() => router.push(`/campaigns/${id}`)}
               variant="outline"
@@ -302,18 +1024,18 @@ function EditCampaignPageContent({
             </Button>
             <Button
               onClick={handleSaveCampaign}
-              disabled={isSaving || !campaignData.name}
+              disabled={isSaving || isRestarting || !campaignData.name}
               className="bg-purple-600 hover:bg-purple-700"
             >
-              {isSaving ? (
+              {isSaving || isRestarting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Saving Campaign...
+                  {isRestarting ? 'Restarting Campaign...' : 'Saving Campaign...'}
                 </>
               ) : (
                 <>
                   <Save className="w-4 h-4 mr-2" />
-                  Save Campaign
+                  Save & {campaign?.status === 'running' ? 'Restart' : 'Update'} Campaign
                 </>
               )}
             </Button>

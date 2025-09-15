@@ -638,6 +638,7 @@ class UnifiedInboxService {
           // Convert timestamps to user timezone if timezone is provided
           let last_activity_at_display = conversation.last_activity_at;
           if (timezone && conversation.last_activity_at) {
+            console.log(`🔍 TIMEZONE DEBUG: Converting ${conversation.last_activity_at} from UTC to ${timezone}`);
             try {
               const date = new Date(conversation.last_activity_at);
               last_activity_at_display = date.toLocaleString('en-US', {
@@ -649,11 +650,14 @@ class UnifiedInboxService {
                 minute: '2-digit',
                 hour12: true
               });
+              console.log(`✅ TIMEZONE SUCCESS: ${conversation.last_activity_at} → ${last_activity_at_display}`);
             } catch (error) {
               console.error('❌ Error converting timezone for last_activity_at:', error);
               // Fallback to original timestamp if conversion fails
               last_activity_at_display = conversation.last_activity_at;
             }
+          } else {
+            console.log(`⚠️ TIMEZONE SKIP: timezone=${timezone}, last_activity_at=${conversation.last_activity_at}`);
           }
 
           return {

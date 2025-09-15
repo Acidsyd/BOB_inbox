@@ -93,6 +93,8 @@ router.get('/conversations', authenticateToken, async (req, res) => {
       timezone = null // Add timezone parameter for timestamp conversion
     } = req.query;
 
+    console.log(`🔍 CONVERSATIONS API: timezone parameter = "${timezone}"`);
+
     // Process labelIds parameter (can be single value or array)
     let processedLabelIds = null;
     if (labelIds) {
