@@ -70,11 +70,13 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
 
   const formatMessageDate = (date: string | Date | undefined | null) => {
     if (!isClient) return '';
-    return formatInboxMessageDate(date);
+    // Pass the current timezone to ensure timezone-aware formatting
+    return formatDateInTimezone(date, 'MMM d, yyyy h:mm a', timezone);
   };
 
   const formatConversationDateFunc = (date: string | Date | undefined | null) => {
     if (!isClient) return '';
+    // Use the timezone-aware utility but ensure timezone is passed
     return formatConversationDate(date);
   };
 

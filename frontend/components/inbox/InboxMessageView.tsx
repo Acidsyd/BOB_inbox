@@ -25,7 +25,7 @@ import {
   MailOpen,
   Type
 } from 'lucide-react'
-import { format } from 'date-fns'
+// Removed direct date-fns import - using timezone-aware formatting instead
 import { useInboxMessages } from '../../hooks/useInboxMessages'
 import { useTimezone } from '../../contexts/TimezoneContext'
 import { Label } from '../../hooks/useLabels'
