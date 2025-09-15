@@ -816,6 +816,7 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
       return await rescheduleExistingCampaign(campaignId, req.user.organizationId, campaign, res);
     } else {
       console.log(`🆕 First time campaign launch - no existing emails found`);
+      console.log(`🚨 DEBUG: Taking NEW CAMPAIGN path - will call CampaignScheduler directly`);
     }
 
     // Get leads for this campaign - OPTIMIZED: No more 1000-row limit with pagination
@@ -908,7 +909,24 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
     console.log(`📧 Email sequence: ${allEmails.length} emails (1 initial + ${emailSequence.length} follow-ups)`);
 
     // Generate schedule respecting ALL campaign rules
+    console.log(`🚨 DEBUG: About to call CampaignScheduler.scheduleEmails() with ${allLeads.length} leads (NEW CAMPAIGN PATH)`);
+    console.log(`🚨 DEBUG: Scheduler config:`, {
+      timezone: campaign.config?.timezone,
+      emailsPerDay: campaign.config?.emailsPerDay,
+      emailsPerHour: campaign.config?.emailsPerHour,
+      sendingInterval: campaign.config?.sendingInterval,
+      sendingHours: campaign.config?.sendingHours
+    });
     const schedules = scheduler.scheduleEmails(allLeads, emailAccounts);
+    console.log(`🚨 DEBUG: CampaignScheduler returned ${schedules.length} schedules (NEW CAMPAIGN PATH)`);
+    if (schedules.length > 0) {
+      const first = schedules[0];
+      const last = schedules[schedules.length - 1];
+      console.log(`🚨 DEBUG: First email sendAt: ${first.sendAt?.toISOString()} (NEW CAMPAIGN PATH)`);
+      console.log(`🚨 DEBUG: Last email sendAt: ${last.sendAt?.toISOString()} (NEW CAMPAIGN PATH)`);
+      const timeDiff = last.sendAt - first.sendAt;
+      console.log(`🚨 DEBUG: Total time span: ${Math.round(timeDiff / (1000 * 60))} minutes for ${schedules.length} emails (NEW CAMPAIGN PATH)`);
+    }
     const scheduledEmails = [];
 
     schedules.forEach((schedule, scheduleIndex) => {
@@ -1675,6 +1693,7 @@ router.get('/:id/scheduled-activity', authenticateToken, async (req, res) => {
  */
 async function rescheduleExistingCampaign(campaignId, organizationId, campaign, res) {
   console.log(`🔄 Starting campaign restart process for ${campaignId}`);
+  console.log(`🚨 DEBUG: Taking RESTART CAMPAIGN path - will call CampaignScheduler from rescheduleExistingCampaign()`);
   
   try {
     // 🔒 CRITICAL: Add atomic protection to prevent concurrent reschedule operations
@@ -1824,7 +1843,24 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
     });
 
     console.log(`📅 Creating fresh schedule starting from NOW...`);
+    console.log(`🚨 DEBUG: About to call CampaignScheduler.scheduleEmails() with ${allLeadsForRestart.length} leads`);
+    console.log(`🚨 DEBUG: Scheduler config:`, {
+      timezone: campaign.config?.timezone,
+      emailsPerDay: campaign.config?.emailsPerDay,
+      emailsPerHour: campaign.config?.emailsPerHour,
+      sendingInterval: campaign.config?.sendingInterval,
+      sendingHours: campaign.config?.sendingHours
+    });
     const leadSchedules = scheduler.scheduleEmails(allLeadsForRestart, emailAccounts);
+    console.log(`🚨 DEBUG: CampaignScheduler returned ${leadSchedules.length} schedules`);
+    if (leadSchedules.length > 0) {
+      const first = leadSchedules[0];
+      const last = leadSchedules[leadSchedules.length - 1];
+      console.log(`🚨 DEBUG: First email sendAt: ${first.sendAt?.toISOString()}`);
+      console.log(`🚨 DEBUG: Last email sendAt: ${last.sendAt?.toISOString()}`);
+      const timeDiff = last.sendAt - first.sendAt;
+      console.log(`🚨 DEBUG: Total time span: ${Math.round(timeDiff / (1000 * 60))} minutes for ${leadSchedules.length} emails`);
+    }
     
     // Step 2.4: Process in batches to handle large campaigns
     const BATCH_SIZE = 100;
