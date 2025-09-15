@@ -28,13 +28,7 @@ interface TimezoneProviderProps {
 }
 
 export function TimezoneProvider({ children }: TimezoneProviderProps) {
-  const [timezone, setTimezoneState] = useState<string>(() => {
-    // SSR-safe timezone initialization
-    if (typeof window !== 'undefined') {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    }
-    return 'UTC';
-  });
+  const [timezone, setTimezoneState] = useState<string>('UTC'); // Always start with UTC for SSR
   const [isClient, setIsClient] = useState(false);
 
   // Initialize timezone on client side
@@ -42,13 +36,18 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
     setIsClient(true);
     const detectedTimezone = getUserTimezone();
     setTimezoneState(detectedTimezone);
-    
+
     // Debug log
     console.log('🌐 TimezoneProvider initialized:', {
       detectedTimezone,
       browserTimezone: getBrowserTimezone(),
       timezoneInfo: getTimezoneInfo()
     });
+
+    // Force re-render after timezone is set
+    setTimeout(() => {
+      console.log('🌐 Timezone should now be set:', detectedTimezone);
+    }, 100);
   }, []);
 
   const handleSetTimezone = (newTimezone: string) => {
@@ -65,11 +64,13 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
 
   const formatDate = (date: string | Date | undefined | null, formatString?: string) => {
     if (!isClient) return '';
+    console.log('🌐 formatDate called:', { date, timezone, isClient });
     return formatDateInTimezone(date, formatString, timezone);
   };
 
   const formatMessageDate = (date: string | Date | undefined | null) => {
     if (!isClient) return '';
+    console.log('🌐 formatMessageDate called:', { date, timezone, isClient });
     // Pass the current timezone to ensure timezone-aware formatting
     return formatDateInTimezone(date, 'MMM d, yyyy h:mm a', timezone);
   };
