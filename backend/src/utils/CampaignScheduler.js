@@ -92,9 +92,8 @@ class CampaignScheduler {
     if (startTime) {
       currentTime = new Date(startTime);
     } else {
-      // Create a time that represents "now" in the campaign timezone
-      const nowInTz = new Date().toLocaleString('en-US', { timeZone: this.timezone });
-      currentTime = new Date(nowInTz);
+      // Use current UTC time - timezone conversion will be handled properly in helper methods
+      currentTime = new Date();
     }
     
     // Move to next valid sending window if needed
@@ -257,11 +256,32 @@ class CampaignScheduler {
    * Get hour in campaign timezone
    */
   getHourInTimezone(date) {
-    return parseInt(date.toLocaleString('en-US', {
-      timeZone: this.timezone,
-      hour: '2-digit',
-      hour12: false
-    }));
+    // Validate date first to prevent NaN
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+      console.error('🚨 Invalid date passed to getHourInTimezone:', date);
+      return 9; // Return safe default hour
+    }
+
+    try {
+      const hourString = date.toLocaleString('en-US', {
+        timeZone: this.timezone,
+        hour: '2-digit',
+        hour12: false
+      });
+
+      const hour = parseInt(hourString);
+
+      // Validate the result
+      if (isNaN(hour) || hour < 0 || hour > 23) {
+        console.error('🚨 Invalid hour result from toLocaleString:', hourString, 'parsed to:', hour);
+        return 9; // Return safe default hour
+      }
+
+      return hour;
+    } catch (error) {
+      console.error('🚨 Error in getHourInTimezone:', error);
+      return 9; // Return safe default hour
+    }
   }
 
   /**
