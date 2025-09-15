@@ -126,11 +126,10 @@ export default function DuplicateCheckStep({
         </Card>
       )}
 
-      {/* Duplicate Check Options */}
+      {/* Duplicate Check Option - Single centered card */}
       {!hasChecked ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Check for Duplicates */}
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={!isCheckingDuplicates ? checkForDuplicates : undefined}>
+        <div className="max-w-md mx-auto">
+          <Card className="hover:shadow-md transition-shadow">
             <CardHeader>
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-purple-100 rounded-lg">
@@ -146,7 +145,7 @@ export default function DuplicateCheckStep({
               <p className="text-sm text-gray-700 mb-4">
                 Scan your database to identify leads that have already been contacted in other campaigns. This helps prevent spam complaints and improves engagement rates.
               </p>
-              <Button 
+              <Button
                 onClick={checkForDuplicates}
                 disabled={isCheckingDuplicates || !selectedLeadListId}
                 className="w-full"
@@ -162,34 +161,6 @@ export default function DuplicateCheckStep({
                     Check for Duplicates
                   </>
                 )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Skip Check */}
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={handleSkipDuplicateCheck}>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <SkipForward className="h-6 w-6 text-gray-600" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">Skip Duplicate Check</CardTitle>
-                  <p className="text-sm text-gray-600">Continue without checking</p>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <p className="text-sm text-gray-700 mb-4">
-                Proceed directly to email account selection. Use this option if you're confident your lead list doesn't contain duplicates or if this is a new audience.
-              </p>
-              <Button 
-                variant="outline" 
-                onClick={handleSkipDuplicateCheck}
-                className="w-full"
-              >
-                <SkipForward className="h-4 w-4 mr-2" />
-                Skip & Continue
               </Button>
             </CardContent>
           </Card>

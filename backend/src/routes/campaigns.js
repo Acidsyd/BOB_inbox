@@ -1951,4 +1951,162 @@ function createScheduledEmailRecord(campaignId, lead, emailAccountId, campaign, 
   };
 }
 
+// PUT /api/campaigns/:id - Update existing campaign
+router.put('/:id', authenticateToken, async (req, res) => {
+  try {
+    const campaignId = req.params.id;
+    const organizationId = req.user.organizationId;
+
+    console.log('✏️ PUT /api/campaigns/:id called for campaign:', campaignId);
+
+    // Validate campaign ownership and status
+    const { data: existingCampaign, error: fetchError } = await supabase
+      .from('campaigns')
+      .select('id, status, organization_id')
+      .eq('id', campaignId)
+      .eq('organization_id', organizationId)
+      .single();
+
+    if (fetchError || !existingCampaign) {
+      console.error('❌ Campaign not found:', fetchError);
+      return res.status(404).json({
+        success: false,
+        error: 'Campaign not found'
+      });
+    }
+
+    // Prevent editing active campaigns
+    if (existingCampaign.status === 'active') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot edit active campaigns. Please pause the campaign first.'
+      });
+    }
+
+    const {
+      name,
+      description,
+      emailSubject,
+      emailContent,
+      followUpEnabled,
+      emailSequence,
+      selectedLeads,
+      selectedLeadListId,
+      selectedLeadListName,
+      selectedLeadListCount,
+      emailAccounts,
+      selectedAccountIds,
+      emailsPerDay,
+      sendingInterval,
+      trackOpens,
+      trackClicks,
+      stopOnReply,
+      activeDays,
+      sendingHours,
+      enableJitter,
+      jitterMinutes
+    } = req.body;
+
+    // Build campaign config
+    const campaignConfig = {
+      emailSubject,
+      emailContent,
+      followUpEnabled,
+      emailSequence: emailSequence || [],
+      leadListId: selectedLeadListId,
+      leadListName: selectedLeadListName,
+      leadCount: selectedLeadListCount,
+      emailAccounts: selectedAccountIds || emailAccounts || [],
+      emailsPerDay: emailsPerDay || 50,
+      sendingInterval: Math.max(5, sendingInterval || 15), // Minimum 5 minutes
+      trackOpens: trackOpens || false,
+      trackClicks: trackClicks || false,
+      stopOnReply: stopOnReply || false,
+      activeDays: activeDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+      sendingHours: sendingHours || { start: 9, end: 17 },
+      enableJitter: enableJitter || false,
+      jitterMinutes: jitterMinutes || 2
+    };
+
+    console.log('🔧 Updating campaign with config:', {
+      campaignId,
+      name,
+      leadCount: selectedLeadListCount,
+      emailAccountsCount: campaignConfig.emailAccounts.length,
+      sendingInterval: campaignConfig.sendingInterval,
+      emailsPerDay: campaignConfig.emailsPerDay
+    });
+
+    // Update campaign
+    const { data: updatedCampaign, error: updateError } = await supabase
+      .from('campaigns')
+      .update({
+        name: name,
+        description: description,
+        config: campaignConfig,
+        updated_at: toLocalTimestamp()
+      })
+      .eq('id', campaignId)
+      .eq('organization_id', organizationId)
+      .select('*')
+      .single();
+
+    if (updateError || !updatedCampaign) {
+      console.error('❌ Error updating campaign:', updateError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to update campaign'
+      });
+    }
+
+    // Clear any existing scheduled emails for this campaign since settings changed
+    console.log('🧹 Clearing existing scheduled emails due to campaign update');
+    const { error: deleteError } = await supabase
+      .from('scheduled_emails')
+      .delete()
+      .eq('campaign_id', campaignId)
+      .eq('organization_id', organizationId);
+
+    if (deleteError) {
+      console.warn('⚠️ Error clearing scheduled emails:', deleteError);
+    } else {
+      console.log('✅ Cleared existing scheduled emails');
+    }
+
+    // Return updated campaign with expanded config
+    const responseData = {
+      id: updatedCampaign.id,
+      name: updatedCampaign.name,
+      description: updatedCampaign.description,
+      status: updatedCampaign.status,
+      organizationId: updatedCampaign.organization_id,
+      createdAt: updatedCampaign.created_at,
+      updatedAt: updatedCampaign.updated_at,
+
+      // Expand config for frontend
+      ...campaignConfig,
+
+      // Legacy support
+      selectedLeads: selectedLeads || [],
+      selectedLeadListId,
+      selectedLeadListName,
+      selectedLeadListCount,
+      selectedAccountIds: campaignConfig.emailAccounts
+    };
+
+    console.log('✅ Campaign updated successfully:', updatedCampaign.id);
+    res.json({
+      success: true,
+      campaign: responseData
+    });
+
+  } catch (error) {
+    console.error('❌ Error in PUT /campaigns/:id:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
 module.exports = router;

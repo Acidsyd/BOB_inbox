@@ -406,45 +406,50 @@ export default function CSVUploader() {
     <div className="min-h-screen bg-white">
       <div className="max-w-4xl mx-auto py-8 px-4">
         {/* Enhanced Header with Progress Indicator */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
-            <FileSpreadsheet className="h-8 w-8 text-blue-600 mr-3" />
-            <h1 className="text-3xl font-bold text-gray-900">Import Leads</h1>
-          </div>
-          <p className="text-lg text-gray-600">Upload your CSV file and map fields to import leads</p>
-          
-          {/* Step Progress Indicator */}
-          <div className="flex items-center justify-center mt-6 space-x-4">
+        <div className="text-center mb-12">
+          {/* Step Progress Indicator - Matching Screenshot Design */}
+          <div className="flex items-center justify-center space-x-6 mb-8">
             {[
-              { step: 'upload', label: 'Upload', icon: Upload },
-              { step: 'mapping', label: 'Map Fields', icon: FileText },
-              { step: 'uploading', label: 'Processing', icon: Users },
-              { step: 'completed', label: 'Import Completed', icon: CheckCircle }
-            ].map(({ step, label, icon: Icon }, index) => (
-              <div key={step} className="flex items-center">
-                <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all ${
-                  currentStep === step 
-                    ? 'bg-blue-600 border-blue-600 text-white' 
+              { step: 'upload', label: 'CSV\nUpload', sublabel: 'Select your\nCSV file', icon: Upload, active: currentStep === 'upload' },
+              { step: 'mapping', label: 'Field\nMapping', sublabel: 'Map CSV\ncolumns', icon: FileText, active: currentStep === 'mapping' },
+              { step: 'uploading', label: 'Processing', sublabel: 'Import\nleads', icon: Users, active: currentStep === 'uploading' },
+              { step: 'completed', label: 'Completed', sublabel: 'Review\nresults', icon: CheckCircle, active: currentStep === 'completed' }
+            ].map(({ step, label, sublabel, icon: Icon, active }, index) => (
+              <div key={step} className="flex flex-col items-center text-center">
+                <div className={`flex items-center justify-center w-16 h-16 rounded-full transition-all duration-200 ${
+                  active
+                    ? 'bg-purple-600 text-white shadow-lg scale-110'
                     : index < ['upload', 'mapping', 'uploading', 'completed'].indexOf(currentStep)
-                    ? 'bg-green-500 border-green-500 text-white'
-                    : 'border-gray-300 text-gray-400'
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gray-200 text-gray-400'
                 }`}>
-                  {index < ['upload', 'mapping', 'uploading', 'completed'].indexOf(currentStep) ? (
-                    <CheckCircle className="h-5 w-5" />
+                  {index < ['upload', 'mapping', 'uploading', 'completed'].indexOf(currentStep) && !active ? (
+                    <CheckCircle className="h-6 w-6" />
                   ) : (
-                    <Icon className="h-5 w-5" />
+                    <Icon className="h-6 w-6" />
                   )}
                 </div>
-                <span className={`ml-2 text-sm font-medium ${
-                  currentStep === step ? 'text-blue-600' : 'text-gray-500'
-                }`}>
-                  {label}
-                </span>
-                {index < 2 && (
-                  <ChevronRight className="h-4 w-4 text-gray-300 ml-4" />
-                )}
+                <div className="mt-3 max-w-20">
+                  <div className={`text-sm font-semibold leading-tight mb-1 ${
+                    active ? 'text-purple-600' : 'text-gray-700'
+                  }`}>
+                    {label.split('\n').map((line, lineIndex) => (
+                      <div key={lineIndex}>{line}</div>
+                    ))}
+                  </div>
+                  <div className="text-xs text-gray-500 leading-tight">
+                    {sublabel.split('\n').map((line, lineIndex) => (
+                      <div key={lineIndex}>{line}</div>
+                    ))}
+                  </div>
+                </div>
               </div>
             ))}
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-gray-900">Import Leads from CSV</h1>
+            <p className="text-gray-600">Upload your CSV file and map fields to import leads</p>
           </div>
         </div>
 

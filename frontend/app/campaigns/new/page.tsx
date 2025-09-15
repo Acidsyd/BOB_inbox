@@ -7,18 +7,19 @@ import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { Label } from '../../../components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
-import { 
-  ArrowLeft, 
-  ArrowRight, 
-  Check, 
-  Target, 
-  Mail, 
-  Users, 
-  Settings, 
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Target,
+  Mail,
+  Users,
+  Settings,
   Calendar,
   Play,
   AlertCircle,
-  BarChart
+  BarChart,
+  SkipForward
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -1310,9 +1311,26 @@ function CampaignBuilderContent() {
             </Button>
           )}
         </div>
-        <div>
+        <div className="flex gap-3">
+          {/* Skip & Continue button for duplicate check step */}
+          {currentStep === 4 && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                // Skip duplicate check and move to next step
+                updateCampaignData({
+                  selectedLeadListCount: campaignData.selectedLeadListCount
+                })
+                nextStep()
+              }}
+            >
+              <SkipForward className="h-4 w-4 mr-2" />
+              Skip & Continue
+            </Button>
+          )}
+
           {currentStep < steps.length ? (
-            <Button 
+            <Button
               onClick={nextStep}
               disabled={!canProceed()}
               className="btn-primary"
@@ -1321,7 +1339,7 @@ function CampaignBuilderContent() {
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           ) : (
-            <Button 
+            <Button
               onClick={handleLaunch}
               disabled={!canProceed() || isLaunching}
               className="btn-primary"

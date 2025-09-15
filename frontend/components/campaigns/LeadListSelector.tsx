@@ -231,32 +231,6 @@ export default function LeadListSelector({
         </p>
       </div>
 
-      {/* 🚨 ALWAYS VISIBLE TEST BUTTON - MOVED OUTSIDE ALL CONDITIONALS 🚨 */}
-      <div className="border-4 border-red-600 pt-6 mb-6 bg-red-200 p-6 rounded-lg">
-        <h1 className="text-red-900 font-bold text-xl mb-4 text-center">🚨 TEST: DUPLICATE CHECK BUTTON 🚨</h1>
-        <h2 className="text-red-800 font-semibold text-lg mb-3 text-center">This button should ALWAYS be visible!</h2>
-        <Button 
-          onClick={checkForDuplicates}
-          disabled={isCheckingDuplicates || !selectedList}
-          variant="outline"
-          className="w-full border-red-600 text-red-900 hover:bg-red-100 bg-red-300 font-bold text-lg py-3"
-        >
-          {isCheckingDuplicates ? (
-            <>
-              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-              Checking duplicates...
-            </>
-          ) : (
-            <>
-              <Copy className="h-5 w-5 mr-2" />
-              🔍 CHECK FOR DUPLICATES - TEST VERSION
-            </>
-          )}
-        </Button>
-        {!selectedList && (
-          <p className="text-red-800 text-sm text-center mt-2">Select a lead list first to check for duplicates</p>
-        )}
-      </div>
 
       {/* Selected List Summary (if selected) */}
       {selectedList && (

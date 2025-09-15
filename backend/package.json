@@ -1,6 +1,6 @@
 {
   "name": "bobinbox-backend",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "BOBinbox Backend API",
   "main": "src/index.js",
   "scripts": {

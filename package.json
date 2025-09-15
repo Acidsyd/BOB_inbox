@@ -1,6 +1,6 @@
 {
   "name": "bobinbox-test-suite",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Comprehensive test suite for BOBinbox B2B email marketing automation platform",
   "type": "module",
   "scripts": {

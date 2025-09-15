@@ -437,13 +437,12 @@ class CronEmailProcessor {
     // Create a map of campaign_id to config and status
     const campaignConfigMap = {};
     const campaignStatusMap = {};
+    const campaignTimezoneMap = {};
     campaigns?.forEach(campaign => {
       campaignConfigMap[campaign.id] = campaign.config?.sendingHours || null;
       campaignStatusMap[campaign.id] = campaign.status;
+      campaignTimezoneMap[campaign.id] = campaign.config?.timezone || 'UTC';
     });
-
-    // Filter emails based on campaign status and sending hours
-    const currentHour = new Date().getHours();
     const filteredEmails = emails.filter(email => {
       // If no campaign_id, allow the email
       if (!email.campaign_id) return true;
@@ -456,27 +455,43 @@ class CronEmailProcessor {
       }
 
       const sendingHours = campaignConfigMap[email.campaign_id];
-      
+
       // If no sending hours configured, allow all times
       if (!sendingHours || !sendingHours.start || !sendingHours.end) {
         return true;
       }
 
       const { start, end } = sendingHours;
-      
+      const campaignTimezone = campaignTimezoneMap[email.campaign_id];
+
+      // Get current hour in campaign timezone (CRITICAL FIX)
+      const currentHour = new Date().toLocaleString('en-US', {
+        timeZone: campaignTimezone,
+        hour12: false,
+        hour: 'numeric'
+      });
+      const currentHourNum = parseInt(currentHour);
+
       // Handle cases where end time is next day (e.g., 9 AM to 2 AM)
       if (end < start) {
         // Crosses midnight
-        return currentHour >= start || currentHour < end;
+        return currentHourNum >= start || currentHourNum < end;
       } else {
         // Same day
-        return currentHour >= start && currentHour < end;
+        return currentHourNum >= start && currentHourNum < end;
       }
     });
 
     const skippedCount = emails.length - filteredEmails.length;
     if (skippedCount > 0) {
-      console.log(`⏰ Skipped ${skippedCount} emails due to sending hours restrictions (current hour: ${currentHour}:00)`);
+      // Show current time for different campaign timezones for debugging
+      const timezoneExample = [...new Set(Object.values(campaignTimezoneMap))][0] || 'UTC';
+      const currentHourExample = new Date().toLocaleString('en-US', {
+        timeZone: timezoneExample,
+        hour12: false,
+        hour: 'numeric'
+      });
+      console.log(`⏰ Skipped ${skippedCount} emails due to sending hours restrictions (current hour in ${timezoneExample}: ${currentHourExample}:00)`);
     }
 
     return filteredEmails;
