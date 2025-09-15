@@ -86,7 +86,16 @@ class CampaignScheduler {
    */
   scheduleEmails(leads, emailAccounts, startTime = null) {
     const schedules = [];
-    let currentTime = startTime ? new Date(startTime) : new Date();
+
+    // Get current time in the campaign timezone
+    let currentTime;
+    if (startTime) {
+      currentTime = new Date(startTime);
+    } else {
+      // Create a time that represents "now" in the campaign timezone
+      const nowInTz = new Date().toLocaleString('en-US', { timeZone: this.timezone });
+      currentTime = new Date(nowInTz);
+    }
     
     // Move to next valid sending window if needed
     currentTime = this.moveToNextValidSendingWindow(currentTime);
@@ -95,7 +104,7 @@ class CampaignScheduler {
     let emailsSentToday = 0;
     let emailsSentThisHour = 0;
     let currentDay = this.getDateInTimezone(currentTime);
-    let currentHour = currentTime.getHours();
+    let currentHour = this.getHourInTimezone(currentTime);
     
     console.log(`📅 Starting scheduling from: ${currentTime.toISOString()}`);
     console.log(`   Timezone: ${this.timezone}`);
@@ -111,7 +120,7 @@ class CampaignScheduler {
       if (emailsSentThisHour >= this.emailsPerHour) {
         currentTime = this.moveToNextHour(currentTime);
         emailsSentThisHour = 0;
-        currentHour = currentTime.getHours();
+        currentHour = this.getHourInTimezone(currentTime);
         
         // Check if day changed
         const newDay = this.getDateInTimezone(currentTime);
@@ -127,7 +136,7 @@ class CampaignScheduler {
         emailsSentToday = 0;
         emailsSentThisHour = 0;
         currentDay = this.getDateInTimezone(currentTime);
-        currentHour = currentTime.getHours();
+        currentHour = this.getHourInTimezone(currentTime);
       }
       
       // Ensure we're in a valid sending window
@@ -151,7 +160,7 @@ class CampaignScheduler {
       currentTime = new Date(currentTime.getTime() + (this.sendingInterval * 60 * 1000));
       
       // Check if we crossed into a new hour
-      const newHour = currentTime.getHours();
+      const newHour = this.getHourInTimezone(currentTime);
       if (newHour !== currentHour) {
         currentHour = newHour;
         emailsSentThisHour = 0;
@@ -174,7 +183,7 @@ class CampaignScheduler {
       attempts++;
       
       // Check if current day is active
-      const dayOfWeek = current.getDay();
+      const dayOfWeek = this.getDayOfWeekInTimezone(current);
       if (!this.activeDayNumbers.includes(dayOfWeek)) {
         // Move to next day at start hour
         current = this.moveToNextDay(current);
@@ -182,10 +191,10 @@ class CampaignScheduler {
       }
       
       // Check if current hour is within sending hours
-      const hour = current.getHours();
+      const hour = this.getHourInTimezone(current);
       if (hour < this.sendingHours.start) {
         // Move to start hour of same day
-        current.setHours(this.sendingHours.start, 0, 0, 0);
+        current = this.setHourInTimezone(current, this.sendingHours.start, 0, 0);
       } else if (hour >= this.sendingHours.end) {
         // Move to next day at start hour
         current = this.moveToNextDay(current);
@@ -204,10 +213,11 @@ class CampaignScheduler {
    */
   moveToNextHour(date) {
     let current = new Date(date);
-    current.setHours(current.getHours() + 1, 0, 0, 0);
+    const currentHourInTz = this.getHourInTimezone(current);
+    current = this.setHourInTimezone(current, currentHourInTz + 1, 0, 0);
     
     // Check if we exceeded sending hours
-    if (current.getHours() >= this.sendingHours.end) {
+    if (this.getHourInTimezone(current) >= this.sendingHours.end) {
       current = this.moveToNextDay(current);
     }
     
@@ -220,13 +230,13 @@ class CampaignScheduler {
   moveToNextDay(date) {
     let current = new Date(date);
     current.setDate(current.getDate() + 1);
-    current.setHours(this.sendingHours.start, 0, 0, 0);
+    current = this.setHourInTimezone(current, this.sendingHours.start, 0, 0);
     
     // Find next active day
     let attempts = 0;
     while (attempts < 7) {
       attempts++;
-      const dayOfWeek = current.getDay();
+      const dayOfWeek = this.getDayOfWeekInTimezone(current);
       if (this.activeDayNumbers.includes(dayOfWeek)) {
         break;
       }
@@ -240,16 +250,67 @@ class CampaignScheduler {
    * Get date string in timezone
    */
   getDateInTimezone(date) {
-    // For now, use UTC. In production, use proper timezone library
-    return date.toISOString().split('T')[0];
+    return date.toLocaleDateString('en-CA', { timeZone: this.timezone });
+  }
+
+  /**
+   * Get hour in campaign timezone
+   */
+  getHourInTimezone(date) {
+    return parseInt(date.toLocaleString('en-US', {
+      timeZone: this.timezone,
+      hour: '2-digit',
+      hour12: false
+    }));
+  }
+
+  /**
+   * Get day of week in campaign timezone (0=Sunday, 6=Saturday)
+   */
+  getDayOfWeekInTimezone(date) {
+    const dayStr = date.toLocaleDateString('en-US', {
+      timeZone: this.timezone,
+      weekday: 'long'
+    }).toLowerCase();
+    const dayMap = {
+      'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
+      'thursday': 4, 'friday': 5, 'saturday': 6
+    };
+    return dayMap[dayStr];
   }
   
+  /**
+   * Set time to specific hour in campaign timezone
+   */
+  setHourInTimezone(date, hour, minute = 0, second = 0) {
+    // Create a date string in the campaign timezone
+    const dateStr = date.toLocaleDateString('en-CA', { timeZone: this.timezone });
+    const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
+
+    // Combine and create new Date - this will be interpreted as local time
+    const targetTimeStr = `${dateStr}T${timeStr}:00`;
+
+    // Convert to UTC by getting the offset
+    const tempDate = new Date(targetTimeStr);
+    const tzOffset = this.getTimezoneOffset(tempDate);
+
+    return new Date(tempDate.getTime() - tzOffset);
+  }
+
+  /**
+   * Get timezone offset in milliseconds
+   */
+  getTimezoneOffset(date) {
+    const utcTime = date.getTime();
+    const tzTime = new Date(date.toLocaleString('en-US', { timeZone: this.timezone })).getTime();
+    return utcTime - tzTime;
+  }
+
   /**
    * Convert local time to UTC for database storage
    */
   convertToUTC(localTime) {
-    // This is a simplified version - in production use moment-timezone or similar
-    // For now, just return the time as-is since we're working with UTC
+    // The Date objects are already in UTC, so return as-is
     return localTime;
   }
 
