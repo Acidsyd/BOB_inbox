@@ -144,21 +144,67 @@ router.get('/conversations/:id/messages', authenticateToken, async (req, res) =>
   try {
     const { organizationId } = req.user;
     const { id: conversationId } = req.params;
+    const { timezone = 'UTC' } = req.query; // Allow timezone parameter from frontend
 
     console.log(`📬 Fetching messages for conversation: ${conversationId}`);
 
     const messages = await unifiedInboxService.getConversationMessages(conversationId, organizationId);
 
+    // Convert UTC timestamps to user timezone (similar to campaign scheduled activity fix)
+    const messagesWithTimezone = messages.map(message => {
+      const convertedMessage = { ...message };
+
+      // Convert sent_at timestamp if exists
+      if (message.sent_at) {
+        try {
+          const sentAtDate = new Date(message.sent_at);
+          convertedMessage.sent_at_display = sentAtDate.toLocaleString('en-US', {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          });
+        } catch (error) {
+          console.warn(`⚠️ Error converting sent_at timestamp: ${message.sent_at}`, error);
+          convertedMessage.sent_at_display = message.sent_at; // Fallback to original
+        }
+      }
+
+      // Convert received_at timestamp if exists
+      if (message.received_at) {
+        try {
+          const receivedAtDate = new Date(message.received_at);
+          convertedMessage.received_at_display = receivedAtDate.toLocaleString('en-US', {
+            timeZone: timezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          });
+        } catch (error) {
+          console.warn(`⚠️ Error converting received_at timestamp: ${message.received_at}`, error);
+          convertedMessage.received_at_display = message.received_at; // Fallback to original
+        }
+      }
+
+      return convertedMessage;
+    });
+
     res.json({
       conversationId,
-      messages
+      messages: messagesWithTimezone
     });
 
   } catch (error) {
     console.error('❌ Error fetching conversation messages:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch conversation messages',
-      details: error.message 
+      details: error.message
     });
   }
 });

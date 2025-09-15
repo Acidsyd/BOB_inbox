@@ -215,7 +215,7 @@ export function InboxMessageView({
     
     if (latestMessage) {
       const senderName = getSenderName(latestMessage)
-      const messageDate = formatDate(latestMessage.sent_at || latestMessage.received_at)
+      const messageDate = formatDate(latestMessage)
       const quotedText = latestMessage.content_plain || extractPlainText(latestMessage.content_html || '')
       
       // Plain text quote format
@@ -401,9 +401,15 @@ export function InboxMessageView({
   }
 
 
-  // Use timezone-aware formatting from context
-  const formatDate = (dateStr?: string) => {
-    return formatMessageDate(dateStr)
+  // Use timezone-aware formatting - prefer display fields from backend conversion
+  const formatDate = (message: Message) => {
+    // Use backend-converted display timestamp if available, otherwise fallback to timezone context
+    const displayTime = message.sent_at_display || message.received_at_display
+    if (displayTime) {
+      return displayTime
+    }
+    // Fallback to original context-based formatting
+    return formatMessageDate(message.sent_at || message.received_at)
   }
 
   const renderMessageContent = (message: Message) => {
@@ -570,7 +576,7 @@ export function InboxMessageView({
                 <span className="font-medium">Subject:</span>
                 <span className="truncate flex-1">{conversation.subject || 'No subject'}</span>
                 <span>•</span>
-                <span>{formatDate(conversation.last_activity_at)}</span>
+                <span>{formatMessageDate(conversation.last_activity_at)}</span>
               </div>
             </div>
           </div>
@@ -691,7 +697,7 @@ export function InboxMessageView({
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <span className="text-xs text-gray-500">
-                            {formatDate(message.sent_at || message.received_at)}
+                            {formatDate(message)}
                           </span>
                           {expandedMessages.has(message.id) ? (
                             <ChevronUp className="h-4 w-4 text-blue-500 transition-all duration-200" />

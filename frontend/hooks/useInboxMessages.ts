@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../lib/api'
+import { getUserTimezone } from '../lib/timezone'
 
 interface Message {
   id: string
@@ -12,6 +13,9 @@ interface Message {
   content_html?: string
   content_plain?: string
   sent_at: string
+  received_at?: string
+  sent_at_display?: string // Timezone-converted display timestamp
+  received_at_display?: string // Timezone-converted display timestamp
   direction: 'sent' | 'received'
   is_reply: boolean
   is_read: boolean // Added for bidirectional sync
@@ -49,7 +53,11 @@ export function useInboxMessages(conversationId: string | null) {
     setError(null)
     
     try {
-      const response = await api.get(`/inbox/conversations/${conversationId}/messages`)
+      // Get user timezone for backend conversion
+      const userTimezone = getUserTimezone()
+      const response = await api.get(`/inbox/conversations/${conversationId}/messages`, {
+        params: { timezone: userTimezone }
+      })
       
       if (response.data && response.data.messages) {
         // Sort messages by sent_at date
