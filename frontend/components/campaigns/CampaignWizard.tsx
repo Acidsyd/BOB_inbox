@@ -176,7 +176,7 @@ export default function CampaignWizard({ onComplete, onCancel }: CampaignWizardP
     sendingInterval: 15,
     activeDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
     sendingHours: { start: 9, end: 17 },
-    timezone: 'UTC',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     abTestEnabled: false,
     stopOnReply: true,
     stopOnClick: false,

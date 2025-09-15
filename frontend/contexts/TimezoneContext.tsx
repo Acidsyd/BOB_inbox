@@ -28,7 +28,13 @@ interface TimezoneProviderProps {
 }
 
 export function TimezoneProvider({ children }: TimezoneProviderProps) {
-  const [timezone, setTimezoneState] = useState<string>('UTC');
+  const [timezone, setTimezoneState] = useState<string>(() => {
+    // SSR-safe timezone initialization
+    if (typeof window !== 'undefined') {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    }
+    return 'UTC';
+  });
   const [isClient, setIsClient] = useState(false);
 
   // Initialize timezone on client side

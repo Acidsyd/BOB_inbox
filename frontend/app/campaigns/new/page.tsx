@@ -180,7 +180,7 @@ function CampaignBuilderContent() {
       start: 9,   // 9:00 AM
       end: 17     // 5:00 PM
     },
-    timezone: 'UTC',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     // Human-like timing defaults
     enableJitter: true,   // Enabled by default for natural timing
     jitterMinutes: 3,     // ±3 minutes variation
