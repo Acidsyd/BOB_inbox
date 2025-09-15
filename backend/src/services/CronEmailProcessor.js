@@ -368,7 +368,7 @@ class CronEmailProcessor {
   async getPendingEmails() {
     // Calculate dynamic batch size based on system load
     const batchSize = await this.calculateOptimalBatchSize();
-    
+
     const { data: emails, error } = await supabase
       .from('scheduled_emails')
       .select(`
@@ -386,7 +386,7 @@ class CronEmailProcessor {
         message_id_header,
         thread_id
       `) // Only select needed columns instead of *
-      .lte('send_at', toLocalTimestamp())
+      .lte('send_at', new Date().toISOString()) // FIXED: Use UTC timestamp instead of toLocalTimestamp()
       .eq('status', 'scheduled')
       .order('send_at', { ascending: true })
       .limit(batchSize);
