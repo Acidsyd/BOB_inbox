@@ -685,6 +685,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // POST /api/campaigns/:id/start - Start/launch campaign
 router.post('/:id/start', authenticateToken, async (req, res) => {
   try {
+    console.log('🚨🚨🚨 CRITICAL DEBUG: CAMPAIGN START ENDPOINT CALLED 🚨🚨🚨');
+    console.log('🚨🚨🚨 CRITICAL DEBUG: Campaign ID:', req.params.id, '🚨🚨🚨');
     console.log('🚀 POST /api/campaigns/:id/start called');
     console.log('👤 User:', req.user);
     console.log('📋 Campaign ID:', req.params.id);
