@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../lib/api'
 import { Label } from './useLabels'
+import { getUserTimezone } from '../lib/timezone'
 
 interface Conversation {
   id: string
   subject: string
   last_activity_at?: string
+  last_activity_at_display?: string // Timezone-converted display timestamp
   last_message_at?: string
   message_count: number
   is_read: boolean
@@ -67,13 +69,16 @@ export function useInbox(filters: InboxFilters = {}) {
   const fetchConversations = useCallback(async () => {
     setIsLoading(true)
     setError(null)
-    
+
     try {
+      // Get user timezone for backend conversion
+      const userTimezone = getUserTimezone()
       // Build query params
       const params = new URLSearchParams()
       params.append('status', memoizedFilters.status || 'active')
       params.append('limit', '50')
       params.append('offset', '0')
+      params.append('timezone', userTimezone) // Add timezone parameter for conversion
       params.append('_t', Date.now().toString()) // Cache buster for timestamp fixes
       
       if (memoizedFilters.search) params.append('search', memoizedFilters.search)

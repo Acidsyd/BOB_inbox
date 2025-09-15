@@ -21,6 +21,7 @@ interface Conversation {
   subject?: string
   participants?: string[]
   last_activity_at?: string
+  last_activity_at_display?: string
   message_count?: number
   unread_count?: number
   is_read?: boolean
@@ -193,7 +194,7 @@ export function InboxConversationItem({ conversation, isSelected, isChecked, onC
               )}
             </div>
             <span className="text-xs text-gray-500 shrink-0 ml-2">
-              {formatDate(conversation.last_activity_at)}
+              {conversation.last_activity_at_display || formatDate(conversation.last_activity_at)}
             </span>
           </div>
 

@@ -76,7 +76,7 @@ const authenticateToken = (req, res, next) => {
 router.get('/conversations', authenticateToken, async (req, res) => {
   try {
     const { organizationId } = req.user;
-    const { 
+    const {
       status = 'active',
       limit = 50,
       offset = 0,
@@ -89,7 +89,8 @@ router.get('/conversations', authenticateToken, async (req, res) => {
       campaignId = null,
       labelIds = null,
       sortBy = 'last_activity_at',
-      sortOrder = 'desc'
+      sortOrder = 'desc',
+      timezone = null // Add timezone parameter for timestamp conversion
     } = req.query;
 
     // Process labelIds parameter (can be single value or array)
@@ -115,7 +116,8 @@ router.get('/conversations', authenticateToken, async (req, res) => {
       campaignId,
       labelIds: processedLabelIds,
       sortBy,
-      sortOrder
+      sortOrder,
+      timezone // Pass timezone for timestamp conversion
     });
 
     res.json({

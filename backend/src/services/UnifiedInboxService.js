@@ -466,7 +466,8 @@ class UnifiedInboxService {
       campaignId = null,
       labelIds = null,
       sortBy = 'last_activity_at',
-      sortOrder = 'desc'
+      sortOrder = 'desc',
+      timezone = null
     } = options;
 
     try {
@@ -621,24 +622,46 @@ class UnifiedInboxService {
         }) || [];
       }
 
-      // Flatten label assignments and add campaign/lead names (timestamps are correct in database)
+      // Flatten label assignments and add campaign/lead names, convert timestamps to user timezone
       if (conversations && conversations.length > 0) {
         conversations = conversations.map(conversation => {
           const labels = conversation.conversation_label_assignments?.map(
             assignment => assignment.conversation_labels
           ).filter(Boolean) || [];
-          
+
           // Extract campaign name and lead name from joined data
           const campaign_name = conversation.campaigns?.name || null;
-          const lead_name = conversation.leads 
+          const lead_name = conversation.leads
             ? `${conversation.leads.first_name || ''} ${conversation.leads.last_name || ''}`.trim() || conversation.leads.email || null
             : null;
-          
+
+          // Convert timestamps to user timezone if timezone is provided
+          let last_activity_at_display = conversation.last_activity_at;
+          if (timezone && conversation.last_activity_at) {
+            try {
+              const date = new Date(conversation.last_activity_at);
+              last_activity_at_display = date.toLocaleString('en-US', {
+                timeZone: timezone,
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+              });
+            } catch (error) {
+              console.error('❌ Error converting timezone for last_activity_at:', error);
+              // Fallback to original timestamp if conversion fails
+              last_activity_at_display = conversation.last_activity_at;
+            }
+          }
+
           return {
             ...conversation,
             labels,
             campaign_name,
             lead_name,
+            last_activity_at_display, // Add timezone-converted display timestamp
             conversation_label_assignments: undefined, // Remove nested structure
             campaigns: undefined, // Remove nested structure
             leads: undefined // Remove nested structure
