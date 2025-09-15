@@ -110,10 +110,16 @@ class CampaignScheduler {
     let currentDay = this.getDateInTimezone(currentTime);
     let currentHour = this.getHourInTimezone(currentTime);
     
+    // Calculate minimum interval based on emailsPerHour constraint
+    const minIntervalMinutes = Math.ceil(60 / this.emailsPerHour); // 60 minutes / emails per hour
+    const actualIntervalMinutes = Math.max(this.sendingInterval, minIntervalMinutes);
+
     console.log(`📅 Starting scheduling from: ${currentTime.toISOString()}`);
     console.log(`   Timezone: ${this.timezone}`);
     console.log(`   Limits: ${this.emailsPerHour}/hour, ${this.emailsPerDay}/day`);
-    console.log(`   Interval: ${this.sendingInterval} minutes between emails`);
+    console.log(`   User interval: ${this.sendingInterval} minutes`);
+    console.log(`   Minimum required interval: ${minIntervalMinutes} minutes (based on ${this.emailsPerHour} emails/hour)`);
+    console.log(`   Actual interval used: ${actualIntervalMinutes} minutes`);
     console.log(`   Jitter: ${this.enableJitter ? `±${this.jitterMinutes} minutes` : 'disabled'}`);
     
     leads.forEach((lead, leadIndex) => {
@@ -160,8 +166,8 @@ class CampaignScheduler {
       emailsSentToday++;
       emailsSentThisHour++;
       
-      // Move to next sending time (add interval)
-      currentTime = new Date(currentTime.getTime() + (this.sendingInterval * 60 * 1000));
+      // Move to next sending time (add actual calculated interval)
+      currentTime = new Date(currentTime.getTime() + (actualIntervalMinutes * 60 * 1000));
       
       // Check if we crossed into a new hour
       const newHour = this.getHourInTimezone(currentTime);
