@@ -218,12 +218,12 @@ class CampaignScheduler {
     // Don't reset to :00:00 - this causes all emails to get the same exact time
     const currentMinute = parseInt(current.toLocaleString('en-US', {
       timeZone: this.timezone,
-      minute: '2-digit'
-    }));
+      minute: 'numeric'
+    })) || 0;
     const currentSecond = parseInt(current.toLocaleString('en-US', {
       timeZone: this.timezone,
-      second: '2-digit'
-    }));
+      second: 'numeric'
+    })) || 0;
 
     current = this.setHourInTimezone(current, currentHourInTz + 1, currentMinute, currentSecond);
 
@@ -277,7 +277,7 @@ class CampaignScheduler {
     try {
       const hourString = date.toLocaleString('en-US', {
         timeZone: this.timezone,
-        hour: '2-digit',
+        hour: 'numeric',
         hour12: false
       });
 
@@ -379,9 +379,9 @@ class CampaignScheduler {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
         hour12: false
       });
 
