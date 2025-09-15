@@ -91,6 +91,11 @@ class CampaignScheduler {
     let currentTime;
     if (startTime) {
       currentTime = new Date(startTime);
+      // Validate the provided startTime
+      if (isNaN(currentTime.getTime())) {
+        console.error('🚨 Invalid startTime provided to scheduleEmails:', startTime);
+        currentTime = new Date(); // Use current time as fallback
+      }
     } else {
       // Use current UTC time - timezone conversion will be handled properly in helper methods
       currentTime = new Date();
@@ -303,27 +308,96 @@ class CampaignScheduler {
    * Set time to specific hour in campaign timezone
    */
   setHourInTimezone(date, hour, minute = 0, second = 0) {
-    // Create a date string in the campaign timezone
-    const dateStr = date.toLocaleDateString('en-CA', { timeZone: this.timezone });
-    const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
+    // Validate input date
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+      console.error('🚨 Invalid date passed to setHourInTimezone:', date);
+      return new Date(); // Return current time as fallback
+    }
 
-    // Combine and create new Date - this will be interpreted as local time
-    const targetTimeStr = `${dateStr}T${timeStr}:00`;
+    // Validate hour, minute, second
+    hour = Math.max(0, Math.min(23, parseInt(hour) || 0));
+    minute = Math.max(0, Math.min(59, parseInt(minute) || 0));
+    second = Math.max(0, Math.min(59, parseInt(second) || 0));
 
-    // Convert to UTC by getting the offset
-    const tempDate = new Date(targetTimeStr);
-    const tzOffset = this.getTimezoneOffset(tempDate);
+    try {
+      // Create a date string in the campaign timezone
+      const dateStr = date.toLocaleDateString('en-CA', { timeZone: this.timezone });
+      const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
 
-    return new Date(tempDate.getTime() - tzOffset);
+      // Combine and create new Date - this will be interpreted as local time
+      const targetTimeStr = `${dateStr}T${timeStr}:00`;
+
+      // Convert to UTC by getting the offset
+      const tempDate = new Date(targetTimeStr);
+
+      // Validate tempDate
+      if (isNaN(tempDate.getTime())) {
+        console.error('🚨 Invalid tempDate created in setHourInTimezone:', targetTimeStr);
+        return new Date(); // Return current time as fallback
+      }
+
+      const tzOffset = this.getTimezoneOffset(tempDate);
+      const result = new Date(tempDate.getTime() - tzOffset);
+
+      // Validate final result
+      if (isNaN(result.getTime())) {
+        console.error('🚨 Invalid result date in setHourInTimezone:', result);
+        return new Date(); // Return current time as fallback
+      }
+
+      return result;
+    } catch (error) {
+      console.error('🚨 Error in setHourInTimezone:', error);
+      return new Date(); // Return current time as fallback
+    }
   }
 
   /**
    * Get timezone offset in milliseconds
    */
   getTimezoneOffset(date) {
-    const utcTime = date.getTime();
-    const tzTime = new Date(date.toLocaleString('en-US', { timeZone: this.timezone })).getTime();
-    return utcTime - tzTime;
+    // Validate input date
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+      console.error('🚨 Invalid date passed to getTimezoneOffset:', date);
+      return 0; // Return 0 offset as fallback
+    }
+
+    try {
+      const utcTime = date.getTime();
+
+      // Use a safer approach to get timezone offset
+      // Get the date formatted in the target timezone
+      const tzString = date.toLocaleString('en-CA', {
+        timeZone: this.timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+
+      // Parse the timezone string back to a date
+      const [datePart, timePart] = tzString.split(', ');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hour, minute, second] = timePart.split(':').map(Number);
+
+      // Create date in local timezone (interpreted as local)
+      const tzDate = new Date(year, month - 1, day, hour, minute, second);
+
+      // Validate the created date
+      if (isNaN(tzDate.getTime())) {
+        console.error('🚨 Invalid tzDate created in getTimezoneOffset:', tzString);
+        return 0; // Return 0 offset as fallback
+      }
+
+      const tzTime = tzDate.getTime();
+      return utcTime - tzTime;
+    } catch (error) {
+      console.error('🚨 Error in getTimezoneOffset:', error);
+      return 0; // Return 0 offset as fallback
+    }
   }
 
   /**
@@ -339,28 +413,45 @@ class CampaignScheduler {
    * Uses email address as seed for consistent but varied timing per lead
    */
   applyJitter(baseTime, emailSeed = '') {
+    // Validate input date
+    if (!baseTime || !(baseTime instanceof Date) || isNaN(baseTime.getTime())) {
+      console.error('🚨 Invalid baseTime passed to applyJitter:', baseTime);
+      return new Date(); // Return current time as fallback
+    }
+
     if (!this.enableJitter) {
       return new Date(baseTime);
     }
 
-    // Create a simple seed from email for consistent jitter per lead
-    let seed = 0;
-    for (let i = 0; i < emailSeed.length; i++) {
-      seed = ((seed << 5) - seed + emailSeed.charCodeAt(i)) & 0xffffffff;
+    try {
+      // Create a simple seed from email for consistent jitter per lead
+      let seed = 0;
+      for (let i = 0; i < emailSeed.length; i++) {
+        seed = ((seed << 5) - seed + emailSeed.charCodeAt(i)) & 0xffffffff;
+      }
+
+      // Use seeded random to generate consistent offset for this email
+      const seedRandom = Math.abs(seed) / 0xffffffff;
+
+      // Generate offset between -jitterMinutes and +jitterMinutes
+      const offsetMinutes = (seedRandom - 0.5) * 2 * this.jitterMinutes;
+      const offsetMs = offsetMinutes * 60 * 1000;
+
+      const jitteredTime = new Date(baseTime.getTime() + offsetMs);
+
+      // Validate the result
+      if (isNaN(jitteredTime.getTime())) {
+        console.error('🚨 Invalid jitteredTime created in applyJitter');
+        return new Date(baseTime); // Return original time as fallback
+      }
+
+      // Ensure jittered time doesn't go below minimum 5-minute spacing from previous
+      // This is a simplified check - in practice, you'd validate against previous scheduled times
+      return jitteredTime;
+    } catch (error) {
+      console.error('🚨 Error in applyJitter:', error);
+      return new Date(baseTime); // Return original time as fallback
     }
-    
-    // Use seeded random to generate consistent offset for this email
-    const seedRandom = Math.abs(seed) / 0xffffffff;
-    
-    // Generate offset between -jitterMinutes and +jitterMinutes
-    const offsetMinutes = (seedRandom - 0.5) * 2 * this.jitterMinutes;
-    const offsetMs = offsetMinutes * 60 * 1000;
-    
-    const jitteredTime = new Date(baseTime.getTime() + offsetMs);
-    
-    // Ensure jittered time doesn't go below minimum 5-minute spacing from previous
-    // This is a simplified check - in practice, you'd validate against previous scheduled times
-    return jitteredTime;
   }
 }
 
