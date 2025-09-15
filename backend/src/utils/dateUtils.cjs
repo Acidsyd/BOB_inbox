@@ -129,7 +129,7 @@ function formatDisplayTime(timestampStr, options = {}) {
       year: 'numeric',
       month: options.short ? 'short' : 'long',
       day: 'numeric',
-      hour: '2-digit',
+      hour: 'numeric',
       minute: '2-digit',
       second: options.includeSeconds ? '2-digit' : undefined,
       ...options.formatOptions
