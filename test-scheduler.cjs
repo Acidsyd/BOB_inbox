@@ -1,43 +1,45 @@
-#!/usr/bin/env node
-
 const CampaignScheduler = require('./backend/src/utils/CampaignScheduler');
 
-// Test with the exact same config as the campaign
+// Test the scheduler logic
 const config = {
   timezone: 'Europe/Rome',
-  emailsPerDay: 50,
-  emailsPerHour: 5,
-  sendingInterval: 15,
   sendingHours: { start: 9, end: 17 },
-  activeDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
-  enableJitter: true,
-  jitterMinutes: 3
+  emailsPerHour: 10,
+  sendingInterval: 15,
+  emailsPerDay: 100,
+  activeDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']
 };
-
-console.log('🔍 Testing CampaignScheduler with config:', config);
 
 const scheduler = new CampaignScheduler(config);
 
-// Create 10 test leads
-const testLeads = Array.from({ length: 10 }, (_, i) => ({
-  id: `lead-${i + 1}`,
-  email: `test${i + 1}@example.com`,
-  first_name: `Test${i + 1}`
-}));
+console.log('Testing scheduler with current time...');
 
-const emailAccounts = ['test-account-1'];
+// Test with current time (around 17:38 CEST)
+const now = new Date();
+console.log('Current UTC time:', now.toISOString());
+console.log('Current Europe/Rome time:', now.toLocaleString('en-US', { timeZone: 'Europe/Rome' }));
 
-console.log('📧 Scheduling 10 test emails...');
-const schedules = scheduler.scheduleEmails(testLeads, emailAccounts);
+// Test moveToNextValidSendingWindow
+const validTime = scheduler.moveToNextValidSendingWindow(now);
+console.log('Valid sending window time:', validTime.toISOString());
+console.log('Valid time in Europe/Rome:', validTime.toLocaleString('en-US', { timeZone: 'Europe/Rome' }));
 
-console.log('📊 Results:');
-schedules.forEach((schedule, i) => {
-  const sendTime = schedule.sendAt;
-  if (i > 0) {
-    const prevTime = schedules[i-1].sendAt;
-    const diffMinutes = (sendTime - prevTime) / (1000 * 60);
-    console.log(`${i+1}. ${sendTime.toISOString()} (${diffMinutes.toFixed(1)} min gap)`);
-  } else {
-    console.log(`${i+1}. ${sendTime.toISOString()}`);
-  }
+// Test current hour detection
+const currentHour = scheduler.getHourInTimezone(now);
+console.log('Current hour in Europe/Rome:', currentHour);
+
+// Test what happens when we schedule emails
+console.log('\nScheduling test with 3 fake leads...');
+const fakeLeads = [
+  { email: 'test1@example.com' },
+  { email: 'test2@example.com' },
+  { email: 'test3@example.com' }
+];
+const fakeAccounts = ['account1'];
+
+const schedules = scheduler.scheduleEmails(fakeLeads, fakeAccounts);
+console.log('Scheduled times:');
+schedules.forEach((schedule, idx) => {
+  const timeInRome = schedule.sendAt.toLocaleString('en-US', { timeZone: 'Europe/Rome' });
+  console.log((idx + 1) + '. ' + schedule.lead.email + ' -> ' + timeInRome + ' (' + schedule.sendAt.toISOString() + ')');
 });

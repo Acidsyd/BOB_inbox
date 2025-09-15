@@ -332,7 +332,7 @@ class CampaignScheduler {
       const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
 
       // Combine and create new Date - this will be interpreted as local time
-      const targetTimeStr = `${dateStr}T${timeStr}:00`;
+      const targetTimeStr = `${dateStr}T${timeStr}.000`;
 
       // Convert to UTC by getting the offset
       const tempDate = new Date(targetTimeStr);

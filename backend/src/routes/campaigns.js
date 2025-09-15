@@ -1587,11 +1587,25 @@ router.get('/:id/daily-stats', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /campaigns/:id/scheduled-activity - Get scheduled emails for this campaign  
+// GET /campaigns/:id/scheduled-activity - Get scheduled emails for this campaign
 router.get('/:id/scheduled-activity', authenticateToken, async (req, res) => {
   try {
     const campaignId = req.params.id;
     const organizationId = req.user.organizationId;
+
+    // Get campaign timezone for proper time formatting
+    const { data: campaign, error: campaignError } = await supabase
+      .from('campaigns')
+      .select('config')
+      .eq('id', campaignId)
+      .eq('organization_id', organizationId)
+      .single();
+
+    if (campaignError) {
+      console.error('❌ Error fetching campaign for timezone:', campaignError);
+    }
+
+    const campaignTimezone = campaign?.config?.timezone || 'UTC';
 
     // Get scheduled emails with account info
     const { data: scheduledEmails, error } = await supabase
@@ -1663,9 +1677,21 @@ router.get('/:id/scheduled-activity', authenticateToken, async (req, res) => {
         senderEmail = accountLookup[email.email_account_id];
       }
 
+      // Convert time to campaign timezone for display
+      const sendAtDate = new Date(email.send_at);
+      const formattedTime = sendAtDate.toLocaleString('en-US', {
+        timeZone: campaignTimezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+
       return {
         id: email.id,
-        time: email.send_at,
+        time: formattedTime,
         from: senderEmail || 'Unknown',
         to: email.to_email || 'Unknown',
         subject: email.subject || 'No subject',
