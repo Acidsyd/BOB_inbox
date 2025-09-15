@@ -134,46 +134,56 @@ function EditCampaignPageContent({
         const fetchedCampaign = response.data.campaign
         setCampaign(fetchedCampaign)
 
+        // The API spreads config fields to top level, so check both locations
+        const getConfigValue = (key, defaultValue) => {
+          return fetchedCampaign[key] ?? fetchedCampaign.config?.[key] ?? defaultValue;
+        };
+
         // Populate form data with campaign config
         setCampaignData({
           name: fetchedCampaign.name || '',
-          description: fetchedCampaign.config?.description || '',
-          emailSubject: fetchedCampaign.config?.emailSubject || '',
-          emailContent: fetchedCampaign.config?.emailContent || '',
-          followUpEnabled: fetchedCampaign.config?.followUpEnabled || false,
-          emailSequence: fetchedCampaign.config?.emailSequence || [],
-          selectedLeads: fetchedCampaign.config?.selectedLeads || [],
-          emailAccounts: fetchedCampaign.config?.emailAccounts || [],
-          scheduleType: fetchedCampaign.config?.scheduleType || 'immediate',
-          scheduledDate: fetchedCampaign.config?.scheduledDate,
-          dailyLimit: fetchedCampaign.config?.dailyLimit || 50,
-          emailsPerDay: fetchedCampaign.config?.emailsPerDay || 50,
-          emailsPerHour: fetchedCampaign.config?.emailsPerHour || 10,
-          emailsPerMinute: fetchedCampaign.config?.emailsPerMinute || 1,
-          sendingInterval: fetchedCampaign.config?.sendingInterval || 15,
-          activeDays: fetchedCampaign.config?.activeDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
-          sendingHours: fetchedCampaign.config?.sendingHours || { start: 9, end: 17 },
-          csvData: fetchedCampaign.config?.csvData || [],
-          leadListId: fetchedCampaign.config?.leadListId || '',
-          leadListName: fetchedCampaign.config?.leadListName || '',
-          leadListCount: fetchedCampaign.config?.leadListCount || 0,
-          timezone: fetchedCampaign.config?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-          enableJitter: fetchedCampaign.config?.enableJitter ?? true,
-          jitterMinutes: fetchedCampaign.config?.jitterMinutes || 3,
-          stopOnReply: fetchedCampaign.config?.stopOnReply ?? true,
-          stopOnClick: fetchedCampaign.config?.stopOnClick ?? false,
-          stopOnOpen: fetchedCampaign.config?.stopOnOpen ?? false,
-          sendPlainText: fetchedCampaign.config?.sendPlainText ?? false,
-          trackOpens: fetchedCampaign.config?.trackOpens ?? true,
-          trackClicks: fetchedCampaign.config?.trackClicks ?? true,
-          companyLevelPause: fetchedCampaign.config?.companyLevelPause ?? true,
-          domainLevelPause: fetchedCampaign.config?.domainLevelPause ?? false,
-          aiEmailMatching: fetchedCampaign.config?.aiEmailMatching ?? true,
-          aiLeadCategorization: fetchedCampaign.config?.aiLeadCategorization ?? false,
-          bounceProtection: fetchedCampaign.config?.bounceProtection ?? true,
-          domainRateLimit: fetchedCampaign.config?.domainRateLimit ?? false,
-          includeUnsubscribe: fetchedCampaign.config?.includeUnsubscribe ?? true
+          description: getConfigValue('description', ''),
+          emailSubject: getConfigValue('emailSubject', ''),
+          emailContent: getConfigValue('emailContent', ''),
+          followUpEnabled: getConfigValue('followUpEnabled', false),
+          emailSequence: getConfigValue('emailSequence', []),
+          selectedLeads: getConfigValue('selectedLeads', []),
+          emailAccounts: getConfigValue('emailAccounts', []),
+          scheduleType: getConfigValue('scheduleType', 'immediate'),
+          scheduledDate: getConfigValue('scheduledDate'),
+          dailyLimit: getConfigValue('dailyLimit', 50),
+          emailsPerDay: getConfigValue('emailsPerDay', 50),
+          emailsPerHour: getConfigValue('emailsPerHour', 10),
+          emailsPerMinute: getConfigValue('emailsPerMinute', 1),
+          sendingInterval: getConfigValue('sendingInterval', 15),
+          activeDays: getConfigValue('activeDays', ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']),
+          sendingHours: getConfigValue('sendingHours', { start: 9, end: 17 }),
+          csvData: getConfigValue('csvData', []),
+          leadListId: getConfigValue('leadListId', ''),
+          leadListName: getConfigValue('leadListName', ''),
+          leadListCount: getConfigValue('leadListCount', 0),
+          timezone: getConfigValue('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone),
+          enableJitter: getConfigValue('enableJitter', true),
+          jitterMinutes: getConfigValue('jitterMinutes', 3),
+          stopOnReply: getConfigValue('stopOnReply', true),
+          stopOnClick: getConfigValue('stopOnClick', false),
+          stopOnOpen: getConfigValue('stopOnOpen', false),
+          sendPlainText: getConfigValue('sendPlainText', false),
+          trackOpens: getConfigValue('trackOpens', true),
+          trackClicks: getConfigValue('trackClicks', true),
+          companyLevelPause: getConfigValue('companyLevelPause', true),
+          domainLevelPause: getConfigValue('domainLevelPause', false),
+          aiEmailMatching: getConfigValue('aiEmailMatching', true),
+          aiLeadCategorization: getConfigValue('aiLeadCategorization', false),
+          bounceProtection: getConfigValue('bounceProtection', true),
+          domainRateLimit: getConfigValue('domainRateLimit', false),
+          includeUnsubscribe: getConfigValue('includeUnsubscribe', true)
         })
+
+        console.log('🔍 Debug - Fetched campaign:', fetchedCampaign);
+        console.log('🔍 Debug - Email sequence from API:', getConfigValue('emailSequence', []));
+        console.log('🔍 Debug - Email accounts from API:', getConfigValue('emailAccounts', []));
+        console.log('🔍 Debug - Email subject from API:', getConfigValue('emailSubject', ''));
       } else {
         setError('Campaign not found')
       }
@@ -330,6 +340,11 @@ function EditCampaignPageContent({
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Edit Campaign</h1>
               <p className="text-gray-600 mt-1">{campaign.name}</p>
+              {campaign && (
+                <div className="text-xs text-green-600 mt-1">
+                  ✅ Data loaded | Emails: {campaignData.emailSequence?.length || 0} | Accounts: {campaignData.emailAccounts?.length || 0}
+                </div>
+              )}
             </div>
           </div>
         </div>

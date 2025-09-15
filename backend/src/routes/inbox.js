@@ -90,10 +90,13 @@ router.get('/conversations', authenticateToken, async (req, res) => {
       labelIds = null,
       sortBy = 'last_activity_at',
       sortOrder = 'desc',
-      timezone = null // Add timezone parameter for timestamp conversion
+      timezone
     } = req.query;
 
-    console.log(`🔍 CONVERSATIONS API: timezone parameter = "${timezone}"`);
+    // Clean up timezone parameter - ignore if null, undefined, or string versions
+    const cleanTimezone = (timezone && timezone !== 'null' && timezone !== 'undefined' && timezone !== null && timezone !== undefined) ? timezone : null;
+
+    console.log(`🔍 CONVERSATIONS API: raw timezone = "${timezone}", cleaned timezone = "${cleanTimezone}"`);
 
     // Process labelIds parameter (can be single value or array)
     let processedLabelIds = null;
@@ -119,7 +122,7 @@ router.get('/conversations', authenticateToken, async (req, res) => {
       labelIds: processedLabelIds,
       sortBy,
       sortOrder,
-      timezone // Pass timezone for timestamp conversion
+      timezone: cleanTimezone // Pass cleaned timezone for timestamp conversion
     });
 
     res.json({

@@ -24,23 +24,49 @@ export function getBrowserTimezone(): string {
  * @returns {string} IANA timezone identifier
  */
 export function getUserTimezone(): string {
+  // Only run in browser environment
+  if (typeof window === 'undefined') {
+    console.log('🔍 getUserTimezone: Running in SSR, returning UTC');
+    return 'UTC';
+  }
+
   try {
-    // First try to get from localStorage
-    const stored = localStorage.getItem('userTimezone');
-    if (stored) {
+    // First try to get from localStorage (with safety check)
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem('userTimezone');
+    } catch (storageError) {
+      console.warn('🔍 getUserTimezone: localStorage not accessible:', storageError);
+    }
+
+    if (stored && stored !== 'null' && stored !== 'undefined') {
+      console.log('🔍 getUserTimezone: Found stored timezone:', stored);
       return stored;
     }
-    
+
     // Fall back to browser detection
     const browserTimezone = getBrowserTimezone();
-    
-    // Store for future use
-    localStorage.setItem('userTimezone', browserTimezone);
-    
+    console.log('🔍 getUserTimezone: Detected browser timezone:', browserTimezone);
+
+    // Store for future use (with safety check)
+    try {
+      if (browserTimezone && browserTimezone !== 'UTC') {
+        localStorage.setItem('userTimezone', browserTimezone);
+      }
+    } catch (storageError) {
+      console.warn('🔍 getUserTimezone: Could not store timezone:', storageError);
+    }
+
     return browserTimezone;
   } catch (error) {
     console.warn('Error getting user timezone:', error);
-    return 'UTC';
+    // Last resort: direct browser detection
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch (intlError) {
+      console.warn('Failed to get timezone from Intl API:', intlError);
+      return 'UTC';
+    }
   }
 }
 

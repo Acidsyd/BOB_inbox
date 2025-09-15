@@ -73,13 +73,40 @@ export function useInbox(filters: InboxFilters = {}) {
     try {
       // Get user timezone for backend conversion
       const userTimezone = getUserTimezone()
+      console.log('🔍 Frontend useInbox: getUserTimezone() returned:', userTimezone, typeof userTimezone)
+
       // Build query params
       const params = new URLSearchParams()
       params.append('status', memoizedFilters.status || 'active')
       params.append('limit', '50')
       params.append('offset', '0')
-      params.append('timezone', userTimezone) // Add timezone parameter for conversion
+
+      // Only add timezone parameter if it's a valid timezone string (not null, undefined, or string 'null')
+      if (userTimezone &&
+          userTimezone !== 'null' &&
+          userTimezone !== null &&
+          userTimezone !== 'undefined' &&
+          typeof userTimezone === 'string' &&
+          userTimezone.length > 0) {
+        params.append('timezone', userTimezone) // Add timezone parameter for conversion
+        console.log('🔍 Frontend useInbox: Added timezone parameter:', userTimezone)
+      } else {
+        console.log('🔍 Frontend useInbox: Skipping timezone parameter, value was:', userTimezone, 'type:', typeof userTimezone)
+        // Force browser timezone detection if getUserTimezone is failing
+        try {
+          const fallbackTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+          if (fallbackTimezone && fallbackTimezone !== 'UTC') {
+            params.append('timezone', fallbackTimezone)
+            console.log('🔍 Frontend useInbox: Using fallback timezone:', fallbackTimezone)
+          }
+        } catch (fallbackError) {
+          console.warn('🔍 Frontend useInbox: Fallback timezone detection failed:', fallbackError)
+        }
+      }
+
       params.append('_t', Date.now().toString()) // Cache buster for timestamp fixes
+
+      console.log('🔍 Frontend useInbox: Final params.toString():', params.toString())
       
       if (memoizedFilters.search) params.append('search', memoizedFilters.search)
       if (memoizedFilters.type) params.append('type', memoizedFilters.type)
