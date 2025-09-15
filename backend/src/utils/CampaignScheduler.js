@@ -125,56 +125,45 @@ class CampaignScheduler {
     leads.forEach((lead, leadIndex) => {
       // Select email account (round-robin)
       const emailAccountId = emailAccounts[leadIndex % emailAccounts.length];
-      
-      // Check if we need to move to next hour
-      if (emailsSentThisHour >= this.emailsPerHour) {
-        currentTime = this.moveToNextHour(currentTime);
-        emailsSentThisHour = 0;
-        currentHour = this.getHourInTimezone(currentTime);
-        
-        // Check if day changed
-        const newDay = this.getDateInTimezone(currentTime);
-        if (newDay !== currentDay) {
-          currentDay = newDay;
-          emailsSentToday = 0;
-        }
+
+      // ULTIMATE FIX: Simple time advancement with no validation functions
+      // This ensures each email gets a unique, properly spaced time without compression
+      if (leadIndex > 0) {
+        currentTime = new Date(currentTime.getTime() + (actualIntervalMinutes * 60 * 1000));
+
+        // CRITICAL: No validation functions here - they cause compression!
+        // All validation was done once at the beginning with moveToNextValidSendingWindow
       }
-      
-      // Check if we need to move to next day
-      if (emailsSentToday >= this.emailsPerDay) {
-        currentTime = this.moveToNextDay(currentTime);
-        emailsSentToday = 0;
-        emailsSentThisHour = 0;
-        currentDay = this.getDateInTimezone(currentTime);
-        currentHour = this.getHourInTimezone(currentTime);
-      }
-      
-      // Ensure we're in a valid sending window
-      currentTime = this.moveToNextValidSendingWindow(currentTime);
-      
+
       // Apply human-like jitter to make timing less robotic
       const jitteredTime = this.applyJitter(currentTime, lead.email);
-      
+
       // Schedule the email
       schedules.push({
         lead,
         emailAccountId,
         sendAt: jitteredTime
       });
-      
-      // Update counters
+
+      // Simple counter tracking for statistics (not for time manipulation)
       emailsSentToday++;
       emailsSentThisHour++;
-      
-      // Move to next sending time (add actual calculated interval)
-      currentTime = new Date(currentTime.getTime() + (actualIntervalMinutes * 60 * 1000));
-      
-      // Check if we crossed into a new hour
-      const newHour = this.getHourInTimezone(currentTime);
-      if (newHour !== currentHour) {
-        currentHour = newHour;
+
+      // Check if we crossed into a new day/hour (for counter reset only)
+      const newDay = this.getDateInTimezone(currentTime);
+      if (newDay !== currentDay) {
+        currentDay = newDay;
+        emailsSentToday = 0;
         emailsSentThisHour = 0;
-        console.log(`⏰ Moved to new hour: ${currentHour}:00 - Reset hourly counter`);
+        currentHour = this.getHourInTimezone(currentTime);
+        console.log(`📅 Moved to new day: ${newDay} - Reset counters`);
+      } else {
+        const newHour = this.getHourInTimezone(currentTime);
+        if (newHour !== currentHour) {
+          currentHour = newHour;
+          emailsSentThisHour = 0;
+          console.log(`⏰ Moved to new hour: ${currentHour}:00 - Reset hourly counter`);
+        }
       }
     });
     
@@ -224,13 +213,25 @@ class CampaignScheduler {
   moveToNextHour(date) {
     let current = new Date(date);
     const currentHourInTz = this.getHourInTimezone(current);
-    current = this.setHourInTimezone(current, currentHourInTz + 1, 0, 0);
-    
+
+    // CRITICAL FIX: Preserve minutes and seconds when advancing to next hour
+    // Don't reset to :00:00 - this causes all emails to get the same exact time
+    const currentMinute = parseInt(current.toLocaleString('en-US', {
+      timeZone: this.timezone,
+      minute: '2-digit'
+    }));
+    const currentSecond = parseInt(current.toLocaleString('en-US', {
+      timeZone: this.timezone,
+      second: '2-digit'
+    }));
+
+    current = this.setHourInTimezone(current, currentHourInTz + 1, currentMinute, currentSecond);
+
     // Check if we exceeded sending hours
     if (this.getHourInTimezone(current) >= this.sendingHours.end) {
       current = this.moveToNextDay(current);
     }
-    
+
     return this.moveToNextValidSendingWindow(current);
   }
   

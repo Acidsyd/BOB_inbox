@@ -5,6 +5,7 @@ const UnifiedInboxService = require('./UnifiedInboxService');
 const AccountRateLimitService = require('./AccountRateLimitService');
 const BounceTrackingService = require('./BounceTrackingService');
 const HealthCheckService = require('./HealthCheckService');
+const SpintaxParser = require('../utils/spintax');
 const { toLocalTimestamp } = require('../utils/dateUtils.cjs');
 
 // Initialize Supabase client
@@ -671,14 +672,19 @@ class CronEmailProcessor {
     this.campaignAccountRotation.set(campaignId, currentAccountIndex);
     console.log(`🔄 Campaign ${campaignId}: Saved rotation state - account ${currentAccountIndex} used`);
 
+    // 🚨 CRITICAL FIX: Get the last email sent time to calculate proper reschedule time
+    const lastEmailSentTime = await this.getLastEmailSentTime(campaignId, organizationId);
+    const baseTime = lastEmailSentTime || new Date(); // Use last send time or current time if no emails sent
+
     // Reschedule emails from OTHER accounts for the next campaign interval
     for (let i = 0; i < accountEntries.length; i++) {
       if (i === currentAccountIndex) continue; // Skip current account, already processed
-      
+
       const [otherAccountId, otherAccountEmails] = accountEntries[i];
       if (otherAccountEmails.length > 0) {
-        const nextIntervalTime = new Date(Date.now() + (actualIntervalMinutes * 60 * 1000));
-        console.log(`⏳ Campaign ${campaignId}: Rescheduling ${otherAccountEmails.length} emails from account ${i + 1}/${accountCount} for next interval (+${actualIntervalMinutes}min)`);
+        // 🚨 CRITICAL FIX: Calculate based on last email time, not current time
+        const nextIntervalTime = new Date(baseTime.getTime() + (actualIntervalMinutes * 60 * 1000));
+        console.log(`🚨 FIXED: Rescheduling ${otherAccountEmails.length} emails from account ${i + 1}/${accountCount} to ${nextIntervalTime.toISOString()} (${actualIntervalMinutes}min from last send)`);
         await this.rescheduleEmails(otherAccountEmails, nextIntervalTime);
       }
     }
@@ -713,30 +719,50 @@ class CronEmailProcessor {
 
     const accountId = accountInfo.id;
     const fromEmail = accountInfo.email;
+    const campaignId = accountEmails[0].campaign_id;
     console.log(`📨 Processing ${accountEmails.length} emails for account ${fromEmail}`);
 
     // Get campaign configuration to respect sending intervals
-    const campaignConfig = await this.getCampaignConfig(accountEmails[0].campaign_id);
-    const sendingIntervalMinutes = campaignConfig?.sendingInterval || 2; // Default 2 minutes
-    const emailsPerHour = campaignConfig?.emailsPerHour || 10; // Default 10 emails/hour
-    
+    const campaignConfig = await this.getCampaignConfig(campaignId);
+    const sendingIntervalMinutes = campaignConfig?.sendingInterval || 15; // Default 15 minutes
+    const emailsPerHour = campaignConfig?.emailsPerHour || 4; // Default 4 emails/hour
+
     // Calculate minimum interval based on emailsPerHour limit
     const minIntervalMinutes = Math.ceil(60 / emailsPerHour); // 60 minutes / emails per hour
     const actualIntervalMinutes = Math.max(sendingIntervalMinutes, minIntervalMinutes);
-    
-    console.log(`⏱️ Campaign config: ${sendingIntervalMinutes} min interval, ${emailsPerHour} emails/hour limit`);
+
+    console.log(`⏱️ Campaign ${campaignId} config: ${sendingIntervalMinutes} min interval, ${emailsPerHour} emails/hour limit`);
     console.log(`⏱️ Using actual interval: ${actualIntervalMinutes} minutes (min: ${minIntervalMinutes}min for hourly limit)`);
+
+    // 🚨 CRITICAL FIX: Check when the last email was sent for this campaign
+    const lastEmailSentTime = await this.getLastEmailSentTime(campaignId, organizationId);
+    const timeSinceLastEmail = lastEmailSentTime ? Date.now() - lastEmailSentTime.getTime() : Infinity;
+    const requiredIntervalMs = actualIntervalMinutes * 60 * 1000;
+
+    console.log(`🕒 Last email sent: ${lastEmailSentTime ? lastEmailSentTime.toISOString() : 'NEVER'}`);
+    console.log(`🕒 Time since last: ${timeSinceLastEmail === Infinity ? 'N/A' : Math.round(timeSinceLastEmail / 60000)} minutes`);
+    console.log(`🕒 Required interval: ${actualIntervalMinutes} minutes`);
+
+    // 🚨 CRITICAL: If not enough time has passed, reschedule ALL emails
+    if (timeSinceLastEmail < requiredIntervalMs) {
+      const timeToWait = requiredIntervalMs - timeSinceLastEmail;
+      const rescheduleTime = new Date(Date.now() + timeToWait);
+      console.log(`⏰ Campaign interval not reached! Rescheduling ${accountEmails.length} emails for ${Math.round(timeToWait / 60000)} minutes from now`);
+
+      await this.rescheduleEmailsWithInterval(accountEmails, rescheduleTime, actualIntervalMinutes);
+      return; // Don't send any emails yet
+    }
 
     // 🔥 CRITICAL FIX: Check rate limits for ALL account types (OAuth2 and SMTP)
     let emailsToSendNow, emailsToReschedule;
-    
+
     // Check account availability and daily/hourly limits for all account types
     const rateLimitInfo = await this.rateLimitService.checkAccountAvailability(accountId, organizationId);
-    
+
     if (!rateLimitInfo.canSend) {
       console.log(`⏰ Account ${fromEmail} reached limits. Reason: ${rateLimitInfo.reason}`);
       console.log(`📊 Daily: ${rateLimitInfo.dailyRemaining || 0}/${rateLimitInfo.dailyLimit || 'N/A'}, Hourly: ${rateLimitInfo.hourlyRemaining || 0}/${rateLimitInfo.hourlyLimit || 'N/A'}`);
-      
+
       // Reschedule all emails for when account becomes available again
       await this.rescheduleEmailsWithInterval(accountEmails, rateLimitInfo.nextAvailableTime || new Date(Date.now() + 60 * 60 * 1000), actualIntervalMinutes);
       return;
@@ -745,20 +771,20 @@ class CronEmailProcessor {
     // 🔥 CRITICAL FIX: Always send only 1 email per campaign interval
     // This ensures proper interval compliance regardless of account type
     console.log(`🔑 ${accountInfo.type === 'oauth2' ? 'OAuth2' : 'SMTP'} account - respecting limits: ${rateLimitInfo.dailyRemaining || 0}/${rateLimitInfo.dailyLimit || 'N/A'} daily, ${rateLimitInfo.hourlyRemaining || 0}/${rateLimitInfo.hourlyLimit || 'N/A'} hourly`);
-    
+
     // ALWAYS send exactly 1 email to respect campaign interval timing
     emailsToSendNow = accountEmails.slice(0, 1); // Only first email
     emailsToReschedule = accountEmails.slice(1);  // Rest for next interval
 
     console.log(`✅ Sending ${emailsToSendNow.length} emails, rescheduling ${emailsToReschedule.length}`);
 
-    // Reschedule excess emails with proper campaign interval (respecting hourly limits)
+    // 🚨 CRITICAL FIX: Calculate reschedule time based on WHEN THIS EMAIL WILL BE SENT
     if (emailsToReschedule.length > 0) {
-      const baseRescheduleTime = (accountInfo.type === 'oauth2') 
-        ? new Date(Date.now() + actualIntervalMinutes * 60 * 1000) // OAuth2: use actual interval (respects hourly limits)
-        : (rateLimitInfo?.nextAvailableTime || new Date(Date.now() + 60 * 60 * 1000)); // SMTP: use rate limit info
-      
-      await this.rescheduleEmailsWithInterval(emailsToReschedule, baseRescheduleTime, actualIntervalMinutes);
+      const emailSendTime = new Date(); // Current time when email will be sent
+      const nextEmailTime = new Date(emailSendTime.getTime() + (actualIntervalMinutes * 60 * 1000)); // Next interval
+
+      console.log(`🚨 FIXED RESCHEDULE: Next email scheduled for ${nextEmailTime.toISOString()} (${actualIntervalMinutes} min from send time)`);
+      await this.rescheduleEmailsWithInterval(emailsToReschedule, nextEmailTime, actualIntervalMinutes);
     }
 
     // Send allowed emails
@@ -807,9 +833,15 @@ class CronEmailProcessor {
       const trackOpens = campaignConfig?.trackOpens || false;
       const trackClicks = campaignConfig?.trackClicks || false;
 
+      // 🎯 Process spintax in subject and content using lead email as seed for consistency
+      const processedSubject = SpintaxParser.spinWithSeed(email.subject, email.to_email);
+      const processedContent = SpintaxParser.spinWithSeed(email.content, email.to_email);
+
+      console.log(`🔄 Spintax processed for ${email.to_email}: Subject changed: ${email.subject !== processedSubject}, Content changed: ${email.content !== processedContent}`);
+
       // Try OAuth2 first, then SMTP fallback
       const useOAuth2 = await this.shouldUseOAuth2(email.from_email, organizationId);
-      
+
       let result;
       // Always use EmailService for consistent tracking
       console.log('📨 Sending via EmailService with tracking');
@@ -817,8 +849,8 @@ class CronEmailProcessor {
         accountId: email.email_account_id,
         organizationId: organizationId,
         to: email.to_email,
-        subject: email.subject,
-        html: email.content,
+        subject: processedSubject,
+        html: processedContent,
         campaignId: email.campaign_id,
         includeUnsubscribe: includeUnsubscribe,
         trackOpens: trackOpens,
@@ -1058,6 +1090,37 @@ class CronEmailProcessor {
       return campaign.config;
     } catch (error) {
       console.error('❌ Error getting campaign config:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get the last email sent time for a campaign to enforce proper intervals
+   */
+  async getLastEmailSentTime(campaignId, organizationId) {
+    try {
+      const { data: lastEmail, error } = await supabase
+        .from('scheduled_emails')
+        .select('sent_at')
+        .eq('campaign_id', campaignId)
+        .eq('organization_id', organizationId)
+        .eq('status', 'sent')
+        .order('sent_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) {
+        // PGRST116 means no rows returned (no emails sent yet)
+        if (error.code === 'PGRST116') {
+          return null; // No emails sent yet for this campaign
+        }
+        console.error(`❌ Error getting last email sent time for campaign ${campaignId}:`, error);
+        return null;
+      }
+
+      return lastEmail?.sent_at ? new Date(lastEmail.sent_at) : null;
+    } catch (error) {
+      console.error(`❌ Error in getLastEmailSentTime for campaign ${campaignId}:`, error);
       return null;
     }
   }

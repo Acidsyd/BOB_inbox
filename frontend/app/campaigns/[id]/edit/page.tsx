@@ -51,18 +51,26 @@ function EditCampaignPageContent({
   // Form data matching campaign config structure
   const [campaignData, setCampaignData] = useState({
     name: '',
+    description: '',
     emailSubject: '',
     emailContent: '',
+    followUpEnabled: false,
     emailSequence: [],
-    leadListId: '',
-    leadListName: '',
-    leadListCount: 0,
+    selectedLeads: [],
     emailAccounts: [],
+    scheduleType: 'immediate' as 'immediate' | 'scheduled',
+    scheduledDate: undefined,
+    dailyLimit: 50,
     emailsPerDay: 50,
     emailsPerHour: 10,
+    emailsPerMinute: 1,
     sendingInterval: 5,
     activeDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
     sendingHours: { start: 9, end: 17 },
+    csvData: [],
+    leadListId: '',
+    leadListName: '',
+    leadListCount: 0,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     trackOpens: true,
     trackClicks: true,
@@ -87,18 +95,26 @@ function EditCampaignPageContent({
         // Populate form data with campaign config
         setCampaignData({
           name: fetchedCampaign.name || '',
+          description: fetchedCampaign.config?.description || '',
           emailSubject: fetchedCampaign.config?.emailSubject || '',
           emailContent: fetchedCampaign.config?.emailContent || '',
+          followUpEnabled: fetchedCampaign.config?.followUpEnabled || false,
           emailSequence: fetchedCampaign.config?.emailSequence || [],
-          leadListId: fetchedCampaign.config?.leadListId || '',
-          leadListName: fetchedCampaign.config?.leadListName || '',
-          leadListCount: fetchedCampaign.config?.leadListCount || 0,
+          selectedLeads: fetchedCampaign.config?.selectedLeads || [],
           emailAccounts: fetchedCampaign.config?.emailAccounts || [],
+          scheduleType: fetchedCampaign.config?.scheduleType || 'immediate',
+          scheduledDate: fetchedCampaign.config?.scheduledDate,
+          dailyLimit: fetchedCampaign.config?.dailyLimit || 50,
           emailsPerDay: fetchedCampaign.config?.emailsPerDay || 50,
           emailsPerHour: fetchedCampaign.config?.emailsPerHour || 10,
+          emailsPerMinute: fetchedCampaign.config?.emailsPerMinute || 1,
           sendingInterval: fetchedCampaign.config?.sendingInterval || 5,
           activeDays: fetchedCampaign.config?.activeDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
           sendingHours: fetchedCampaign.config?.sendingHours || { start: 9, end: 17 },
+          csvData: fetchedCampaign.config?.csvData || [],
+          leadListId: fetchedCampaign.config?.leadListId || '',
+          leadListName: fetchedCampaign.config?.leadListName || '',
+          leadListCount: fetchedCampaign.config?.leadListCount || 0,
           timezone: fetchedCampaign.config?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
           trackOpens: fetchedCampaign.config?.trackOpens ?? true,
           trackClicks: fetchedCampaign.config?.trackClicks ?? true,
@@ -124,18 +140,26 @@ function EditCampaignPageContent({
       const updateData = {
         name: campaignData.name,
         config: {
+          description: campaignData.description,
           emailSubject: campaignData.emailSubject,
           emailContent: campaignData.emailContent,
+          followUpEnabled: campaignData.followUpEnabled,
           emailSequence: campaignData.emailSequence,
-          leadListId: campaignData.leadListId,
-          leadListName: campaignData.leadListName,
-          leadListCount: campaignData.leadListCount,
+          selectedLeads: campaignData.selectedLeads,
           emailAccounts: campaignData.emailAccounts,
+          scheduleType: campaignData.scheduleType,
+          scheduledDate: campaignData.scheduledDate,
+          dailyLimit: campaignData.dailyLimit,
           emailsPerDay: campaignData.emailsPerDay,
           emailsPerHour: campaignData.emailsPerHour,
+          emailsPerMinute: campaignData.emailsPerMinute,
           sendingInterval: campaignData.sendingInterval,
           activeDays: campaignData.activeDays,
           sendingHours: campaignData.sendingHours,
+          csvData: campaignData.csvData,
+          leadListId: campaignData.leadListId,
+          leadListName: campaignData.leadListName,
+          leadListCount: campaignData.leadListCount,
           timezone: campaignData.timezone,
           trackOpens: campaignData.trackOpens,
           trackClicks: campaignData.trackClicks,
@@ -261,12 +285,8 @@ function EditCampaignPageContent({
             <CardContent>
               {campaignData.emailSubject !== undefined && (
                 <EmailSequenceBuilder
-                  emailSubject={campaignData.emailSubject}
-                  emailContent={campaignData.emailContent}
-                  emailSequence={campaignData.emailSequence}
-                  onEmailSubjectChange={(subject) => setCampaignData(prev => ({ ...prev, emailSubject: subject }))}
-                  onEmailContentChange={(content) => setCampaignData(prev => ({ ...prev, emailContent: content }))}
-                  onEmailSequenceChange={(sequence) => setCampaignData(prev => ({ ...prev, emailSequence: sequence }))}
+                  campaignData={campaignData}
+                  updateCampaignData={(data) => setCampaignData(prev => ({ ...prev, ...data }))}
                 />
               )}
             </CardContent>
