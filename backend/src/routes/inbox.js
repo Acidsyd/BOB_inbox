@@ -5,6 +5,7 @@ const UnifiedInboxService = require('../services/UnifiedInboxService');
 const FolderService = require('../services/FolderService');
 const EmailSyncService = require('../services/EmailSyncService');
 const SyncSchedulerService = require('../services/SyncSchedulerService');
+const WebhookService = require('../services/WebhookService');
 const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Supabase client
@@ -17,6 +18,7 @@ const unifiedInboxService = new UnifiedInboxService();
 const folderService = new FolderService();
 const emailSyncService = new EmailSyncService();
 const syncSchedulerService = new SyncSchedulerService();
+const webhookService = new WebhookService();
 
 // Helper function to create proper names from email addresses
 function createProperName(email) {
@@ -747,15 +749,26 @@ router.post('/labels', authenticateToken, async (req, res) => {
       throw error;
     }
 
+    // Send webhook notification for label creation
+    try {
+      await webhookService.sendLabelWebhook(organizationId, 'label.created', {
+        label: label,
+        created_by: userId
+      });
+    } catch (webhookError) {
+      console.error('⚠️ Failed to send label.created webhook:', webhookError);
+      // Don't fail the main operation if webhook fails
+    }
+
     res.status(201).json({
       label
     });
 
   } catch (error) {
     console.error('❌ Error creating label:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to create label',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -975,6 +988,22 @@ router.post('/conversations/:id/labels', authenticateToken, async (req, res) => 
 
     const labels = createdAssignments?.map(assignment => assignment.conversation_labels) || [];
 
+    // Send webhook notifications for each added label
+    if (labels.length > 0) {
+      try {
+        for (const label of labels) {
+          await webhookService.sendLabelWebhook(organizationId, 'label.assigned', {
+            conversation_id: conversationId,
+            label: label,
+            assigned_by: userId
+          });
+        }
+      } catch (webhookError) {
+        console.error('⚠️ Failed to send label.assigned webhooks:', webhookError);
+        // Don't fail the main operation if webhook fails
+      }
+    }
+
     res.status(201).json({
       conversationId,
       addedLabels: labels,
@@ -983,9 +1012,9 @@ router.post('/conversations/:id/labels', authenticateToken, async (req, res) => 
 
   } catch (error) {
     console.error('❌ Error adding labels to conversation:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to add labels to conversation',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -1014,6 +1043,27 @@ router.delete('/conversations/:id/labels/:labelId', authenticateToken, async (re
     // If no assignments were deleted, the label wasn't assigned (which is fine)
     if (!assignments || assignments.length === 0) {
       console.log(`⚠️ Label ${labelId} was not assigned to conversation ${conversationId} (already removed or never assigned)`);
+    } else {
+      // Send webhook notification for label removal
+      try {
+        // Get label details for webhook payload
+        const { data: labelData, error: labelError } = await supabase
+          .from('labels')
+          .select('*')
+          .eq('id', labelId)
+          .eq('organization_id', organizationId)
+          .single();
+
+        if (!labelError && labelData) {
+          await webhookService.sendLabelWebhook(organizationId, 'label.removed', {
+            label: labelData,
+            conversation_id: conversationId,
+            removed_by: req.user.userId
+          });
+        }
+      } catch (webhookError) {
+        console.error('⚠️ Failed to send label.removed webhook:', webhookError);
+      }
     }
 
     res.json({
@@ -1092,6 +1142,31 @@ router.put('/conversations/bulk-label', authenticateToken, async (req, res) => {
         assignmentsCreated: createdAssignments?.length || 0
       };
 
+      // Send webhook notifications for bulk label assignments
+      if (createdAssignments && createdAssignments.length > 0) {
+        try {
+          // Get label details for webhook payload
+          const { data: labelsData, error: labelsError } = await supabase
+            .from('labels')
+            .select('*')
+            .in('id', labelIds)
+            .eq('organization_id', organizationId);
+
+          if (!labelsError && labelsData) {
+            for (const label of labelsData) {
+              await webhookService.sendLabelWebhook(organizationId, 'label.assigned', {
+                label: label,
+                conversation_ids: conversationIds,
+                assigned_by: userId,
+                bulk_operation: true
+              });
+            }
+          }
+        } catch (webhookError) {
+          console.error('⚠️ Failed to send bulk label.assigned webhook:', webhookError);
+        }
+      }
+
     } else if (action === 'remove') {
       const { data: deletedAssignments, error } = await supabase
         .from('conversation_label_assignments')
@@ -1109,6 +1184,31 @@ router.put('/conversations/bulk-label', authenticateToken, async (req, res) => {
         labelCount: labelIds.length,
         assignmentsRemoved: deletedAssignments?.length || 0
       };
+
+      // Send webhook notifications for bulk label removal
+      if (deletedAssignments && deletedAssignments.length > 0) {
+        try {
+          // Get label details for webhook payload
+          const { data: labelsData, error: labelsError } = await supabase
+            .from('labels')
+            .select('*')
+            .in('id', labelIds)
+            .eq('organization_id', organizationId);
+
+          if (!labelsError && labelsData) {
+            for (const label of labelsData) {
+              await webhookService.sendLabelWebhook(organizationId, 'label.removed', {
+                label: label,
+                conversation_ids: conversationIds,
+                removed_by: userId,
+                bulk_operation: true
+              });
+            }
+          }
+        } catch (webhookError) {
+          console.error('⚠️ Failed to send bulk label.removed webhook:', webhookError);
+        }
+      }
     }
 
     res.json({

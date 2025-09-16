@@ -1,6 +1,6 @@
 /**
  * Campaign Scheduler - Comprehensive scheduling algorithm that respects ALL campaign rules
- * 
+ *
  * Rules to respect:
  * 1. Timezone - All times should be calculated in campaign timezone
  * 2. Emails per day limit - Max emails per calendar day
@@ -10,9 +10,18 @@
  * 6. Active days - Which days of week to send (e.g., Mon-Fri)
  */
 
+const TimezoneService = require('../services/TimezoneService');
+
 class CampaignScheduler {
   constructor(config) {
-    this.timezone = config.timezone || 'UTC';
+    // Validate and set timezone
+    const requestedTimezone = config.timezone || 'UTC';
+    this.timezone = TimezoneService.isValidTimezone(requestedTimezone) ? requestedTimezone : 'UTC';
+
+    if (requestedTimezone !== this.timezone) {
+      console.warn(`🌐 Invalid timezone '${requestedTimezone}' provided to CampaignScheduler, using UTC instead`);
+    }
+
     this.emailsPerDay = config.emailsPerDay || 100;
     this.emailsPerHour = config.emailsPerHour || 10;
     this.sendingInterval = Math.max(5, config.sendingInterval || 15); // Enforce minimum 5 minutes

@@ -4,16 +4,17 @@ import ProtectedRoute from '../../components/auth/ProtectedRoute'
 import AppLayout from '../../components/layout/AppLayout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
-import { 
-  Mail, 
-  Building, 
-  CreditCard, 
-  Settings, 
-  Users, 
+import {
+  Mail,
+  Building,
+  CreditCard,
+  Settings,
+  Users,
   Globe,
   ArrowRight,
   CheckCircle,
-  AlertTriangle
+  AlertTriangle,
+  Clock
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -54,6 +55,15 @@ function SettingsContent() {
       status: 'neutral',
       statusText: '3 available',
       color: 'border-gray-200 bg-gray-50'
+    },
+    {
+      title: 'Timezone & Preferences',
+      description: 'Timezone settings, date formats, and display preferences',
+      icon: Clock,
+      href: '/settings/timezone',
+      status: 'success',
+      statusText: 'Auto-detected',
+      color: 'border-purple-200 bg-purple-50'
     }
   ]
 

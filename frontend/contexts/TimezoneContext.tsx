@@ -1,14 +1,19 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { 
-  getUserTimezone, 
-  setUserTimezone, 
+import { formatInTimeZone } from 'date-fns-tz';
+import {
+  getUserTimezone,
+  setUserTimezone,
   getBrowserTimezone,
   formatDateInTimezone,
   formatInboxMessageDate,
   formatConversationDate,
-  getTimezoneInfo
+  getTimezoneInfo,
+  watchTimezoneChanges,
+  detectUserTimezone,
+  isValidTimezone,
+  getTimezoneAbbreviation
 } from '../lib/timezone';
 
 interface TimezoneContextType {
@@ -19,6 +24,9 @@ interface TimezoneContextType {
   formatConversationDate: (date: string | Date | undefined | null) => string;
   timezoneInfo: any;
   refreshTimezone: () => void;
+  timezoneAbbreviation: string;
+  isTimezoneDetected: boolean;
+  timezoneChangeCount: number;
 }
 
 const TimezoneContext = createContext<TimezoneContextType | undefined>(undefined);
@@ -30,30 +38,72 @@ interface TimezoneProviderProps {
 export function TimezoneProvider({ children }: TimezoneProviderProps) {
   const [timezone, setTimezoneState] = useState<string>('UTC'); // Always start with UTC for SSR
   const [isClient, setIsClient] = useState(false);
+  const [timezoneAbbreviation, setTimezoneAbbreviation] = useState<string>('UTC');
+  const [isTimezoneDetected, setIsTimezoneDetected] = useState<boolean>(false);
+  const [timezoneChangeCount, setTimezoneChangeCount] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Initialize timezone on client side
+  // Initialize timezone on client side with enhanced detection
   useEffect(() => {
     setIsClient(true);
-    const detectedTimezone = getUserTimezone();
-    setTimezoneState(detectedTimezone);
 
-    // Debug log
-    console.log('🌐 TimezoneProvider initialized:', {
-      detectedTimezone,
-      browserTimezone: getBrowserTimezone(),
-      timezoneInfo: getTimezoneInfo()
+    try {
+      // Use enhanced timezone detection with error handling
+      const detection = detectUserTimezone();
+      const detectedTimezone = detection.timezone;
+
+      setTimezoneState(detectedTimezone);
+      setTimezoneAbbreviation(detection.abbreviation);
+      setIsTimezoneDetected(detection.isValid);
+
+      console.log('🌐 Enhanced TimezoneProvider initialized:', {
+        detection,
+        browserTimezone: getBrowserTimezone()
+      });
+    } catch (error) {
+      console.error('🌐 Error initializing timezone:', error);
+      // Fallback to basic detection
+      const fallbackTimezone = getBrowserTimezone();
+      setTimezoneState(fallbackTimezone);
+      setTimezoneAbbreviation(getTimezoneAbbreviation(fallbackTimezone));
+      setIsTimezoneDetected(isValidTimezone(fallbackTimezone));
+    } finally {
+      // Always set loading to false
+      setIsLoading(false);
+    }
+
+    // Set up timezone change monitoring with error handling
+    const cleanup = watchTimezoneChanges((newTimezone) => {
+      try {
+        console.log('🌐 Timezone change detected:', newTimezone);
+        setTimezoneState(newTimezone);
+        setTimezoneAbbreviation(getTimezoneAbbreviation(newTimezone));
+        setTimezoneChangeCount(prev => prev + 1);
+
+        // Notify user of timezone change
+        if (typeof window !== 'undefined' && window.location.pathname.includes('inbox')) {
+          console.log('📧 Inbox timezone change - timestamps will update automatically');
+        }
+      } catch (error) {
+        console.error('🌐 Error handling timezone change:', error);
+      }
     });
 
-    // Force re-render after timezone is set
-    setTimeout(() => {
-      console.log('🌐 Timezone should now be set:', detectedTimezone);
-    }, 100);
+    // Cleanup timezone watcher on unmount
+    return cleanup;
   }, []);
 
   const handleSetTimezone = (newTimezone: string) => {
+    if (!isValidTimezone(newTimezone)) {
+      console.warn('🌐 Invalid timezone provided:', newTimezone);
+      return;
+    }
+
     setUserTimezone(newTimezone);
     setTimezoneState(newTimezone);
-    console.log('🌐 Timezone changed to:', newTimezone);
+    setTimezoneAbbreviation(getTimezoneAbbreviation(newTimezone));
+    setIsTimezoneDetected(true);
+    console.log('🌐 Timezone manually changed to:', newTimezone);
   };
 
   const refreshTimezone = () => {
@@ -64,13 +114,11 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
 
   const formatDate = (date: string | Date | undefined | null, formatString?: string) => {
     if (!isClient) return '';
-    console.log('🌐 formatDate called:', { date, timezone, isClient });
     return formatDateInTimezone(date, formatString, timezone);
   };
 
   const formatMessageDate = (date: string | Date | undefined | null) => {
     if (!isClient) return '';
-    console.log('🌐 formatMessageDate called:', { date, timezone, isClient });
     // Pass the current timezone to ensure timezone-aware formatting
     return formatDateInTimezone(date, 'MMM d, yyyy h:mm a', timezone);
   };
@@ -91,7 +139,6 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
       const now = new Date();
 
       // Get timezone-aware formatted dates for comparison using context timezone
-      const { formatInTimeZone } = require('date-fns-tz');
       const todayStr = formatInTimeZone(now, timezone, 'yyyy-MM-dd');
       const dateStr = formatInTimeZone(dateObj, timezone, 'yyyy-MM-dd');
 
@@ -124,14 +171,28 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
     }
   };
 
+  // Safe timezone info getter
+  const safeGetTimezoneInfo = () => {
+    if (!isClient || isLoading) return null;
+    try {
+      return getTimezoneInfo();
+    } catch (error) {
+      console.error('🌐 Error getting timezone info:', error);
+      return { timezone, browserTimezone: getBrowserTimezone(), error: true };
+    }
+  };
+
   const contextValue: TimezoneContextType = {
     timezone,
     setTimezone: handleSetTimezone,
     formatDate,
     formatMessageDate,
     formatConversationDate: formatConversationDateFunc,
-    timezoneInfo: isClient ? getTimezoneInfo() : null,
-    refreshTimezone
+    timezoneInfo: safeGetTimezoneInfo(),
+    refreshTimezone,
+    timezoneAbbreviation,
+    isTimezoneDetected,
+    timezoneChangeCount
   };
 
   return (

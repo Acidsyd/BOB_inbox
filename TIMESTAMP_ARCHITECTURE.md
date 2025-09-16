@@ -177,7 +177,141 @@ class CampaignScheduler {
 }
 ```
 
-### 4. Frontend Display Formatting
+### 4. Production Environment Configuration
+
+**Location**: `ecosystem.config.cjs` (PM2 configuration)
+
+Critical for production deployment - ensures Node.js processes use the correct timezone:
+
+```javascript
+module.exports = {
+  apps: [
+    {
+      name: 'mailsender-backend',
+      script: './backend/src/index.js',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 4000,
+        TZ: 'Europe/Rome'  // ✅ CRITICAL: Forces timezone consistency
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        PORT: 4000,
+        TZ: 'Europe/Rome'  // ✅ CRITICAL: Forces timezone consistency
+      }
+    }
+    // ... other services with same TZ setting
+  ]
+};
+```
+
+**Why This Matters**:
+- Production servers often run in UTC by default
+- Without TZ environment variable, Node.js inherits system timezone (UTC)
+- This causes 2-hour offset for CEST users (UTC → CEST conversion fails)
+- Setting TZ forces all Node.js `toLocaleString()` calls to use correct base timezone
+
+**Verification**:
+```bash
+# Check if timezone is correctly set
+pm2 env 0 | grep TZ
+# Should output: TZ: Europe/Rome
+
+# Test timezone in Node.js process
+TZ=Europe/Rome node -e "console.log(new Date().toString())"
+# Should output: CEST time, not UTC
+```
+
+### 5. Timezone Settings UI System
+
+**Location**: `frontend/app/settings/timezone/page.tsx`, `frontend/contexts/TimezoneContext.tsx`
+
+Complete timezone management system with UI for user control and React Context for state management:
+
+#### Timezone Settings Page Features
+
+```typescript
+// Comprehensive timezone settings interface
+const timezoneOptions = [
+  {
+    region: 'North America',
+    zones: ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles']
+  },
+  {
+    region: 'Europe',
+    zones: ['Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Rome']
+  },
+  {
+    region: 'Asia Pacific',
+    zones: ['Asia/Tokyo', 'Asia/Shanghai', 'Asia/Mumbai', 'Australia/Sydney']
+  }
+];
+
+// Auto-detection with manual override
+const handleTimezoneChange = async (newTimezone: string) => {
+  if (newTimezone === 'auto') {
+    refreshTimezone(); // Triggers browser detection
+  } else {
+    setTimezone(newTimezone); // Manual selection
+  }
+};
+```
+
+**Features**:
+- Auto-detect timezone with browser API
+- Manual timezone selection organized by regions
+- Current timezone display with live time preview
+- Business hours and campaign scheduling information
+- Debug information for troubleshooting
+
+#### TimezoneContext Performance Optimizations
+
+**Location**: `frontend/contexts/TimezoneContext.tsx`
+
+**Critical Fix**: Removed performance-blocking console.log statements from formatting functions:
+
+```typescript
+// ❌ BEFORE - Caused inbox loading hangs
+const formatDate = (date: string | Date | undefined | null, formatString?: string) => {
+  if (!isClient) return '';
+  console.log('🌐 formatDate called:', { date, timezone, isClient }); // REMOVED
+  return formatDateInTimezone(date, formatString, timezone);
+};
+
+// ✅ AFTER - Performance optimized
+const formatDate = (date: string | Date | undefined | null, formatString?: string) => {
+  if (!isClient) return '';
+  return formatDateInTimezone(date, formatString, timezone);
+};
+```
+
+**Context Features**:
+- Centralized timezone state management across the app
+- Enhanced timezone detection with error handling
+- Automatic timezone change monitoring
+- Performance-optimized date formatting
+- Server-side rendering safe initialization
+
+#### Navigation Integration
+
+**Location**: `frontend/components/layout/Sidebar.tsx`
+
+Added timezone settings to main navigation dropdown:
+
+```typescript
+{
+  name: 'Settings',
+  icon: Settings,
+  children: [
+    { name: 'Email Accounts', href: '/settings/email-accounts' },
+    { name: 'Integrations', href: '/settings/integrations' },
+    { name: 'Billing', href: '/settings/billing' },
+    { name: 'Timezone', href: '/settings/timezone' }, // ✅ NEW
+  ]
+}
+```
+
+### 6. Frontend Display Formatting
 
 **Location**: `frontend/lib/timezone.ts`
 
@@ -346,16 +480,53 @@ try {
 ### Issue 1: "Invalid hour result: 24"
 **Cause**: `hour: '2-digit'` returning invalid hour value
 **Solution**: Use `hour: 'numeric'` instead
+**Status**: ✅ Fixed September 2025
 
 ### Issue 2: UTC vs Local Time Confusion
 **Cause**: Mixing UTC and local times in calculations
 **Solution**: Always use UTC for processing, local only for display
 
-### Issue 3: Daylight Saving Time Transitions
+### Issue 3: Inbox Loading Performance Issues
+**Cause**: Excessive console.log statements in TimezoneContext formatting functions called on every message render
+**Symptoms**: Inbox page shows "Loading timezone..." and hangs, especially with many conversations
+**Solution**: Removed performance-blocking console.log statements from formatDate and formatMessageDate functions
+**Status**: ✅ Fixed September 2025
+
+```typescript
+// Problem was in TimezoneContext.tsx
+const formatDate = (date: string | Date | undefined | null, formatString?: string) => {
+  if (!isClient) return '';
+  // console.log('🌐 formatDate called:', { date, timezone, isClient }); // ❌ REMOVED
+  return formatDateInTimezone(date, formatString, timezone);
+};
+```
+
+### Issue 4: Missing Timezone Settings Access
+**Cause**: No user-accessible timezone settings interface
+**Solution**: Created comprehensive timezone settings page and added to navigation
+**Status**: ✅ Fixed September 2025
+- Complete timezone settings page at `/settings/timezone`
+- Added to sidebar navigation dropdown
+- Auto-detection with manual override options
+
+### Issue 5: Production vs Development Timezone Mismatch
+**Cause**: Production server running in UTC while development runs in local timezone
+**Solution**: Set `TZ` environment variable in PM2 ecosystem config to match user timezone
+```javascript
+// ecosystem.config.cjs
+env: {
+  NODE_ENV: 'production',
+  PORT: 4000,
+  TZ: 'Europe/Rome'  // Critical: Forces Node.js to use this timezone
+}
+```
+**Status**: ✅ Fixed September 2025 - All PM2 processes now use Europe/Rome timezone
+
+### Issue 6: Daylight Saving Time Transitions
 **Cause**: Date calculations during DST changes
 **Solution**: Use IANA timezone identifiers and proper libraries
 
-### Issue 4: Browser Compatibility
+### Issue 7: Browser Compatibility
 **Cause**: Different browsers handle timezone conversion differently
 **Solution**: Use standardized Intl.DateTimeFormat API with fallbacks
 
@@ -383,14 +554,52 @@ const info = getTimezoneInfo();
 console.log('Timezone Debug:', info);
 ```
 
+### Production Troubleshooting
+
+When timestamps show incorrect times in production but work correctly in development:
+
+1. **Check Server Timezone**:
+```bash
+ssh root@your-server "date"
+ssh root@your-server "timedatectl status"
+```
+
+2. **Check Node.js Process Timezone**:
+```bash
+ssh root@your-server "pm2 env 0 | grep TZ"
+```
+
+3. **Test Timezone Conversion**:
+```bash
+# Should show CEST time if TZ is set correctly
+ssh root@your-server "cd /var/www/mailsender && TZ=Europe/Rome node -e \"console.log(new Date().toString())\""
+```
+
+4. **Common Fix - Update PM2 Config**:
+```bash
+# Add TZ environment variable to all apps in ecosystem.config.cjs
+# Then restart services
+pm2 delete all
+pm2 start ecosystem.config.cjs --env production
+```
+
+## Recent Improvements (September 2025)
+
+### ✅ Completed Enhancements
+
+1. **Timezone Settings UI**: Complete timezone management interface with auto-detection and manual override
+2. **React Context Integration**: Centralized timezone management with performance optimization
+3. **Sidebar Navigation**: Direct access to timezone settings from main navigation
+4. **Enhanced Detection**: Robust timezone detection with error handling and fallbacks
+5. **Performance Optimization**: Removed excessive logging that caused inbox loading issues
+
 ## Future Enhancements
 
 ### Planned Improvements
 
-1. **User Timezone Preferences**: Allow manual timezone selection in settings
-2. **Multi-Timezone Display**: Show times in multiple zones for global teams
-3. **Smart Timezone Detection**: Detect timezone changes during long sessions
-4. **Timezone History**: Track timezone changes for audit purposes
+1. **Multi-Timezone Display**: Show times in multiple zones for global teams
+2. **Smart Timezone Detection**: Detect timezone changes during long sessions
+3. **Timezone History**: Track timezone changes for audit purposes
 
 ### Migration Considerations
 

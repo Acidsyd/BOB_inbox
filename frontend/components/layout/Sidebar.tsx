@@ -45,7 +45,9 @@ const navigation = [
     icon: Settings,
     children: [
       { name: 'Email Accounts', href: '/settings/email-accounts' },
+      { name: 'Integrations', href: '/settings/integrations' },
       { name: 'Billing', href: '/settings/billing' },
+      { name: 'Timezone', href: '/settings/timezone' },
     ]
   },
 ]

@@ -43,6 +43,7 @@ app.use('/api/unsubscribe', require('./routes/unsubscribe').router);
 app.use('/api/health', require('./routes/health'));
 app.use('/api/process', require('./routes/process'));
 app.use('/api/track', require('./routes/tracking'));
+app.use('/api/webhooks', require('./routes/webhooks'));
 
 // Basic health check (legacy)
 app.get('/health', (req, res) => {

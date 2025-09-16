@@ -1,6 +1,6 @@
 {
   "name": "bobinbox-frontend",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "BOBinbox B2B Email Marketing Platform Frontend",
   "private": true,
   "scripts": {

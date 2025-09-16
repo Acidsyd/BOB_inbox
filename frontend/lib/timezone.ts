@@ -184,20 +184,202 @@ export function formatConversationDate(date: string | Date | undefined | null): 
 }
 
 /**
+ * Validate if a timezone is a valid IANA timezone identifier
+ * @param {string} timezone - Timezone to validate
+ * @returns {boolean} True if valid timezone
+ */
+export function isValidTimezone(timezone: string): boolean {
+  if (!timezone || typeof timezone !== 'string') {
+    return false;
+  }
+
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get timezone abbreviation (e.g., EST, PST, CEST)
+ * @param {string} timezone - IANA timezone identifier
+ * @param {Date} date - Date for abbreviation (handles DST)
+ * @returns {string} Timezone abbreviation
+ */
+export function getTimezoneAbbreviation(timezone?: string, date: Date = new Date()): string {
+  const tz = timezone || getUserTimezone();
+
+  if (!isValidTimezone(tz)) {
+    return 'UTC';
+  }
+
+  try {
+    return date.toLocaleDateString('en', {
+      timeZone: tz,
+      timeZoneName: 'short'
+    }).split(', ')[1] || 'UTC';
+  } catch (error) {
+    console.error('Error getting timezone abbreviation:', error);
+    return 'UTC';
+  }
+}
+
+/**
+ * Enhanced timezone detection with change monitoring
+ * @returns {TimezoneInfo} Comprehensive timezone information
+ */
+export interface TimezoneInfo {
+  timezone: string;
+  browserTimezone: string;
+  abbreviation: string;
+  offset: number;
+  isDST: boolean;
+  confidence: 'high' | 'medium' | 'low';
+  detectedAt: string;
+  isValid: boolean;
+}
+
+export function detectUserTimezone(): TimezoneInfo {
+  const browserTimezone = getBrowserTimezone();
+  const now = new Date();
+
+  // Check if we're in daylight saving time
+  const isDST = isDaylightSavingTime(now);
+
+  return {
+    timezone: browserTimezone,
+    browserTimezone,
+    abbreviation: getTimezoneAbbreviation(browserTimezone, now),
+    offset: now.getTimezoneOffset(),
+    isDST,
+    confidence: isValidTimezone(browserTimezone) ? 'high' : 'low',
+    detectedAt: now.toISOString(),
+    isValid: isValidTimezone(browserTimezone)
+  };
+}
+
+/**
+ * Check if date is during daylight saving time
+ * @param {Date} date - Date to check
+ * @returns {boolean} True if in DST
+ */
+export function isDaylightSavingTime(date: Date): boolean {
+  try {
+    const january = new Date(date.getFullYear(), 0, 1).getTimezoneOffset();
+    const july = new Date(date.getFullYear(), 6, 1).getTimezoneOffset();
+    return Math.max(january, july) !== date.getTimezoneOffset();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Watch for timezone changes during session
+ * Useful for detecting when users travel or change system timezone
+ */
+export function watchTimezoneChanges(onTimezoneChange?: (newTimezone: string) => void): () => void {
+  if (typeof window === 'undefined') {
+    return () => {}; // No-op for SSR
+  }
+
+  const initialTimezone = getUserTimezone();
+  let currentTimezone = initialTimezone;
+
+  const checkTimezone = () => {
+    const detectedTimezone = getBrowserTimezone();
+
+    if (detectedTimezone !== currentTimezone) {
+      console.log('🌐 Timezone change detected:', {
+        old: currentTimezone,
+        new: detectedTimezone
+      });
+
+      currentTimezone = detectedTimezone;
+      setUserTimezone(detectedTimezone);
+
+      if (onTimezoneChange) {
+        onTimezoneChange(detectedTimezone);
+      }
+    }
+  };
+
+  // Check every 30 seconds for timezone changes
+  const interval = setInterval(checkTimezone, 30000);
+
+  // Return cleanup function
+  return () => clearInterval(interval);
+}
+
+/**
+ * Get business hours for a timezone
+ * @param {string} timezone - IANA timezone identifier
+ * @returns {Object} Business hours {start, end}
+ */
+export interface BusinessHours {
+  start: number;
+  end: number;
+}
+
+export function getBusinessHours(timezone?: string): BusinessHours {
+  const tz = timezone || getUserTimezone();
+
+  // Business hours defaults by region
+  const businessHoursMap: Record<string, BusinessHours> = {
+    // Americas (9 AM - 5 PM)
+    'America/New_York': { start: 9, end: 17 },
+    'America/Chicago': { start: 9, end: 17 },
+    'America/Denver': { start: 9, end: 17 },
+    'America/Los_Angeles': { start: 9, end: 17 },
+    'America/Toronto': { start: 9, end: 17 },
+
+    // Europe (9 AM - 5 PM)
+    'Europe/London': { start: 9, end: 17 },
+    'Europe/Paris': { start: 9, end: 17 },
+    'Europe/Berlin': { start: 9, end: 17 },
+    'Europe/Rome': { start: 9, end: 17 },
+    'Europe/Madrid': { start: 9, end: 17 },
+
+    // Asia (9 AM - 6 PM, longer hours)
+    'Asia/Tokyo': { start: 9, end: 18 },
+    'Asia/Shanghai': { start: 9, end: 18 },
+    'Asia/Mumbai': { start: 10, end: 18 },
+    'Asia/Dubai': { start: 9, end: 17 },
+    'Asia/Singapore': { start: 9, end: 18 },
+
+    // Oceania (9 AM - 5 PM)
+    'Australia/Sydney': { start: 9, end: 17 },
+    'Australia/Melbourne': { start: 9, end: 17 },
+    'Pacific/Auckland': { start: 9, end: 17 },
+
+    // Default fallback
+    'default': { start: 9, end: 17 }
+  };
+
+  return businessHoursMap[tz] || businessHoursMap.default;
+}
+
+/**
  * Get timezone info for debugging
  * @returns {object} Timezone information
  */
 export function getTimezoneInfo() {
   const timezone = getUserTimezone();
   const now = new Date();
-  
+  const detection = detectUserTimezone();
+
   return {
     timezone,
     browserTimezone: getBrowserTimezone(),
+    abbreviation: getTimezoneAbbreviation(timezone, now),
     currentTime: formatDateInTimezone(now, 'yyyy-MM-dd HH:mm:ss zzz'),
     utcTime: now.toISOString(),
     timezoneOffset: now.getTimezoneOffset(),
-    storedTimezone: localStorage.getItem('userTimezone')
+    storedTimezone: typeof window !== 'undefined' ? localStorage.getItem('userTimezone') : null,
+    businessHours: getBusinessHours(timezone),
+    isDST: detection.isDST,
+    isValid: isValidTimezone(timezone),
+    detection
   };
 }
 

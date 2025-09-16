@@ -5,6 +5,7 @@ const UnifiedInboxService = require('./UnifiedInboxService');
 const AccountRateLimitService = require('./AccountRateLimitService');
 const BounceTrackingService = require('./BounceTrackingService');
 const HealthCheckService = require('./HealthCheckService');
+const TimezoneService = require('./TimezoneService');
 const SpintaxParser = require('../utils/spintax');
 const { toLocalTimestamp } = require('../utils/dateUtils.cjs');
 
@@ -439,10 +440,12 @@ class CronEmailProcessor {
     const campaignConfigMap = {};
     const campaignStatusMap = {};
     const campaignTimezoneMap = {};
+    const campaignActiveDaysMap = {};
     campaigns?.forEach(campaign => {
       campaignConfigMap[campaign.id] = campaign.config?.sendingHours || null;
       campaignStatusMap[campaign.id] = campaign.status;
       campaignTimezoneMap[campaign.id] = campaign.config?.timezone || 'UTC';
+      campaignActiveDaysMap[campaign.id] = campaign.config?.activeDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
     });
     const filteredEmails = emails.filter(email => {
       // If no campaign_id, allow the email
@@ -455,6 +458,16 @@ class CronEmailProcessor {
         return false;
       }
 
+      const campaignTimezone = campaignTimezoneMap[email.campaign_id];
+      const activeDays = campaignActiveDaysMap[email.campaign_id];
+
+      // Check if today is an active day (timezone-aware)
+      const todayInCampaignTz = TimezoneService.convertToUserTimezone(new Date(), campaignTimezone, { format: 'cccc' }).toLowerCase();
+      if (!activeDays.includes(todayInCampaignTz)) {
+        console.log(`📅 Skipping email ${email.id} - ${todayInCampaignTz} not in active days [${activeDays.join(', ')}] for campaign ${email.campaign_id}`);
+        return false;
+      }
+
       const sendingHours = campaignConfigMap[email.campaign_id];
 
       // If no sending hours configured, allow all times
@@ -463,24 +476,20 @@ class CronEmailProcessor {
       }
 
       const { start, end } = sendingHours;
-      const campaignTimezone = campaignTimezoneMap[email.campaign_id];
 
-      // Get current hour in campaign timezone (CRITICAL FIX)
-      const currentHour = new Date().toLocaleString('en-US', {
-        timeZone: campaignTimezone,
-        hour12: false,
-        hour: 'numeric'
-      });
-      const currentHourNum = parseInt(currentHour);
+      // Use TimezoneService for reliable business hours checking
+      const isWithinHours = TimezoneService.isWithinBusinessHours(
+        campaignTimezone,
+        new Date(),
+        { start, end }
+      );
 
-      // Handle cases where end time is next day (e.g., 9 AM to 2 AM)
-      if (end < start) {
-        // Crosses midnight
-        return currentHourNum >= start || currentHourNum < end;
-      } else {
-        // Same day
-        return currentHourNum >= start && currentHourNum < end;
+      if (!isWithinHours) {
+        const currentTime = TimezoneService.convertToUserTimezone(new Date(), campaignTimezone, { format: 'h:mm a' });
+        console.log(`⏰ Email skipped - outside sending hours ${start}:00-${end}:00 in ${campaignTimezone} (current: ${currentTime})`);
       }
+
+      return isWithinHours;
     });
 
     const skippedCount = emails.length - filteredEmails.length;

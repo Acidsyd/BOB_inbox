@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../lib/api'
 import { Label } from './useLabels'
 import { getUserTimezone } from '../lib/timezone'
+import { useTimezone } from '../contexts/TimezoneContext'
 
 interface Conversation {
   id: string
@@ -51,6 +52,9 @@ export function useInbox(filters: InboxFilters = {}) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Get timezone from context instead of getUserTimezone
+  const { timezone } = useTimezone()
+
   // Memoize filters to prevent infinite loops
   const memoizedFilters = useMemo(() => filters, [
     filters.status,
@@ -71,9 +75,9 @@ export function useInbox(filters: InboxFilters = {}) {
     setError(null)
 
     try {
-      // Get user timezone for backend conversion
-      const userTimezone = getUserTimezone()
-      console.log('🔍 Frontend useInbox: getUserTimezone() returned:', userTimezone, typeof userTimezone)
+      // Use timezone from context for backend conversion
+      const userTimezone = timezone
+      console.log('🔍 Frontend useInbox: timezone from context:', userTimezone, typeof userTimezone)
 
       // Build query params
       const params = new URLSearchParams()
@@ -140,7 +144,7 @@ export function useInbox(filters: InboxFilters = {}) {
     } finally {
       setIsLoading(false)
     }
-  }, [memoizedFilters])
+  }, [memoizedFilters, timezone])
 
   const fetchStats = useCallback(async () => {
     try {
