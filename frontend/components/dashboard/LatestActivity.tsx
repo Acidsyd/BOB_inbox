@@ -43,7 +43,9 @@ export default function LatestActivity({
         for (const conv of conversations.slice(0, limit)) {
           // Try to get messages for this conversation
           try {
-            const messagesResponse = await api.get(`/inbox/conversations/${conv.id}/messages`)
+            const messagesResponse = await api.get(`/inbox/conversations/${conv.id}/messages`, {
+              params: { timezone: 'UTC' } // Use UTC for dashboard consistency or could use getUserTimezone()
+            })
             const messages = messagesResponse.data.messages || []
             
             // Get the most recent message

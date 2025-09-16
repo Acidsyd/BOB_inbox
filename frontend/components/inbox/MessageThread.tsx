@@ -22,6 +22,7 @@ import { Badge } from '../ui/badge'
 import { Separator } from '../ui/separator'
 import { Textarea } from '../ui/textarea'
 import { useInboxMessages } from '../../hooks/useInboxMessages'
+import { useTimezone } from '../../contexts/TimezoneContext'
 import { cn } from '../../lib/utils'
 import { api } from '../../lib/api'
 import { stripTrackingElements } from '../../lib/strip-tracking-pixels'
@@ -53,8 +54,9 @@ export function MessageThread({ conversation, onClose, onArchive, onMarkRead }: 
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set())
   const [isReplying, setIsReplying] = useState(false)
   const [replyContent, setReplyContent] = useState('')
-  
-  const { messages, isLoading, error, refreshMessages } = useInboxMessages(conversation.id)
+
+  const { timezone } = useTimezone()
+  const { messages, isLoading, error, refreshMessages } = useInboxMessages(conversation.id, timezone)
 
   useEffect(() => {
     // Expand the last message by default

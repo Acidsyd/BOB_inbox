@@ -95,7 +95,7 @@ export function InboxMessageView({
   const [conversationLabels, setConversationLabels] = useState<Label[]>(conversation.labels || [])
   
   // Timezone-aware date formatting
-  const { formatMessageDate } = useTimezone()
+  const { formatMessageDate, timezone } = useTimezone()
   
   // Reset labels when conversation changes
   useEffect(() => {
@@ -118,7 +118,7 @@ export function InboxMessageView({
     markMessageAsRead,
     markMessageAsUnread,
     markConversationAsRead
-  } = useInboxMessages(conversation.id)
+  } = useInboxMessages(conversation.id, timezone)
 
   // Keyboard shortcuts for reply box
   useEffect(() => {
