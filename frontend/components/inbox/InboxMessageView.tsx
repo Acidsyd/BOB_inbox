@@ -576,7 +576,7 @@ export function InboxMessageView({
                 <span className="font-medium">Subject:</span>
                 <span className="truncate flex-1">{conversation.subject || 'No subject'}</span>
                 <span>•</span>
-                <span>{formatMessageDate(conversation.last_activity_at)}</span>
+                <span>{formatMessageDate(conversation.last_activity_at)} ({timezone})</span>
               </div>
             </div>
           </div>
