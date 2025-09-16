@@ -39,9 +39,19 @@ export function getUserTimezone(): string {
       console.warn('🔍 getUserTimezone: localStorage not accessible:', storageError);
     }
 
-    if (stored && stored !== 'null' && stored !== 'undefined') {
+    if (stored && stored !== 'null' && stored !== 'undefined' && stored !== null && stored !== undefined) {
       console.log('🔍 getUserTimezone: Found stored timezone:', stored);
       return stored;
+    }
+
+    // Clean up invalid localStorage values
+    if (stored === 'null' || stored === 'undefined') {
+      console.log('🔍 getUserTimezone: Clearing invalid stored timezone value:', stored);
+      try {
+        localStorage.removeItem('userTimezone');
+      } catch (cleanupError) {
+        console.warn('🔍 getUserTimezone: Could not clear invalid timezone:', cleanupError);
+      }
     }
 
     // Fall back to browser detection

@@ -721,7 +721,7 @@ export function InboxMessageView({
                           </div>
                           <div className="flex items-center gap-1">
                             <span className="font-medium text-gray-700 min-w-[35px]">To:</span>
-                            <span className="truncate">{message.to_email || 'Unknown recipient'}</span>
+                            <span className="break-all">{message.to_email || 'Unknown recipient'}</span>
                           </div>
                         </div>
                       )}
