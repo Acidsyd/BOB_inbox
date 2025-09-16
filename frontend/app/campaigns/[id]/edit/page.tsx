@@ -181,9 +181,23 @@ function EditCampaignPageContent({
         })
 
         console.log('🔍 Debug - Fetched campaign:', fetchedCampaign);
+        console.log('🔍 Debug - Raw config object:', fetchedCampaign.config);
+        console.log('🔍 Debug - All top-level keys:', Object.keys(fetchedCampaign));
         console.log('🔍 Debug - Email sequence from API:', getConfigValue('emailSequence', []));
         console.log('🔍 Debug - Email accounts from API:', getConfigValue('emailAccounts', []));
         console.log('🔍 Debug - Email subject from API:', getConfigValue('emailSubject', ''));
+        console.log('🔍 Debug - Email content from API:', getConfigValue('emailContent', ''));
+
+        // Check if this specific campaign has empty data
+        if (getConfigValue('emailSequence', []).length === 0) {
+          console.log('⚠️ This campaign has NO email sequence data in the database');
+        }
+        if (getConfigValue('emailAccounts', []).length === 0) {
+          console.log('⚠️ This campaign has NO email accounts data in the database');
+        }
+        if (!getConfigValue('emailSubject', '')) {
+          console.log('⚠️ This campaign has NO email subject in the database');
+        }
       } else {
         setError('Campaign not found')
       }

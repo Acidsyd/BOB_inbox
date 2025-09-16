@@ -499,6 +499,13 @@ router.post('/', authenticateToken, async (req, res) => {
       jitterMinutes
     } = req.body;
 
+    // 🔍 DEBUG: Log email sequence data specifically
+    console.log('🔍 DEBUG - Email Sequence data received:');
+    console.log('emailSequence:', emailSequence);
+    console.log('emailSequence type:', typeof emailSequence);
+    console.log('emailSequence length:', emailSequence?.length);
+    console.log('emailSequence content:', JSON.stringify(emailSequence, null, 2));
+
     // Validate required fields
     if (!name || !emailSubject || !emailContent || !leadListId || !emailAccounts?.length) {
       return res.status(400).json({
@@ -576,7 +583,13 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     console.log('✅ Campaign created successfully:', campaign.id);
-    
+
+    // 🔍 DEBUG: Log what was actually saved to database
+    console.log('🔍 DEBUG - Campaign config saved to database:');
+    console.log('Campaign ID:', campaign.id);
+    console.log('Config emailSequence:', campaign.config?.emailSequence);
+    console.log('Config emailSequence length:', campaign.config?.emailSequence?.length);
+
     res.json({
       success: true,
       campaign: campaign,

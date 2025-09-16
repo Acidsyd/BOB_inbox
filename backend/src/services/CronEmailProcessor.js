@@ -833,11 +833,12 @@ class CronEmailProcessor {
       const trackOpens = campaignConfig?.trackOpens || false;
       const trackClicks = campaignConfig?.trackClicks || false;
 
-      // 🎯 Process spintax in subject and content using lead email as seed for consistency
-      const processedSubject = SpintaxParser.spinWithSeed(email.subject, email.to_email);
-      const processedContent = SpintaxParser.spinWithSeed(email.content, email.to_email);
+      // ✅ Use pre-processed content from scheduled_emails table
+      // Spintax and variable substitution already done during campaign creation
+      const processedSubject = email.subject;
+      const processedContent = email.content;
 
-      console.log(`🔄 Spintax processed for ${email.to_email}: Subject changed: ${email.subject !== processedSubject}, Content changed: ${email.content !== processedContent}`);
+      console.log(`✅ Using pre-processed content for ${email.to_email} (spintax & variables already substituted)`);
 
       // Try OAuth2 first, then SMTP fallback
       const useOAuth2 = await this.shouldUseOAuth2(email.from_email, organizationId);

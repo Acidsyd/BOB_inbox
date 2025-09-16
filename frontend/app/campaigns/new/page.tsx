@@ -38,6 +38,7 @@ interface EmailSequence {
   subject: string
   content: string
   delay: number // days after previous email
+  replyToSameThread?: boolean
 }
 
 interface CampaignData {

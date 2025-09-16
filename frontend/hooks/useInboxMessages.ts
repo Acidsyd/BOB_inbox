@@ -38,7 +38,7 @@ interface ReadSyncResult {
   error?: string
 }
 
-export function useInboxMessages(conversationId: string | null) {
+export function useInboxMessages(conversationId: string | null, timezone?: string) {
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -53,8 +53,8 @@ export function useInboxMessages(conversationId: string | null) {
     setError(null)
     
     try {
-      // Get user timezone for backend conversion
-      const userTimezone = getUserTimezone()
+      // Use provided timezone or fallback to getUserTimezone for backend conversion
+      const userTimezone = timezone || getUserTimezone()
       const response = await api.get(`/inbox/conversations/${conversationId}/messages`, {
         params: { timezone: userTimezone }
       })
@@ -75,7 +75,7 @@ export function useInboxMessages(conversationId: string | null) {
     } finally {
       setIsLoading(false)
     }
-  }, [conversationId])
+  }, [conversationId, timezone])
 
   const sendReply = useCallback(async (content: string, fromAccountId: string) => {
     if (!conversationId) {
