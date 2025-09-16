@@ -61,6 +61,7 @@ interface Conversation {
   subject?: string
   participants?: string[]
   last_activity_at?: string
+  last_activity_at_display?: string // Timezone-converted display timestamp
   campaign_name?: string
   lead_name?: string
   has_replies?: boolean
@@ -576,7 +577,9 @@ export function InboxMessageView({
                 <span className="font-medium">Subject:</span>
                 <span className="truncate flex-1">{conversation.subject || 'No subject'}</span>
                 <span>•</span>
-                <span>{formatMessageDate(conversation.last_activity_at)} ({timezone})</span>
+                <span>
+                  {conversation.last_activity_at_display || formatMessageDate(conversation.last_activity_at)} ({timezone})
+                </span>
               </div>
             </div>
           </div>

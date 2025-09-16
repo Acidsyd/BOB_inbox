@@ -1,9 +1,9 @@
 import { format, formatDistanceToNow } from 'date-fns'
-import { 
-  Mail, 
-  Circle, 
-  CheckCircle, 
-  Archive, 
+import {
+  Mail,
+  Circle,
+  CheckCircle,
+  Archive,
   MoreVertical,
   Reply,
   Clock,
@@ -18,11 +18,13 @@ import {
 } from '../ui/dropdown-menu'
 import { Badge } from '../ui/badge'
 import { cn } from '../../lib/utils'
+import { useTimezone } from '../../contexts/TimezoneContext'
 
 interface Conversation {
   id: string
   subject: string
   last_activity_at?: string
+  last_activity_at_display?: string // Timezone-converted display timestamp
   last_message_at?: string
   message_count: number
   is_read: boolean
@@ -56,25 +58,20 @@ export function ConversationList({
   onToggleSelect,
   selectionMode = false
 }: ConversationListProps) {
-  const formatTime = (dateStr?: string | null) => {
+  const { formatConversationDate } = useTimezone()
+
+  const formatTime = (conversation: Conversation) => {
+    // Use backend-converted display timestamp if available, otherwise format the UTC timestamp
+    const dateStr = conversation.last_activity_at_display || conversation.last_activity_at || conversation.last_message_at
     if (!dateStr) return 'Unknown'
+
     try {
-      // All database timestamps are now stored correctly - use direct parsing
-      const d = new Date(dateStr)
-      if (isNaN(d.getTime())) return 'Invalid date'
-      
-      const now = new Date()
-      const diffInHours = (now.getTime() - d.getTime()) / (1000 * 60 * 60)
-      
-      if (diffInHours < 24) {
-        return format(d, 'h:mm a')
-      } else if (diffInHours < 48) {
-        return 'Yesterday'
-      } else if (diffInHours < 168) { // Less than a week
-        return format(d, 'EEEE')
-      } else {
-        return format(d, 'MMM d')
+      // If we have the display timestamp, use it directly (it's already formatted)
+      if (conversation.last_activity_at_display) {
+        return conversation.last_activity_at_display
       }
+      // Otherwise format the UTC timestamp
+      return formatConversationDate(dateStr)
     } catch (error) {
       console.error('Error formatting date:', error, dateStr)
       return 'Invalid date'
@@ -156,7 +153,7 @@ export function ConversationList({
                   
                   <div className="flex items-center gap-3 mt-2">
                     <span className="text-xs text-gray-500">
-                      {formatTime(conversation.last_activity_at || conversation.last_message_at)}
+                      {formatTime(conversation)}
                     </span>
                     
                     {conversation.message_count > 1 && (
