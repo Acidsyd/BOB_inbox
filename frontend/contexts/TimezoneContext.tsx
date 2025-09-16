@@ -77,8 +77,51 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
 
   const formatConversationDateFunc = (date: string | Date | undefined | null) => {
     if (!isClient) return '';
-    // Use the timezone-aware utility but ensure timezone is passed
-    return formatConversationDate(date);
+
+    // Replicate formatConversationDate logic but use the context timezone instead of getUserTimezone()
+    if (!date) return '';
+
+    try {
+      const dateObj = typeof date === 'string' ? new Date(date) : date;
+
+      if (isNaN(dateObj.getTime())) {
+        return '';
+      }
+
+      const now = new Date();
+
+      // Get timezone-aware formatted dates for comparison using context timezone
+      const { formatInTimeZone } = require('date-fns-tz');
+      const todayStr = formatInTimeZone(now, timezone, 'yyyy-MM-dd');
+      const dateStr = formatInTimeZone(dateObj, timezone, 'yyyy-MM-dd');
+
+      // Check if it's today
+      if (dateStr === todayStr) {
+        return formatInTimeZone(dateObj, timezone, 'h:mm a');
+      }
+
+      // Check if it's yesterday
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = formatInTimeZone(yesterday, timezone, 'yyyy-MM-dd');
+      if (dateStr === yesterdayStr) {
+        return 'Yesterday';
+      }
+
+      // Check if it's this year
+      const currentYear = formatInTimeZone(now, timezone, 'yyyy');
+      const dateYear = formatInTimeZone(dateObj, timezone, 'yyyy');
+      if (dateYear === currentYear) {
+        return formatInTimeZone(dateObj, timezone, 'MMM d');
+      }
+
+      // Different year
+      return formatInTimeZone(dateObj, timezone, 'MMM d, yyyy');
+
+    } catch (error) {
+      console.error('Error formatting conversation date:', error);
+      return '';
+    }
   };
 
   const contextValue: TimezoneContextType = {
