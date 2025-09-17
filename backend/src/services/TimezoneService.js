@@ -124,8 +124,20 @@ class TimezoneService {
       return 'Invalid date';
     }
 
-    // Convert string dates to Date objects
-    const dateObj = utcDate instanceof Date ? utcDate : new Date(utcDate);
+    // Convert string dates to Date objects with proper UTC handling
+    let dateObj;
+    if (utcDate instanceof Date) {
+      dateObj = utcDate;
+    } else {
+      const dateStr = utcDate.toString();
+      // If timestamp lacks timezone info and matches ISO format, treat as UTC
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/.test(dateStr)) {
+        // Add 'Z' to treat as UTC since database times should be UTC
+        dateObj = new Date(dateStr + 'Z');
+      } else {
+        dateObj = new Date(utcDate);
+      }
+    }
 
     // Check if date is valid
     if (isNaN(dateObj.getTime())) {
@@ -358,4 +370,4 @@ class TimezoneService {
   }
 }
 
-export default TimezoneService;
+module.exports = TimezoneService;

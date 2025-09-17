@@ -462,7 +462,10 @@ class CronEmailProcessor {
       const activeDays = campaignActiveDaysMap[email.campaign_id];
 
       // Check if today is an active day (timezone-aware)
-      const todayInCampaignTz = TimezoneService.convertToUserTimezone(new Date(), campaignTimezone, { format: 'cccc' }).toLowerCase();
+      const todayInCampaignTz = new Date().toLocaleDateString('en-US', {
+        timeZone: campaignTimezone,
+        weekday: 'long'
+      }).toLowerCase();
       if (!activeDays.includes(todayInCampaignTz)) {
         console.log(`📅 Skipping email ${email.id} - ${todayInCampaignTz} not in active days [${activeDays.join(', ')}] for campaign ${email.campaign_id}`);
         return false;
@@ -485,7 +488,11 @@ class CronEmailProcessor {
       );
 
       if (!isWithinHours) {
-        const currentTime = TimezoneService.convertToUserTimezone(new Date(), campaignTimezone, { format: 'h:mm a' });
+        const currentTime = TimezoneService.convertToUserTimezone(new Date(), campaignTimezone, {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
         console.log(`⏰ Email skipped - outside sending hours ${start}:00-${end}:00 in ${campaignTimezone} (current: ${currentTime})`);
       }
 
@@ -982,7 +989,7 @@ class CronEmailProcessor {
     const { error } = await supabase
       .from('scheduled_emails')
       .update({
-        send_at: toLocalTimestamp(newSendTime),
+        send_at: newSendTime.toISOString(),
         status: 'scheduled'
       })
       .in('id', emailIds);
@@ -990,7 +997,7 @@ class CronEmailProcessor {
     if (error) {
       console.error('❌ Error rescheduling emails:', error);
     } else {
-      console.log(`⏰ Rescheduled ${emailIds.length} emails to ${toLocalTimestamp(newSendTime)}`);
+      console.log(`⏰ Rescheduled ${emailIds.length} emails to ${newSendTime.toISOString()}`);
     }
   }
 
@@ -1033,7 +1040,7 @@ class CronEmailProcessor {
       const { error } = await supabase
         .from('scheduled_emails')
         .update({
-          send_at: toLocalTimestamp(rescheduleTime),
+          send_at: rescheduleTime.toISOString(),
           status: 'scheduled',
           updated_at: toLocalTimestamp()
         })
@@ -1064,7 +1071,7 @@ class CronEmailProcessor {
         const { error } = await supabase
           .from('scheduled_emails')
           .update({
-            send_at: toLocalTimestamp(rescheduleTime),
+            send_at: rescheduleTime.toISOString(),
             status: 'scheduled',
             updated_at: toLocalTimestamp()
           })

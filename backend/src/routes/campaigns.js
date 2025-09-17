@@ -15,7 +15,39 @@ const emailService = new EmailService();
 // Helper function to format dates for campaign responses
 function formatCampaignDate(date, timezone = 'UTC', format = 'MMM d, yyyy h:mm a') {
   if (!date) return null;
-  return TimezoneService.convertToUserTimezone(date, timezone, { format });
+
+  // Convert format string to Intl.DateTimeFormat options
+  let options = {
+    timeZone: timezone
+  };
+
+  if (format === 'yyyy-MM-dd') {
+    options = {
+      ...options,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    };
+  } else if (format === 'MMM d') {
+    options = {
+      ...options,
+      month: 'short',
+      day: 'numeric'
+    };
+  } else {
+    // Default format: 'MMM d, yyyy h:mm a'
+    options = {
+      ...options,
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    };
+  }
+
+  return TimezoneService.convertToUserTimezone(date, timezone, options);
 }
 const emailTrackingService = new EmailTrackingService();
 const healthCheckService = new HealthCheckService();
@@ -1561,7 +1593,7 @@ router.get('/:id/daily-stats', authenticateToken, async (req, res) => {
     (emailStats || []).forEach(email => {
       if (email.sent_at) {
         // Convert to campaign timezone before extracting date
-        const tzDate = TimezoneService.convertToUserTimezone(email.sent_at, campaignTimezone, { format: 'yyyy-MM-dd' });
+        const tzDate = formatCampaignDate(email.sent_at, campaignTimezone, 'yyyy-MM-dd');
         emailsByDate[tzDate] = (emailsByDate[tzDate] || 0) + 1;
       }
     });
@@ -1570,7 +1602,7 @@ router.get('/:id/daily-stats', authenticateToken, async (req, res) => {
     const bouncesByDate = {};
     (bounceStats || []).forEach(bounce => {
       if (bounce.sent_at) {
-        const tzDate = TimezoneService.convertToUserTimezone(bounce.sent_at, campaignTimezone, { format: 'yyyy-MM-dd' });
+        const tzDate = formatCampaignDate(bounce.sent_at, campaignTimezone, 'yyyy-MM-dd');
         bouncesByDate[tzDate] = (bouncesByDate[tzDate] || 0) + 1;
       }
     });
@@ -1579,7 +1611,7 @@ router.get('/:id/daily-stats', authenticateToken, async (req, res) => {
     const repliesByDate = {};
     (replyStats || []).forEach(reply => {
       if (reply.created_at) {
-        const tzDate = TimezoneService.convertToUserTimezone(reply.created_at, campaignTimezone, { format: 'yyyy-MM-dd' });
+        const tzDate = formatCampaignDate(reply.created_at, campaignTimezone, 'yyyy-MM-dd');
         repliesByDate[tzDate] = (repliesByDate[tzDate] || 0) + 1;
       }
     });
@@ -1590,8 +1622,8 @@ router.get('/:id/daily-stats', authenticateToken, async (req, res) => {
     for (let i = 29; i >= 0; i--) {
       const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
       // Use timezone-aware date formatting
-      const dateStr = TimezoneService.convertToUserTimezone(date, campaignTimezone, { format: 'yyyy-MM-dd' });
-      const displayDate = TimezoneService.convertToUserTimezone(date, campaignTimezone, { format: 'MMM d' });
+      const dateStr = formatCampaignDate(date, campaignTimezone, 'yyyy-MM-dd');
+      const displayDate = formatCampaignDate(date, campaignTimezone, 'MMM d');
 
       stats.push({
         date: displayDate,
@@ -1635,6 +1667,7 @@ router.get('/:id/scheduled-activity', authenticateToken, async (req, res) => {
     }
 
     const campaignTimezone = campaign?.config?.timezone || 'UTC';
+    console.log('🕐 Campaign timezone for scheduled activity:', campaignTimezone, 'from campaign config:', campaign?.config);
 
     // Get scheduled emails with account info
     const { data: scheduledEmails, error } = await supabase
@@ -1706,14 +1739,10 @@ router.get('/:id/scheduled-activity', authenticateToken, async (req, res) => {
         senderEmail = accountLookup[email.email_account_id];
       }
 
-      // Convert time to campaign timezone for display using TimezoneService
-      const formattedTime = TimezoneService.convertToUserTimezone(
-        email.send_at,
-        campaignTimezone,
-        {
-          format: 'MMM d, yyyy h:mm a'
-        }
-      );
+      // Convert time to campaign timezone for display using helper function
+      console.log('🕐 Converting time:', email.send_at, 'to timezone:', campaignTimezone);
+      const formattedTime = formatCampaignDate(email.send_at, campaignTimezone);
+      console.log('🕐 Formatted result:', formattedTime);
 
       return {
         id: email.id,
