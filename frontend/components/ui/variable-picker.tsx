@@ -276,7 +276,7 @@ export function VariablePicker({
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{variable.label}</span>
                         <code className="text-xs bg-gray-100 px-1 py-0.5 rounded text-gray-600">
-                          {`{${variable.key}}`}
+                          {`{{${variable.key}}}`}
                         </code>
                       </div>
                       {variable.description && (

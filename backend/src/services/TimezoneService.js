@@ -130,9 +130,9 @@ class TimezoneService {
       dateObj = utcDate;
     } else {
       const dateStr = utcDate.toString();
-      // If timestamp lacks timezone info and matches ISO format, treat as UTC
+      // If timestamp lacks timezone info and matches ISO format, treat as UTC (legacy format)
       if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/.test(dateStr)) {
-        // Add 'Z' to treat as UTC since database times should be UTC
+        // Legacy timestamps without 'Z' should be treated as UTC and converted
         dateObj = new Date(dateStr + 'Z');
       } else {
         dateObj = new Date(utcDate);

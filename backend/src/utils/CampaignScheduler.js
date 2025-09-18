@@ -135,17 +135,21 @@ class CampaignScheduler {
       // Select email account (round-robin)
       const emailAccountId = emailAccounts[leadIndex % emailAccounts.length];
 
-      // ULTIMATE FIX: Simple time advancement with no validation functions
-      // This ensures each email gets a unique, properly spaced time without compression
+      // Advance time by the interval
       if (leadIndex > 0) {
         currentTime = new Date(currentTime.getTime() + (actualIntervalMinutes * 60 * 1000));
 
-        // CRITICAL: No validation functions here - they cause compression!
-        // All validation was done once at the beginning with moveToNextValidSendingWindow
+        // CRITICAL FIX: Validate business hours after each advancement
+        // This ensures emails don't get scheduled outside sending hours
+        currentTime = this.moveToNextValidSendingWindow(currentTime);
       }
 
       // Apply human-like jitter to make timing less robotic
-      const jitteredTime = this.applyJitter(currentTime, lead.email);
+      let jitteredTime = this.applyJitter(currentTime, lead.email);
+
+      // CRITICAL FIX: Validate business hours after jitter as well
+      // Jitter can push time backwards, potentially outside business hours
+      jitteredTime = this.moveToNextValidSendingWindow(jitteredTime);
 
       // Schedule the email
       schedules.push({
@@ -336,24 +340,27 @@ class CampaignScheduler {
     second = Math.max(0, Math.min(59, parseInt(second) || 0));
 
     try {
-      // Create a date string in the campaign timezone
-      const dateStr = date.toLocaleDateString('en-CA', { timeZone: this.timezone });
-      const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
+      // CORRECT APPROACH: Use the proper timezone-aware calculation
+      // Get the date components in the target timezone
+      const year = parseInt(date.toLocaleDateString('en-CA', { timeZone: this.timezone, year: 'numeric' }));
+      const month = parseInt(date.toLocaleDateString('en-CA', { timeZone: this.timezone, month: '2-digit' }));
+      const day = parseInt(date.toLocaleDateString('en-CA', { timeZone: this.timezone, day: '2-digit' }));
 
-      // Combine and create new Date - this will be interpreted as local time
-      const targetTimeStr = `${dateStr}T${timeStr}.000`;
+      // Create two dates: one that WOULD be the target time in UTC, and one that IS in the timezone
+      const potentialUTC = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
 
-      // Convert to UTC by getting the offset
-      const tempDate = new Date(targetTimeStr);
+      // Check what hour this UTC time would be in the target timezone
+      const actualHourInTz = parseInt(potentialUTC.toLocaleString('en-US', {
+        timeZone: this.timezone,
+        hour: 'numeric',
+        hour12: false
+      }));
 
-      // Validate tempDate
-      if (isNaN(tempDate.getTime())) {
-        console.error('🚨 Invalid tempDate created in setHourInTimezone:', targetTimeStr);
-        return new Date(); // Return current time as fallback
-      }
+      // Calculate how many hours off we are
+      const hourDifference = hour - actualHourInTz;
 
-      const tzOffset = this.getTimezoneOffset(tempDate);
-      const result = new Date(tempDate.getTime() - tzOffset);
+      // Adjust by the difference to get the correct UTC time
+      const result = new Date(potentialUTC.getTime() + (hourDifference * 60 * 60 * 1000));
 
       // Validate final result
       if (isNaN(result.getTime())) {

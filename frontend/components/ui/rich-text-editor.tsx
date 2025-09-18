@@ -115,7 +115,7 @@ const MenuBar = ({ editor, onImageUpload, onAttachmentUpload, variables, templat
   }
 
   const insertVariable = (variable: string) => {
-    editor.chain().focus().insertContent(`{${variable}}`).run()
+    editor.chain().focus().insertContent(`{{${variable}}}`).run()
   }
 
   const insertTemplate = (template: string) => {
@@ -633,7 +633,7 @@ const MenuBar = ({ editor, onImageUpload, onAttachmentUpload, variables, templat
                     onClick={() => insertVariable(variable.key)}
                   >
                     <code className="text-xs bg-gray-100 px-1 py-0.5 rounded mr-2">
-                      {`{${variable.key}}`}
+                      {`{{${variable.key}}}`}
                     </code>
                     {variable.label}
                   </Button>

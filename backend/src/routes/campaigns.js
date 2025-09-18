@@ -327,7 +327,8 @@ router.post('/test-email', authenticateToken, async (req, res) => {
       company: sampleData.company,
       jobTitle: sampleData.job_title,
       fullName: sampleData.full_name,
-      website: sampleData.website
+      website: sampleData.website,
+      email: recipientEmail
     };
 
     // Validate required fields
@@ -351,21 +352,30 @@ router.post('/test-email', authenticateToken, async (req, res) => {
     let personalizedSubject = SpintaxParser.spinWithSeed(subject, testEmail);
     let personalizedContent = SpintaxParser.spinWithSeed(content, testEmail);
     
-    // Replace personalization tokens
-    const replacements = {
-      '{{firstName}}': personalization.firstName || '',
-      '{{lastName}}': personalization.lastName || '',
-      '{{fullName}}': personalization.fullName || '',
-      '{{company}}': personalization.company || '',
-      '{{jobTitle}}': personalization.jobTitle || '',
-      '{{website}}': personalization.website || ''
-    };
-    
-    Object.entries(replacements).forEach(([token, value]) => {
-      if (value) {
-        personalizedSubject = personalizedSubject.replace(new RegExp(token, 'g'), value);
-        personalizedContent = personalizedContent.replace(new RegExp(token, 'g'), value);
-      }
+    // Replace common token variants to mirror campaign scheduling behavior
+    const tokenPairs = [
+      ['firstName', personalization.firstName],
+      ['lastName', personalization.lastName],
+      ['fullName', personalization.fullName],
+      ['company', personalization.company],
+      ['jobTitle', personalization.jobTitle],
+      ['website', personalization.website],
+      ['email', personalization.email]
+    ];
+    const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const toSnake = (s) => s ? s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase() : s;
+    tokenPairs.forEach(([key, val]) => {
+      if (!val) return;
+      const snake = toSnake(key);
+      const variants = [
+        `{{${key}}}`, `{${key}}`,
+        `{{${snake}}}`, `{${snake}}`
+      ];
+      variants.forEach(ph => {
+        const re = new RegExp(escapeRegExp(ph), 'g');
+        personalizedSubject = personalizedSubject.replace(re, String(val));
+        personalizedContent = personalizedContent.replace(re, String(val));
+      });
     });
 
     console.log('✅ Test email validation passed');
@@ -2042,8 +2052,60 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
  */
 function createScheduledEmailRecord(campaignId, lead, emailAccountId, campaign, sendAt, organizationId, sequenceStep, emailConfig = null) {
   const isFollowUp = sequenceStep > 0;
-  const emailContent = isFollowUp ? emailConfig.content : campaign.config.emailContent;
-  const emailSubject = isFollowUp ? emailConfig.subject : campaign.config.emailSubject;
+  const rawEmailContent = isFollowUp ? emailConfig.content : campaign.config.emailContent;
+  const rawEmailSubject = isFollowUp ? emailConfig.subject : campaign.config.emailSubject;
+
+  // 🔥 CRITICAL FIX: Apply spintax processing and personalization
+  // This was missing in campaign restarts, causing raw spintax to appear in emails
+
+  // Define personalization tokens
+  const replacements = {
+    '{{firstName}}': lead.first_name || '',
+    '{{lastName}}': lead.last_name || '',
+    '{{fullName}}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+    '{{company}}': lead.company || '',
+    '{{jobTitle}}': lead.job_title || '',
+    '{{website}}': lead.website || '',
+    '{{email}}': lead.email || '',
+    '{firstName}': lead.first_name || '',
+    '{lastName}': lead.last_name || '',
+    '{fullName}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+    '{company}': lead.company || '',
+    '{jobTitle}': lead.job_title || '',
+    '{website}': lead.website || '',
+    '{email}': lead.email || '',
+    '{first_name}': lead.first_name || '',
+    '{last_name}': lead.last_name || '',
+    '{full_name}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+    '{job_title}': lead.job_title || ''
+  };
+
+  // Apply spintax processing first (using lead email as seed for consistency)
+  let processedSubject = SpintaxParser.spinWithSeed(rawEmailSubject, lead.email);
+  let processedContent = SpintaxParser.spinWithSeed(rawEmailContent, lead.email);
+
+  // Apply personalization tokens
+  function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  Object.entries(replacements).forEach(([token, value]) => {
+    processedSubject = processedSubject.replace(new RegExp(escapeRegExp(token), 'g'), value);
+    processedContent = processedContent.replace(new RegExp(escapeRegExp(token), 'g'), value);
+  });
+
+  // Determine subject - use initial email subject for replies to same thread
+  if (emailConfig?.replyToSameThread && isFollowUp) {
+    // For replies, use "Re:" prefix with the original initial email subject
+    const initialSubject = campaign.config?.emailSubject || '';
+    processedSubject = `Re: ${SpintaxParser.spinWithSeed(initialSubject, lead.email)}`;
+    // Apply personalization to the reply subject too
+    Object.entries(replacements).forEach(([token, value]) => {
+      processedSubject = processedSubject.replace(new RegExp(escapeRegExp(token), 'g'), value);
+    });
+  }
+
+  console.log(`✅ Processed spintax and personalization for ${lead.email}: "${processedSubject.substring(0, 50)}..."`);
 
   // Generate unique Message-ID
   const timestamp = Date.now();
@@ -2053,12 +2115,12 @@ function createScheduledEmailRecord(campaignId, lead, emailAccountId, campaign, 
   // Generate tracking token if tracking is enabled
   const trackingEnabled = campaign.config?.trackOpens || campaign.config?.trackClicks;
   const trackingToken = trackingEnabled ? emailTrackingService.generateTrackingToken() : null;
-  
+
   // Add tracking to email content if enabled
-  let trackedContent = emailContent;
+  let trackedContent = processedContent;
   if (trackingEnabled && trackingToken) {
     trackedContent = emailTrackingService.addTrackingToEmail(
-      emailContent,
+      processedContent,
       trackingToken,
       campaign.config?.trackOpens || false,
       campaign.config?.trackClicks || false
@@ -2072,7 +2134,7 @@ function createScheduledEmailRecord(campaignId, lead, emailAccountId, campaign, 
     email_account_id: emailAccountId,
     to_email: lead.email,
     from_email: '', // Will be set by email processor
-    subject: emailSubject,
+    subject: processedSubject,
     content: trackedContent,
     send_at: sendAt ? sendAt.toISOString() : new Date().toISOString(),
     status: 'scheduled',
@@ -2082,7 +2144,30 @@ function createScheduledEmailRecord(campaignId, lead, emailAccountId, campaign, 
     sequence_step: sequenceStep,
     is_follow_up: isFollowUp,
     reply_to_same_thread: emailConfig?.replyToSameThread || false,
-    created_at: toLocalTimestamp(new Date())
+    created_at: toLocalTimestamp(new Date()),
+    // Store original content for debugging
+    template_data: {
+      originalSubject: rawEmailSubject,
+      originalContent: rawEmailContent,
+      emailIndex: sequenceStep
+    },
+    email_data: {
+      leadData: {
+        first_name: lead.first_name,
+        last_name: lead.last_name,
+        company: lead.company,
+        job_title: lead.job_title,
+        email: lead.email,
+        full_name: lead.full_name,
+        website: lead.website
+      }
+    },
+    personalization: replacements,
+    variables: {
+      spintaxSeed: lead.email,
+      sequenceStep: sequenceStep,
+      campaignName: campaign.name
+    }
   };
 }
 

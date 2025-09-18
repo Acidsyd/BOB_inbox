@@ -65,6 +65,36 @@ parseTimestamp(timestampStr)
 - Use only for local time formatting when explicitly needed
 - Always prefer TimezoneService for timezone conversions
 
+### Frontend Timezone Components
+
+#### TimezoneContext (`frontend/contexts/TimezoneContext.tsx`)
+**React context for consistent timezone handling across frontend:**
+
+```typescript
+// Core timezone context functions
+const { formatDateInTimezone, getUserTimezone } = useTimezone()
+
+// Usage in components
+formatDateInTimezone(timestamp, 'MMM d, yyyy h:mm a')
+```
+
+#### Timezone Library (`frontend/lib/timezone.ts`)
+**Client-side timezone utilities with browser detection:**
+
+```typescript
+// Browser timezone detection
+getUserTimezone()           // Gets user's detected timezone
+formatDateInTimezone()      // Frontend timezone formatting
+formatConversationDate()    // Relative date formatting
+```
+
+**Key Features:**
+- ✅ Automatic browser timezone detection
+- ✅ localStorage timezone persistence
+- ✅ Legacy timestamp handling (adds 'Z' for UTC)
+- ✅ Consistent formatting across all frontend components
+- ✅ Relative date formatting for conversation lists
+
 ## Database Schema
 
 ### Scheduled Emails Table
@@ -89,7 +119,7 @@ campaign.config = {
 
 ## Critical Fixes Applied (September 2025)
 
-### Issue: Timezone Display Bug
+### Issue #1: Timezone Display Bug (Backend)
 **Problem**: Scheduled emails showed incorrect times (7:00 AM instead of 9:00 AM for Rome timezone)
 
 **Root Cause**:
@@ -120,6 +150,43 @@ if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/.test(dateStr)) {
 - ✅ 5:00 UTC now correctly displays as 9:00 AM Rome time
 - ✅ Legacy timestamps are handled correctly
 - ✅ Future timestamps stored in proper UTC format
+
+### Issue #2: Frontend Timezone Inconsistency (September 2025)
+**Problem**: Message view showed different time than conversation list (11:15 AM vs 9:15 AM for CEST)
+
+**Root Cause**:
+- `InboxMessageView.tsx` prioritized backend pre-formatted timestamps over frontend timezone context
+- Conversation list used frontend timezone formatting while message view used backend display timestamps
+
+**Solution Applied**:
+
+1. **Fixed formatEuropeRomeDate function** (`InboxMessageView.tsx:105`):
+```javascript
+// BEFORE (hardcoded timezone):
+return formatDateInTimezone(date, 'MMM d, yyyy h:mm a', 'Europe/Rome');
+
+// AFTER (uses timezone context):
+return formatDateInTimezone(date, 'MMM d, yyyy h:mm a');
+```
+
+2. **Fixed formatDate precedence logic** (`InboxMessageView.tsx:413-416`):
+```javascript
+// BEFORE (backend display timestamps took precedence):
+const displayTime = message.sent_at_display || message.received_at_display
+if (displayTime) {
+  return displayTime
+}
+
+// AFTER (consistent frontend formatting):
+const formatDate = (message: Message) => {
+  return formatDateInTimezone(message.sent_at || message.received_at, 'MMM d, yyyy h:mm a')
+}
+```
+
+**Result**:
+- ✅ Message view now shows same time as conversation list (9:15 AM CEST)
+- ✅ Consistent timezone formatting across all components
+- ✅ Frontend timezone context properly utilized throughout UI
 
 ## Best Practices
 

@@ -7,6 +7,7 @@ import { Check, Mail, Reply, Eye, Send, Clock, ArrowRight } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
+import { useTimezone } from '../../contexts/TimezoneContext'
 
 interface ActivityItem {
   id: string
@@ -23,11 +24,12 @@ interface LatestActivityProps {
   limit?: number
 }
 
-export default function LatestActivity({ 
+export default function LatestActivity({
   title = 'Latest Activity',
   limit = 8
 }: LatestActivityProps) {
   const router = useRouter()
+  const { formatDateInTimezone } = useTimezone()
 
   const { data: activities = [], isLoading, error } = useQuery({
     queryKey: ['latest-activity'],
@@ -43,9 +45,7 @@ export default function LatestActivity({
         for (const conv of conversations.slice(0, limit)) {
           // Try to get messages for this conversation
           try {
-            const messagesResponse = await api.get(`/inbox/conversations/${conv.id}/messages`, {
-              params: { timezone: 'UTC' } // Use UTC for dashboard consistency or could use getUserTimezone()
-            })
+            const messagesResponse = await api.get(`/inbox/conversations/${conv.id}/messages`)
             const messages = messagesResponse.data.messages || []
             
             // Get the most recent message
@@ -130,11 +130,11 @@ export default function LatestActivity({
     const diffMs = now.getTime() - date.getTime()
     const diffMins = Math.floor(diffMs / (1000 * 60))
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-    
+
     if (diffMins < 1) return 'Just now'
     if (diffMins < 60) return `${diffMins}m ago`
     if (diffHours < 24) return `${diffHours}h ago`
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return formatDateInTimezone(timestamp, 'MMM d')
   }
 
   const handleActivityClick = (activity: ActivityItem) => {
@@ -214,15 +214,7 @@ export default function LatestActivity({
             >
               <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
               <span className="font-medium text-gray-900">
-                {new Date(activity.timestamp).toLocaleString('en-CA', {
-                  year: 'numeric',
-                  month: '2-digit', 
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                  hour12: false
-                }).replace(/[,]/g, 'T').replace(/[\s]/g, '')}
+                {formatDateInTimezone(activity.timestamp, 'MMM d, yyyy h:mm a')}
               </span>
               <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
                 {activity.type === 'sent' ? 'Delivered' : activity.type === 'reply' ? 'Reply' : 'Opened'}

@@ -6,6 +6,7 @@ const FolderService = require('../services/FolderService');
 const EmailSyncService = require('../services/EmailSyncService');
 const SyncSchedulerService = require('../services/SyncSchedulerService');
 const WebhookService = require('../services/WebhookService');
+const TimezoneService = require('../services/TimezoneService');
 const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Supabase client
@@ -96,7 +97,8 @@ router.get('/conversations', authenticateToken, async (req, res) => {
     } = req.query;
 
     // Clean up timezone parameter - ignore if null, undefined, or string versions
-    const cleanTimezone = (timezone && timezone !== 'null' && timezone !== 'undefined' && timezone !== null && timezone !== undefined) ? timezone : null;
+    // Default to 'Europe/Rome' for conversation view timezone consistency
+    const cleanTimezone = (timezone && timezone !== 'null' && timezone !== 'undefined' && timezone !== null && timezone !== undefined) ? timezone : 'Europe/Rome';
 
     console.log(`🔍 CONVERSATIONS API: raw timezone = "${timezone}", cleaned timezone = "${cleanTimezone}"`);
 
@@ -153,56 +155,34 @@ router.get('/conversations/:id/messages', authenticateToken, async (req, res) =>
   try {
     const { organizationId } = req.user;
     const { id: conversationId } = req.params;
-    const { timezone = 'UTC' } = req.query; // Allow timezone parameter from frontend
+    const { timezone } = req.query; // Allow timezone parameter from frontend
+    const cleanTimezone = (timezone && timezone !== 'null' && timezone !== 'undefined' && timezone !== null && timezone !== undefined) ? timezone : 'Europe/Rome';
 
+    console.log(`🔍 MESSAGES API: raw timezone = "${timezone}", cleaned timezone = "${cleanTimezone}"`);
     console.log(`📬 Fetching messages for conversation: ${conversationId}`);
 
     const messages = await unifiedInboxService.getConversationMessages(conversationId, organizationId);
 
-    // Convert UTC timestamps to user timezone (similar to campaign scheduled activity fix)
+    // Convert UTC timestamps to user timezone using TimezoneService
     const messagesWithTimezone = messages.map(message => {
       const convertedMessage = { ...message };
 
       // Convert sent_at timestamp if exists
       if (message.sent_at) {
-        try {
-          const sentAtDate = new Date(message.sent_at);
-          // Use a more reliable timezone conversion method
-          const options = {
-            timeZone: timezone,
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-          };
-          convertedMessage.sent_at_display = sentAtDate.toLocaleString('en-US', options);
-        } catch (error) {
-          console.warn(`⚠️ Error converting sent_at timestamp: ${message.sent_at}`, error);
-          convertedMessage.sent_at_display = message.sent_at; // Fallback to original
-        }
+        convertedMessage.sent_at_display = TimezoneService.convertToUserTimezone(
+          message.sent_at,
+          cleanTimezone
+        );
+        console.log(`🕐 MESSAGES: sent_at = "${message.sent_at}" → "${convertedMessage.sent_at_display}" (timezone: ${cleanTimezone})`);
       }
 
       // Convert received_at timestamp if exists
       if (message.received_at) {
-        try {
-          const receivedAtDate = new Date(message.received_at);
-          // Use a more reliable timezone conversion method
-          const options = {
-            timeZone: timezone,
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-          };
-          convertedMessage.received_at_display = receivedAtDate.toLocaleString('en-US', options);
-        } catch (error) {
-          console.warn(`⚠️ Error converting received_at timestamp: ${message.received_at}`, error);
-          convertedMessage.received_at_display = message.received_at; // Fallback to original
-        }
+        convertedMessage.received_at_display = TimezoneService.convertToUserTimezone(
+          message.received_at,
+          cleanTimezone
+        );
+        console.log(`🕐 MESSAGES: received_at = "${message.received_at}" → "${convertedMessage.received_at_display}" (timezone: ${cleanTimezone})`);
       }
 
       return convertedMessage;
@@ -582,13 +562,17 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
     const subject = conversation.subject || 'No subject';
     const replySubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
     
+    // Ensure text part mirrors HTML substitutions (fallback to stripping HTML)
+    const finalHtml = html || content || '';
+    const finalText = (finalHtml || '').replace(/<[^>]*>/g, '');
+
     const emailData = {
       accountId: fromAccountId,
       organizationId,
       to: replyToEmail,
       subject: replySubject,
-      html: html || content, // Use HTML content if provided, otherwise use plain content
-      text: content, // Use plain text content for text version
+      html: finalHtml,
+      text: finalText,
       inReplyTo: threadingReference?.message_id_header,
       references: threadingReference?.message_references || threadingReference?.message_id_header,
       threadId: threadingReference?.provider_thread_id, // Add Gmail thread ID for proper threading
@@ -607,8 +591,8 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
         from_name: emailAccount.display_name || createProperName(emailAccount.email),
         to_email: replyToEmail,
         subject: emailData.subject,
-        content_html: html || emailData.html, // Store the rich HTML content
-        content_plain: content, // Store the plain text content
+        content_html: emailData.html, // Store the rich HTML content
+        content_plain: emailData.text, // Store the derived plain text content
         sent_at: new Date().toLocaleString('sv-SE').replace(' ', 'T') + 'Z', // Store local time as ISO format
         in_reply_to: threadingReference?.message_id_header, // Critical for threading
         message_references: threadingReference?.message_references || threadingReference?.message_id_header,

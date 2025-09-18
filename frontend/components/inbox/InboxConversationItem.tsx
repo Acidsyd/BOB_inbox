@@ -47,9 +47,20 @@ export function InboxConversationItem({ conversation, isSelected, isChecked, onC
   if (conversation.subject?.includes('ciao')) {
     console.log('CIAO CONVERSATION:', conversation.campaign_name || 'NO CAMPAIGN NAME');
   }
-  
+
   // Timezone-aware date formatting
-  const { formatConversationDate } = useTimezone()
+  const { formatConversationDate, timezone } = useTimezone()
+
+  // Debug timezone conversion - only for first conversation to avoid spam
+  if (conversation.last_activity_at && conversation.last_activity_at.includes("2025-09-17T10")) {
+    console.log('🕐 FRONTEND CONVERSATION DEBUG:', {
+      raw_timestamp: conversation.last_activity_at,
+      backend_display: conversation.last_activity_at_display,
+      frontend_timezone: timezone,
+      frontend_fallback: formatConversationDate(conversation.last_activity_at),
+      final_display: conversation.last_activity_at_display || formatConversationDate(conversation.last_activity_at)
+    });
+  }
   
   // Use timezone-aware formatting from context
   const formatDate = (dateStr?: string) => {

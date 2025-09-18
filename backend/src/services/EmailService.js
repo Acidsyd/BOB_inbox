@@ -526,17 +526,37 @@ class EmailService {
     try {
       console.log('🧪 === SENDING TEST EMAIL ===');
 
-      // Apply personalization
-      let personalizedSubject = subject;
-      let personalizedContent = content;
+      // Apply personalization with support for multiple token styles
+      let personalizedSubject = subject || '';
+      let personalizedContent = content || '';
 
-      // Replace personalization tokens
-      Object.entries(personalization).forEach(([key, value]) => {
-        if (value) {
-          const token = new RegExp(`{{${key}}}`, 'g');
-          personalizedSubject = personalizedSubject.replace(token, value);
-          personalizedContent = personalizedContent.replace(token, value);
-        }
+      // Ensure email available for substitutions
+      const enrichedPersonalization = {
+        ...personalization,
+        email: personalization.email || recipientEmail
+      };
+
+      // Helper to convert camelCase to snake_case
+      const toSnake = (str) => str
+        ? str.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase()
+        : str;
+
+      // Replace tokens like:
+      //  - {{firstName}}, {firstName}
+      //  - {{first_name}}, {first_name}
+      //  - {{company}}, {company}, etc.
+      Object.entries(enrichedPersonalization).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        const snake = toSnake(key);
+        const variants = [
+          `{{${key}}}`, `{${key}}`,
+          `{{${snake}}}`, `{${snake}}`
+        ];
+        variants.forEach((placeholder) => {
+          const re = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+          personalizedSubject = personalizedSubject.replace(re, String(value));
+          personalizedContent = personalizedContent.replace(re, String(value));
+        });
       });
 
       console.log('✨ Personalization applied:');

@@ -97,6 +97,26 @@ export function ComposeEmailModal({
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isDirty, setIsDirty] = useState(false)
 
+  // Common template variables available for insertion
+  const composeVariables: { key: string; label: string; value?: string }[] = [
+    { key: 'first_name', label: 'First Name' },
+    { key: 'last_name', label: 'Last Name' },
+    { key: 'full_name', label: 'Full Name' },
+    { key: 'email', label: 'Email' },
+    { key: 'company', label: 'Company' },
+    { key: 'job_title', label: 'Job Title' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'website', label: 'Website' },
+    { key: 'linkedin_url', label: 'LinkedIn URL' },
+    { key: 'address', label: 'Address' },
+    { key: 'city', label: 'City' },
+    { key: 'state', label: 'State' },
+    { key: 'country', label: 'Country' },
+    { key: 'custom_field_1', label: 'Custom Field 1' },
+    { key: 'custom_field_2', label: 'Custom Field 2' },
+    { key: 'custom_field_3', label: 'Custom Field 3' },
+  ]
+
   // Input refs for email fields
   const toInputRef = useRef<HTMLInputElement>(null)
   const ccInputRef = useRef<HTMLInputElement>(null)
@@ -723,6 +743,7 @@ export function ComposeEmailModal({
                   onChange={handleContentChange}
                   placeholder="Type your email message here..."
                   onAttachmentUpload={handleAttachmentUpload}
+                  variables={composeVariables}
                   className="min-h-64"
                 />
               </div>

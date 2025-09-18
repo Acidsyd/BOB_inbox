@@ -144,6 +144,53 @@ if (userTimezone && userTimezone !== 'UTC') {
 }
 ```
 
+#### TimezoneService Implementation (`backend/src/services/TimezoneService.js`)
+
+The TimezoneService provides centralized timezone conversion functionality using the Intl.DateTimeFormat API:
+
+```javascript
+class TimezoneService {
+  static convertToUserTimezone(dateString, timezone, options = {}) {
+    if (!dateString) return null;
+
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        throw new Error('Invalid date');
+      }
+
+      // Use Intl.DateTimeFormat for reliable timezone conversion
+      return date.toLocaleString('en-US', {
+        timeZone: timezone,
+        ...options
+      });
+    } catch (error) {
+      console.error('TimezoneService conversion error:', error);
+      return dateString; // Fallback to original
+    }
+  }
+}
+```
+
+**Critical Pattern**: All TimezoneService calls must use valid Intl.DateTimeFormat options:
+
+```javascript
+// ✅ CORRECT - Valid Intl.DateTimeFormat options
+const options = {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true
+};
+
+// ❌ INCORRECT - Custom format strings not supported
+const badOptions = {
+  format: 'MMM d, yyyy h:mm a'  // This causes errors
+};
+```
+
 #### Campaign Scheduling (`backend/src/utils/CampaignScheduler.js`)
 
 ```javascript
@@ -482,11 +529,57 @@ try {
 **Solution**: Use `hour: 'numeric'` instead
 **Status**: ✅ Fixed September 2025
 
-### Issue 2: UTC vs Local Time Confusion
+### Issue 2: Scheduled Activity Timezone Display
+**Cause**: formatCampaignDate helper function using invalid format properties for TimezoneService.convertToUserTimezone()
+**Symptoms**: Scheduled emails showing times 2 hours behind (8:58 AM instead of 10:58 AM for Europe/Rome timezone)
+**Solution**: Fixed formatCampaignDate helper in campaigns.js to use proper Intl.DateTimeFormat options instead of custom format strings
+**Files affected**:
+- `backend/src/routes/campaigns.js:16-51` (formatCampaignDate helper)
+- `backend/src/routes/campaigns.js:1741-1742` (scheduled activity API route)
+**Technical Details**: The fix involved updating the formatCampaignDate helper function to properly convert format strings to Intl.DateTimeFormat options:
+
+```javascript
+// Fixed formatCampaignDate helper function in campaigns.js
+function formatCampaignDate(dateString, timezone, customFormat = null) {
+  if (!dateString) return null;
+
+  try {
+    // Default format for campaign dates
+    const defaultOptions = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    };
+
+    // Use custom format if provided, otherwise use default
+    const formatOptions = customFormat || defaultOptions;
+
+    return TimezoneService.convertToUserTimezone(dateString, timezone, formatOptions);
+  } catch (error) {
+    console.error('Error formatting campaign date:', error);
+    return dateString; // Fallback to original if formatting fails
+  }
+}
+
+// Updated scheduled activity API route
+const formattedTime = formatCampaignDate(email.send_at, campaignTimezone);
+```
+
+**Verification**: UTC timestamps now correctly convert to local timezone:
+- UTC 8:58 AM → Rome 10:58 AM ✅
+- UTC 9:12 AM → Rome 11:12 AM ✅
+- UTC 9:28 AM → Rome 11:28 AM ✅
+
+**Status**: ✅ Fixed September 2025 - Backend server restarted with timezone conversion fixes
+
+### Issue 3: UTC vs Local Time Confusion
 **Cause**: Mixing UTC and local times in calculations
 **Solution**: Always use UTC for processing, local only for display
 
-### Issue 3: Inbox Loading Performance Issues
+### Issue 4: Inbox Loading Performance Issues
 **Cause**: Excessive console.log statements in TimezoneContext formatting functions called on every message render
 **Symptoms**: Inbox page shows "Loading timezone..." and hangs, especially with many conversations
 **Solution**: Removed performance-blocking console.log statements from formatDate and formatMessageDate functions
@@ -501,7 +594,7 @@ const formatDate = (date: string | Date | undefined | null, formatString?: strin
 };
 ```
 
-### Issue 4: Missing Timezone Settings Access
+### Issue 5: Missing Timezone Settings Access
 **Cause**: No user-accessible timezone settings interface
 **Solution**: Created comprehensive timezone settings page and added to navigation
 **Status**: ✅ Fixed September 2025
@@ -509,7 +602,7 @@ const formatDate = (date: string | Date | undefined | null, formatString?: strin
 - Added to sidebar navigation dropdown
 - Auto-detection with manual override options
 
-### Issue 5: Production vs Development Timezone Mismatch
+### Issue 6: Production vs Development Timezone Mismatch
 **Cause**: Production server running in UTC while development runs in local timezone
 **Solution**: Set `TZ` environment variable in PM2 ecosystem config to match user timezone
 ```javascript
@@ -522,11 +615,11 @@ env: {
 ```
 **Status**: ✅ Fixed September 2025 - All PM2 processes now use Europe/Rome timezone
 
-### Issue 6: Daylight Saving Time Transitions
+### Issue 7: Daylight Saving Time Transitions
 **Cause**: Date calculations during DST changes
 **Solution**: Use IANA timezone identifiers and proper libraries
 
-### Issue 7: Browser Compatibility
+### Issue 8: Browser Compatibility
 **Cause**: Different browsers handle timezone conversion differently
 **Solution**: Use standardized Intl.DateTimeFormat API with fallbacks
 

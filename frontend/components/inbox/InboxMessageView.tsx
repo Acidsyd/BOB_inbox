@@ -28,6 +28,7 @@ import {
 // Removed direct date-fns import - using timezone-aware formatting instead
 import { useInboxMessages } from '../../hooks/useInboxMessages'
 import { useTimezone } from '../../contexts/TimezoneContext'
+import { formatDateInTimezone } from '../../lib/timezone'
 import { Label } from '../../hooks/useLabels'
 import { LabelPicker } from './LabelPicker'
 import { ConversationLabelsFull } from './ConversationLabels'
@@ -97,6 +98,12 @@ export function InboxMessageView({
   
   // Timezone-aware date formatting
   const { formatMessageDate, timezone } = useTimezone()
+
+  // Create a consistent formatter for inbox messages using user timezone
+  const formatEuropeRomeDate = (date: string | Date | undefined | null) => {
+    if (!date) return '';
+    return formatDateInTimezone(date, 'MMM d, yyyy h:mm a');
+  }
   
   // Reset labels when conversation changes
   useEffect(() => {
@@ -402,15 +409,10 @@ export function InboxMessageView({
   }
 
 
-  // Use timezone-aware formatting - prefer display fields from backend conversion
+  // Use timezone-aware formatting - use frontend timezone context for consistency
   const formatDate = (message: Message) => {
-    // Use backend-converted display timestamp if available, otherwise fallback to timezone context
-    const displayTime = message.sent_at_display || message.received_at_display
-    if (displayTime) {
-      return displayTime
-    }
-    // Fallback to original context-based formatting
-    return formatMessageDate(message.sent_at || message.received_at)
+    // Always use frontend timezone formatting for consistency with conversation list
+    return formatDateInTimezone(message.sent_at || message.received_at, 'MMM d, yyyy h:mm a')
   }
 
   const renderMessageContent = (message: Message) => {
@@ -578,7 +580,7 @@ export function InboxMessageView({
                 <span className="truncate flex-1">{conversation.subject || 'No subject'}</span>
                 <span>•</span>
                 <span>
-                  {conversation.last_activity_at_display || formatMessageDate(conversation.last_activity_at)} ({timezone})
+                  {conversation.last_activity_at_display || formatEuropeRomeDate(conversation.last_activity_at)} (Europe/Rome)
                 </span>
               </div>
             </div>
@@ -820,7 +822,7 @@ export function InboxMessageView({
                         <VariablePicker
                           onSelect={(variable) => {
                             const cursor = (document.getElementById('reply-textarea') as HTMLTextAreaElement)?.selectionStart || replyContent.length
-                            const newContent = replyContent.slice(0, cursor) + `{${variable}}` + replyContent.slice(cursor)
+                            const newContent = replyContent.slice(0, cursor) + `{{${variable}}}` + replyContent.slice(cursor)
                             setReplyContent(newContent)
                           }}
                           buttonText="Variables"
@@ -883,7 +885,7 @@ export function InboxMessageView({
                   
                   <div className="flex justify-between items-center">
                     <div className="text-xs text-gray-500">
-                      Press Escape to cancel • Variables: {`{first_name}, {company_name}, etc.`}
+                      Press Escape to cancel • Variables: {`{{first_name}}, {{company_name}}, etc.`}
                     </div>
                     <div className="flex gap-2">
                       <Button

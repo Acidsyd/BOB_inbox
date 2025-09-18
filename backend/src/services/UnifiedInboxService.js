@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const TimezoneService = require('./TimezoneService');
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -635,32 +636,18 @@ class UnifiedInboxService {
             ? `${conversation.leads.first_name || ''} ${conversation.leads.last_name || ''}`.trim() || conversation.leads.email || null
             : null;
 
-          // Convert timestamps to user timezone if timezone is provided
+          // Convert timestamps to user timezone using TimezoneService
           let last_activity_at_display = conversation.last_activity_at;
           if (timezone && conversation.last_activity_at) {
-            console.log(`🔍 TIMEZONE DEBUG: Converting ${conversation.last_activity_at} from UTC to ${timezone}`);
-            try {
-              const date = new Date(conversation.last_activity_at);
-              last_activity_at_display = date.toLocaleString('en-US', {
-                timeZone: timezone,
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-              });
-              console.log(`✅ TIMEZONE SUCCESS: ${conversation.last_activity_at} → ${last_activity_at_display}`);
-            } catch (error) {
-              console.error('❌ Error converting timezone for last_activity_at:', error);
-              // Fallback to original timestamp if conversion fails
-              last_activity_at_display = conversation.last_activity_at;
-            }
-          } else {
-            console.log(`⚠️ TIMEZONE SKIP: timezone=${timezone}, last_activity_at=${conversation.last_activity_at}`);
+            last_activity_at_display = TimezoneService.convertToUserTimezone(
+              conversation.last_activity_at,
+              timezone
+            );
+            console.log(`🕐 CONVERSATIONS: last_activity_at = "${conversation.last_activity_at}" → "${last_activity_at_display}" (timezone: ${timezone})`);
           }
 
-          return {
+          // Debug the final conversation object being returned
+          const finalConversation = {
             ...conversation,
             labels,
             campaign_name,
@@ -670,6 +657,17 @@ class UnifiedInboxService {
             campaigns: undefined, // Remove nested structure
             leads: undefined // Remove nested structure
           };
+
+          // Log only for debug conversation
+          if (conversation.last_activity_at === "2025-09-17T10:44:57") {
+            console.log('🕐 BACKEND SENDING TO FRONTEND:', {
+              id: conversation.id,
+              last_activity_at: finalConversation.last_activity_at,
+              last_activity_at_display: finalConversation.last_activity_at_display
+            });
+          }
+
+          return finalConversation;
         });
       }
 

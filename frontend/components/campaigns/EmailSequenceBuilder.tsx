@@ -189,11 +189,11 @@ export default function EmailSequenceBuilder({ campaignData, updateCampaignData 
           id="emailSubject"
           value={campaignData.emailSubject}
           onChange={(e) => updateCampaignData({ emailSubject: e.target.value })}
-          placeholder="e.g., {Hi|Hello|Hey} {first_name}, quick question about {company}"
+          placeholder="e.g., {Hi|Hello|Hey} {{first_name}}, quick question about {{company}}"
           className="mt-1"
         />
         <p className="text-xs text-gray-500 mt-1">
-          💡 Tip: Use spintax {'{option1|option2}'} for variations. Variables: {'{first_name}'}, {'{company}'}, {'{job_title}'}, etc.
+          💡 Tip: Use spintax {'{option1|option2}'} for variations. Variables: {'{{first_name}}'}, {'{{company}}'}, {'{{job_title}}'}, etc.
         </p>
       </div>
 
@@ -205,7 +205,7 @@ export default function EmailSequenceBuilder({ campaignData, updateCampaignData 
             onChange={(html, text) => {
               updateCampaignData({ emailContent: html })
             }}
-            placeholder="Hi {first_name},
+            placeholder="Hi {{first_name}},
 
 I hope this email finds you well..."
             variables={emailVariables}
@@ -213,7 +213,7 @@ I hope this email finds you well..."
           />
         </div>
         <p className="mt-2 text-sm text-gray-500">
-          💡 You can use template variables like {'{first_name}'}, {'{company}'}, {'{job_title}'}, etc. to personalize your emails.
+          💡 You can use template variables like {'{{first_name}}'}, {'{{company}}'}, {'{{job_title}}'}, etc. to personalize your emails.
         </p>
       </div>
 
@@ -282,7 +282,7 @@ I hope this email finds you well..."
                 <Input
                   value={email.subject}
                   onChange={(e) => updateSequenceEmail(email.id, 'subject', e.target.value)}
-                  placeholder="Follow-up: {first_name}, did you see my previous email?"
+                  placeholder="Follow-up: {{first_name}}, did you see my previous email?"
                   className="mt-1"
                   required
                 />
@@ -309,7 +309,7 @@ I hope this email finds you well..."
                   onChange={(html, text) => {
                     updateSequenceEmail(email.id, 'content', html)
                   }}
-                  placeholder="Hi {first_name},
+                  placeholder="Hi {{first_name}},
 
 I wanted to follow up on my previous email..."
                   variables={emailVariables}

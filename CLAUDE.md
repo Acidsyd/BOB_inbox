@@ -207,6 +207,7 @@ SMTP_PASS=your-app-password
 - `src/services/OAuth2Service.js` - Gmail API integration with attachment support
 - `src/services/EmailService.js` - Dual-provider email sending
 - `src/services/UnifiedInboxService.js` - RFC-compliant conversation threading
+- `src/services/TimezoneService.js` - **Universal timezone conversion** (IANA timezone support, business hours)
 - `src/services/AccountRateLimitService.js` - Account rotation and rate limiting
 - `src/services/BounceTrackingService.js` - Multi-provider bounce detection
 
@@ -248,6 +249,9 @@ campaigns.config = {
 | Campaign double-start | Implement instant loading states |
 | Reply detection failing | Check Message-ID headers in conversation_messages |
 | Timezone issues | CronEmailProcessor uses campaign timezone |
+| Scheduled emails wrong timezone | Check formatCampaignDate helper in campaigns.js |
+| TimezoneService errors | Use valid Intl.DateTimeFormat options, not custom format strings |
+| Frontend timezone inconsistency | InboxMessageView.tsx must use frontend timezone context, not backend display timestamps |
 | Bounce messages not showing | Check FolderService bounce filtering |
 | Lead count capped at 1000 | Use Supabase count queries, not data length |
 | Tiptap focus/selection issues | Remove content from useEditor deps |
@@ -269,6 +273,12 @@ SELECT COUNT(*) FROM conversations WHERE organization_id = 'uuid';
 
 # Test system health
 curl http://localhost:4000/api/health/cron
+
+# Test timezone conversion
+node -e "const TZ = require('./src/services/TimezoneService'); console.log(TZ.convertToUserTimezone('2025-09-17T08:58:00.000Z', 'Europe/Rome'));"
+
+# Check backend server status
+curl http://localhost:4000/health
 ```
 
 ## Production System Status
@@ -281,6 +291,8 @@ curl http://localhost:4000/api/health/cron
 - **Rate Limiting**: Sophisticated account rotation with usage tracking
 - **Human-like Timing**: Smart jitter system (±1-3 minutes)
 - **Unlimited Lead Counts**: Fixed Supabase 1000-row query limit
+- **Timezone Architecture**: Universal TimezoneService with IANA timezone support
+- **Scheduled Activity Fix**: formatCampaignDate helper with proper Intl.DateTimeFormat options
 
 ### System Performance
 - 99.9% uptime with automatic error recovery
@@ -299,6 +311,61 @@ curl http://localhost:4000/api/health/cron
 6. **Conversation threading uses Message-ID headers** for RFC compliance
 7. **Account rotation prevents single-account bottlenecks**
 8. **Human-like jitter prevents robotic patterns** in email timing
+9. **Frontend timezone consistency requires formatDateInTimezone()** - never use backend display timestamps
+
+## Timezone Patterns (CRITICAL)
+
+### TimezoneService Usage
+```javascript
+// ✅ CORRECT - Use valid Intl.DateTimeFormat options
+const options = {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',     // Safe: avoids "24" hour issue
+  minute: '2-digit',
+  hour12: true
+};
+TimezoneService.convertToUserTimezone(date, timezone, options);
+
+// ❌ INCORRECT - Custom format strings not supported
+TimezoneService.convertToUserTimezone(date, timezone, { format: 'MMM d, yyyy h:mm a' });
+```
+
+### Helper Function Pattern
+```javascript
+// Always create helper functions for timezone conversion
+function formatCampaignDate(dateString, timezone, customFormat = null) {
+  if (!dateString) return null;
+
+  const defaultOptions = {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true
+  };
+
+  return TimezoneService.convertToUserTimezone(
+    dateString, timezone, customFormat || defaultOptions
+  );
+}
+```
+
+### Frontend Timezone Pattern
+```typescript
+// ✅ CORRECT - Use frontend timezone context consistently
+const { formatDateInTimezone } = useTimezone()
+const displayTime = formatDateInTimezone(message.sent_at, 'MMM d, yyyy h:mm a')
+
+// ❌ INCORRECT - Don't prioritize backend display timestamps
+const displayTime = message.sent_at_display || message.received_at_display || fallback
+```
+
+### Timezone Safety Rules
+- **Always validate timezone strings** with `TimezoneService.isValidTimezone()`
+- **Use UTC for all database storage** and processing logic
+- **Convert to user timezone only for display** purposes
+- **Handle timezone detection failures** with UTC fallback
+- **Test DST transitions** when working with scheduled times
+- **Frontend components must use formatDateInTimezone()** for consistency
 
 ---
 *Never modify user isolation, OAuth2 status patterns, or campaign interval enforcement without understanding the complete system flow.*

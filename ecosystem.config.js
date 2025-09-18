@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'mailsender-backend',
-      script: './backend/src/server.js',
+      script: './backend/src/index.js',
       cwd: '/var/www/mailsender',
       instances: 1,
       autorestart: true,
@@ -23,8 +23,9 @@ module.exports = {
     },
     {
       name: 'mailsender-frontend',
-      script: './frontend/server.js',
-      cwd: '/var/www/mailsender',
+      script: 'npm',
+      args: 'start',
+      cwd: '/var/www/mailsender/frontend',
       instances: 1,
       autorestart: true,
       watch: false,
@@ -44,7 +45,7 @@ module.exports = {
     },
     {
       name: 'mailsender-cron',
-      script: './backend/src/scripts/cron-email-processor.js',
+      script: './backend/src/cron.js',
       cwd: '/var/www/mailsender',
       instances: 1,
       autorestart: true,

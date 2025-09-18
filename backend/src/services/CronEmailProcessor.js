@@ -1171,7 +1171,7 @@ class CronEmailProcessor {
         to_email: email.to_email,
         subject: email.subject,
         content_html: email.content,
-        content_plain: email.content, // TODO: Convert HTML to plain text
+        content_plain: (email.content || '').replace(/<[^>]*>/g, ''),
         sent_at: toLocalTimestamp(),
         campaign_id: email.campaign_id,
         lead_id: email.lead_id,

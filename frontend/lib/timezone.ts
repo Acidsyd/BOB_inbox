@@ -100,22 +100,35 @@ export function setUserTimezone(timezone: string): void {
  * @returns {string} Formatted date string
  */
 export function formatDateInTimezone(
-  date: string | Date | undefined | null, 
+  date: string | Date | undefined | null,
   formatString: string = 'MMM d, yyyy h:mm a',
   timezone?: string
 ): string {
   if (!date) return 'Unknown';
-  
+
   try {
     const userTimezone = timezone || getUserTimezone();
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
-    
+    let dateObj: Date;
+
+    if (date instanceof Date) {
+      dateObj = date;
+    } else {
+      const dateStr = date.toString();
+      // Handle legacy timestamps without timezone info - treat as UTC
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/.test(dateStr)) {
+        // Legacy timestamps without 'Z' should be treated as UTC
+        dateObj = new Date(dateStr + 'Z');
+      } else {
+        dateObj = new Date(dateStr);
+      }
+    }
+
     // Handle invalid dates
     if (isNaN(dateObj.getTime())) {
       console.warn('Invalid date provided:', date);
       return 'Invalid date';
     }
-    
+
     return formatInTimeZone(dateObj, userTimezone, formatString);
   } catch (error) {
     console.error('Error formatting date in timezone:', error, { date, formatString, timezone });

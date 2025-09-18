@@ -252,7 +252,7 @@ const SimpleMenuBar = ({ onInsertVariable, variables, textareaRef }) => {
                     >
                       <div>
                         <div className="font-medium">{variable.label}</div>
-                        <div className="text-xs text-gray-500">{`{${variable.key}}`}</div>
+                        <div className="text-xs text-gray-500">{`{{${variable.key}}}`}</div>
                       </div>
                     </Button>
                   ))}
@@ -283,7 +283,7 @@ export function SimpleRichTextEditor({
     const textarea = textareaRef.current
     const startPos = textarea.selectionStart
     const endPos = textarea.selectionEnd
-    const variableText = `{${variable.key}}`
+    const variableText = `{{${variable.key}}}`
     
     const newContent = content.substring(0, startPos) + variableText + content.substring(endPos)
     onChange(newContent, newContent)

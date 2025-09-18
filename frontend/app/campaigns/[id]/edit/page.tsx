@@ -4,7 +4,7 @@ import ProtectedRoute from '../../../../components/auth/ProtectedRoute'
 import AppLayout from '../../../../components/layout/AppLayout'
 import React, { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, ArrowLeft, Save, Settings, AlertCircle, Calendar, Users, Play, Check } from 'lucide-react'
+import { Loader2, ArrowLeft, Save, Settings, AlertCircle, Calendar, Users, Play, Check, Mail } from 'lucide-react'
 import { Button } from '../../../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../../components/ui/card'
 import { Input } from '../../../../components/ui/input'
@@ -13,6 +13,12 @@ import { api } from '../../../../lib/api'
 import EmailSequenceBuilder from '../../../../components/campaigns/EmailSequenceBuilder'
 import { useEmailAccountsSelection } from '../../../../hooks/useEmailAccountsSelection'
 import LeadListSelector from '../../../../components/campaigns/LeadListSelector'
+import dynamic from 'next/dynamic'
+
+const InlineRichTextEditor = dynamic(() => import('../../../../components/ui/rich-text-editor').then(mod => ({ default: mod.RichTextEditor })), {
+  ssr: false,
+  loading: () => <div className="border rounded-lg h-40 bg-gray-50 animate-pulse" />
+})
 
 interface Campaign {
   id: string
@@ -118,7 +124,8 @@ function EditCampaignPageContent({
     { id: 'leads', name: 'Lead List', icon: Users },
     { id: 'accounts', name: 'Email Accounts', icon: Settings },
     { id: 'timing', name: 'Timing Settings', icon: Calendar },
-    { id: 'advanced', name: 'Advanced Settings', icon: Settings }
+    { id: 'advanced', name: 'Advanced Settings', icon: Settings },
+    { id: 'test', name: 'Send Test', icon: Mail }
   ]
 
   useEffect(() => {
@@ -211,6 +218,90 @@ function EditCampaignPageContent({
 
   const updateCampaignData = (data: any) => {
     setCampaignData(prev => ({ ...prev, ...data }))
+  }
+
+  // Test Email state
+  const [testRecipient, setTestRecipient] = useState('')
+  const [testSenderAccountId, setTestSenderAccountId] = useState('')
+  const [testSubject, setTestSubject] = useState('')
+  const [testContent, setTestContent] = useState('')
+  const [testSending, setTestSending] = useState(false)
+  const [testSent, setTestSent] = useState<null | { messageId?: string; response?: string }>(null)
+  const [testError, setTestError] = useState('')
+  const [testSample, setTestSample] = useState({
+    first_name: '',
+    last_name: '',
+    full_name: '',
+    company: '',
+    job_title: '',
+    website: ''
+  })
+
+  // Initialize test defaults when data loads
+  useEffect(() => {
+    if (campaign) {
+      setTestSubject(prev => prev || campaignData.emailSubject || '')
+      setTestContent(prev => prev || campaignData.emailContent || '')
+    }
+  }, [campaign, campaignData.emailSubject, campaignData.emailContent])
+
+  useEffect(() => {
+    if (!testSenderAccountId && emailAccounts && emailAccounts.length > 0) {
+      const preferred = campaignData.emailAccounts?.[0]
+      const exists = preferred && emailAccounts.find(a => a.id === preferred)
+      setTestSenderAccountId(exists ? preferred : emailAccounts[0].id)
+    }
+  }, [emailAccounts, campaignData.emailAccounts, testSenderAccountId])
+
+  const emailVariables = [
+    { key: 'first_name', label: 'First Name' },
+    { key: 'last_name', label: 'Last Name' },
+    { key: 'full_name', label: 'Full Name' },
+    { key: 'email', label: 'Email' },
+    { key: 'company', label: 'Company' },
+    { key: 'job_title', label: 'Job Title' },
+    { key: 'website', label: 'Website' },
+  ]
+
+  const handleSendTestEmail = async () => {
+    setTestError('')
+    setTestSent(null)
+
+    if (!testRecipient || !testSenderAccountId || !testSubject || !testContent) {
+      setTestError('Please fill recipient, sender account, subject and content')
+      return
+    }
+
+    try {
+      setTestSending(true)
+      const payload = {
+        recipientEmail: testRecipient,
+        senderAccountId: testSenderAccountId,
+        subject: testSubject,
+        content: testContent,
+        sampleData: {
+          first_name: testSample.first_name,
+          last_name: testSample.last_name,
+          full_name: testSample.full_name,
+          company: testSample.company,
+          job_title: testSample.job_title,
+          website: testSample.website
+        },
+        campaignName: campaign?.name,
+        emailIndex: 0
+      }
+
+      const res = await api.post('/campaigns/test-email', payload)
+      if (res.data?.success) {
+        setTestSent({ messageId: res.data?.data?.messageId, response: res.data?.data?.response })
+      } else {
+        setTestError(res.data?.error || 'Failed to send test email')
+      }
+    } catch (err: any) {
+      setTestError(err.response?.data?.error || err.message || 'Failed to send test email')
+    } finally {
+      setTestSending(false)
+    }
   }
 
   const handleSaveCampaign = async () => {
@@ -425,6 +516,123 @@ function EditCampaignPageContent({
             </Card>
           )}
 
+          {/* Send Test Tab */}
+          {currentTab === 'test' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Send Test Email</CardTitle>
+                <CardDescription>Preview personalization and send a test email before launching</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Sender & Recipient */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Sender Account</Label>
+                    <select
+                      className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500"
+                      value={testSenderAccountId}
+                      onChange={(e) => setTestSenderAccountId(e.target.value)}
+                    >
+                      {(emailAccounts || []).map(acc => (
+                        <option key={acc.id} value={acc.id}>{acc.email}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Recipient Email</Label>
+                    <Input
+                      placeholder="you@example.com"
+                      value={testRecipient}
+                      onChange={(e) => setTestRecipient(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Subject */}
+                <div>
+                  <Label>Subject</Label>
+                  <Input
+                    placeholder="Subject"
+                    value={testSubject}
+                    onChange={(e) => setTestSubject(e.target.value)}
+                  />
+                </div>
+
+                {/* Content Editor */}
+                <div>
+                  <Label>Content</Label>
+                  <div className="mt-2 border rounded-lg">
+                    <InlineRichTextEditor
+                      content={testContent}
+                      onChange={(html: string) => setTestContent(html)}
+                      placeholder={"Hi {first_name},\n\nI hope this email finds you well..."}
+                      variables={emailVariables as { key: string; label: string; value?: string }[]}
+                      minHeight={'220px'}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Supports spintax {'{Hello|Hi}'} and variables like {'{first_name}'}, {'{company}'}. Sample data below is used for preview substitution.
+                  </p>
+                </div>
+
+                {/* Sample Data */}
+                <div>
+                  <Label className="text-base font-semibold">Sample Lead Data</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+                    <div>
+                      <Label>First Name</Label>
+                      <Input value={testSample.first_name} onChange={(e) => setTestSample(s => ({ ...s, first_name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label>Last Name</Label>
+                      <Input value={testSample.last_name} onChange={(e) => setTestSample(s => ({ ...s, last_name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label>Full Name</Label>
+                      <Input value={testSample.full_name} onChange={(e) => setTestSample(s => ({ ...s, full_name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label>Company</Label>
+                      <Input value={testSample.company} onChange={(e) => setTestSample(s => ({ ...s, company: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label>Job Title</Label>
+                      <Input value={testSample.job_title} onChange={(e) => setTestSample(s => ({ ...s, job_title: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label>Website</Label>
+                      <Input value={testSample.website} onChange={(e) => setTestSample(s => ({ ...s, website: e.target.value }))} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-3">
+                  <Button onClick={handleSendTestEmail} disabled={testSending || !testRecipient || !testSenderAccountId}>
+                    {testSending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 mr-2" /> Send Test Email
+                      </>
+                    )}
+                  </Button>
+                  {testSent && (
+                    <div className="text-green-600 text-sm flex items-center">
+                      <Check className="w-4 h-4 mr-1" /> Sent! Message ID: {testSent.messageId || 'N/A'}
+                    </div>
+                  )}
+                  {testError && (
+                    <div className="text-red-600 text-sm flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-1" /> {testError}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
           {/* Email Sequence Tab */}
           {currentTab === 'sequence' && (
             <Card>
