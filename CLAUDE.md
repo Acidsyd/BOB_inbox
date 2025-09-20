@@ -10,6 +10,7 @@ npm run dev              # Starts both frontend (3001) and backend (4000)
 npm run dev:backend      # Backend only (port 4000)
 npm run dev:frontend     # Frontend only (port 3001)
 npm run cron:dev         # Email processor (every minute) - PRODUCTION-READY with 4-phase enhancements
+npm run reply-monitor:dev # Reply monitoring cron (development mode)
 
 # Testing & Quality
 npm run test             # Unit tests (Jest)
@@ -20,6 +21,7 @@ npm run test:e2e:ui      # E2E tests with UI
 npm run test:e2e:headed  # E2E tests with browser UI
 npm run test:e2e:debug   # Debug E2E tests
 npm run test:e2e:report  # Show E2E test report
+npm run test:e2e:install # Install Playwright browsers
 npm run test:auth        # Auth-specific E2E tests
 npm run test:dashboard   # Dashboard E2E tests
 npm run test:api         # API performance tests
@@ -40,6 +42,7 @@ npm run db:reset         # Reset database
 npm run setup            # Install all dependencies (root, backend, frontend)
 npm run clean            # Clean coverage and build artifacts
 npm run clean:all        # Clean everything including node_modules
+npm run precommit        # Run lint:fix and test:unit (git hook)
 
 # Docker Development
 npm run docker:build     # Build Docker containers
@@ -58,14 +61,30 @@ npm run cron:setup          # Setup daily reset cron job
 # Security
 npm run security:audit      # Security audit for all packages
 npm run security:fix        # Auto-fix security vulnerabilities
+npm run production:setup    # Production setup script
+npm run production:deploy   # Production deployment (custom command)
 ```
 
 ## System Architecture
 
 **Cold Email Automation Platform** - Monorepo with dual-provider email system and sophisticated scheduling.
 
+### Project Structure
+```
+Mailsender/
+├── backend/                 # Node.js/Express API server
+├── frontend/                # Next.js 14 web application
+├── docs/                    # All project documentation
+├── config/                  # Configuration files (database schema, nginx)
+├── scripts/                 # Utility scripts
+├── n8n-workflows/           # N8N workflow templates
+├── @TIMESTAMP_ARCHITECTURE.md # Timezone handling documentation
+└── CLAUDE.md               # This guidance file
+```
+
 ### Core Components
 - **CronEmailProcessor**: Production scheduler (1-minute intervals, 99.9% uptime)
+- **BackgroundSyncService**: Simple 15-minute interval sync for all email accounts
 - **OAuth2Service**: Gmail API integration with RFC-compliant threading
 - **UnifiedInboxService**: Conversation threading across all email accounts
 - **EmailService**: Dual-provider routing (OAuth2 + SMTP fallback)
@@ -141,6 +160,19 @@ Subject + participants fallback → Create/update conversation →
 Store with direction (sent/received)
 ```
 
+### Email Sync Architecture (CRITICAL SIMPLIFICATION)
+```
+Background Sync (15 min) → Fetch all OAuth2 accounts → Sync each account →
+Update timestamps → Store messages → Manual sync button preserved
+```
+
+**Design Philosophy**: Simple and reliable over complex and feature-rich
+- **BackgroundSyncService**: Fixed 15-minute intervals, no activity-based logic
+- **Manual sync**: Preserved via `/api/inbox/sync/manual` endpoint and UI button
+- **No auto-sync**: Eliminated complex SyncSchedulerService with activity intervals
+- **Singleton pattern**: Single background service manages all account syncing
+- **Error isolation**: Failed accounts don't block other account syncing
+
 ## Frontend Patterns
 
 ### React Hooks Pattern
@@ -164,6 +196,10 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
 const RichTextEditor = dynamic(() => import('../ui/rich-text-editor'), {
   ssr: false // CRITICAL: Tiptap requires client-side only
 })
+
+// Tiptap Dependencies (v3.3.0+)
+// @tiptap/react, @tiptap/starter-kit, @tiptap/extension-* packages
+// All Tiptap components must use consistent versioning
 ```
 
 ### Campaign Actions (CRITICAL UX)
@@ -204,6 +240,7 @@ SMTP_PASS=your-app-password
 
 ### Backend Services
 - `src/services/CronEmailProcessor.js` - **Production scheduler** (4-phase enhanced, exact interval compliance)
+- `src/services/BackgroundSyncService.js` - **Simple background sync** (15-minute intervals for all accounts)
 - `src/services/OAuth2Service.js` - Gmail API integration with attachment support
 - `src/services/EmailService.js` - Dual-provider email sending
 - `src/services/UnifiedInboxService.js` - RFC-compliant conversation threading
@@ -255,6 +292,9 @@ campaigns.config = {
 | Bounce messages not showing | Check FolderService bounce filtering |
 | Lead count capped at 1000 | Use Supabase count queries, not data length |
 | Tiptap focus/selection issues | Remove content from useEditor deps |
+| Manual sync not working | Check `/api/inbox/sync/manual` endpoint and triggerManualSync function |
+| Background sync not running | Verify BackgroundSyncService initialization in backend index.js |
+| Auto-sync references | Auto-sync was removed - use BackgroundSyncService for 15-min intervals |
 
 ## Debug Commands
 
@@ -286,6 +326,7 @@ curl http://localhost:4000/health
 ### ✅ Completed Enhancements (September 2025)
 - **Phase 1-4 Improvements**: Error resilience, database optimization, parallel processing, graceful shutdown
 - **Campaign Timing Fixed**: Exact interval compliance with 1 email per interval enforcement
+- **Simplified Sync Architecture**: Replaced complex auto-sync with simple 15-minute background sync
 - **Reply Detection**: Unified inbox system with RFC-compliant threading
 - **Bounce Protection**: Auto-pause campaigns at 5% bounce rate
 - **Rate Limiting**: Sophisticated account rotation with usage tracking

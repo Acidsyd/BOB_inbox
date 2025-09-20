@@ -5,6 +5,7 @@ import AppLayout from '../../../components/layout/AppLayout'
 import { useParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../../lib/api'
+import { useTimezone } from '../../../contexts/TimezoneContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card'
 import { Button } from '../../../components/ui/button'
 import { Badge } from '../../../components/ui/badge'
@@ -78,6 +79,7 @@ function CampaignDetailContent() {
   const [isStarting, setIsStarting] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
   const queryClient = useQueryClient()
+  const { formatDate } = useTimezone()
 
   const { data: campaign, isLoading } = useQuery<Campaign>({
     queryKey: ['campaign', campaignId],
@@ -165,7 +167,21 @@ function CampaignDetailContent() {
       
       // Fetch scheduled activity
       api.get(`/campaigns/${campaignId}/scheduled-activity`)
-        .then(res => setScheduledActivity(res.data.activity || []))
+        .then(res => {
+          const activity = res.data.activity || [];
+          console.log('🕐 Frontend received scheduled activity:', activity);
+          // Debug scheduled emails for September 22nd
+          activity.forEach((item, index) => {
+            if (item.time && typeof item.time === 'string' && item.time.includes('2025-09-22')) {
+              console.log(`🕐 Scheduled activity ${index + 1} for Sep 22:`, {
+                originalTime: item.time,
+                from: item.from,
+                to: item.to
+              });
+            }
+          });
+          setScheduledActivity(activity);
+        })
         .catch(err => console.error('Failed to fetch scheduled activity:', err))
     }
   }, [campaignId, campaign?.sent])
@@ -553,7 +569,7 @@ function CampaignDetailContent() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm">
-                        <span className="font-medium">{activity.time}</span>
+                        <span className="font-medium">{formatDate(activity.time, 'MMM d, yyyy h:mm a')}</span>
                         <span className={`ml-2 text-xs px-2 py-1 rounded-full ${
                           activity.status === 'sent' ? 'bg-green-100 text-green-800' :
                           activity.status === 'failed' || activity.status === 'bounced' ? 'bg-red-100 text-red-800' :
@@ -602,7 +618,29 @@ function CampaignDetailContent() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm">
-                        <span className="font-medium">{activity.time}</span>
+                        <span className="font-medium">{(() => {
+                          // Backend now sends pre-formatted timestamps with timezone conversion applied
+                          // If activity.time is already formatted string, use it directly
+                          // Otherwise fall back to formatDate for legacy compatibility
+                          if (activity.time && typeof activity.time === 'string' &&
+                              (activity.time.includes('AM') || activity.time.includes('PM') || activity.time.includes('am') || activity.time.includes('pm'))) {
+                            // Already formatted by backend TimezoneService
+                            console.log('🕐 Using pre-formatted time from backend:', {
+                              preFormatted: activity.time,
+                              to: activity.to
+                            });
+                            return activity.time;
+                          } else {
+                            // Legacy fallback for raw timestamps
+                            const formatted = formatDate(activity.time, 'MMM d, yyyy h:mm a');
+                            console.log('🕐 Legacy formatting fallback:', {
+                              inputTime: activity.time,
+                              formattedTime: formatted,
+                              to: activity.to
+                            });
+                            return formatted;
+                          }
+                        })()}</span>
                         <span className="text-gray-500 ml-2">
                           From <span className="text-gray-700">{activity.from}</span> → <span className="text-gray-700">{activity.to}</span>
                         </span>

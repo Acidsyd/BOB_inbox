@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { ArrowRight, Mail, Zap, Shield, Users, BarChart3, Globe, Sparkles, TrendingUp, CheckCircle, Clock, Target } from 'lucide-react'
+import { ArrowRight, Mail, Zap, Shield, Users, BarChart3, Globe, Sparkles, TrendingUp, CheckCircle, Clock, Target, Inbox, Search, Calendar, FileText } from 'lucide-react'
 
 export const metadata = {
-  title: 'Features - OPhir B2B Email Marketing Platform',
-  description: 'Discover all the powerful features of OPhir - professional email account management, AI-powered deliverability optimization, advanced analytics, personalization, and more for B2B email marketing success.',
+  title: 'Features - BOBinbox Professional Email Client',
+  description: 'Discover all the powerful features of BOBinbox - unified inbox, smart organization, professional composition, and productivity tools that make email management effortless.',
 }
 
 export default function FeaturesPage() {
@@ -14,7 +14,7 @@ export default function FeaturesPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <Link href="/" className="text-2xl font-bold gradient-text">OPhir</Link>
+              <Link href="/" className="text-2xl font-bold gradient-text">BOBinbox</Link>
             </div>
             <div className="hidden md:flex items-center space-x-8">
               <Link href="/features" className="text-purple-600 font-medium">Features</Link>
@@ -32,11 +32,11 @@ export default function FeaturesPage() {
       <section className="pt-32 pb-20 px-4 gradient-bg">
         <div className="max-w-7xl mx-auto text-center">
           <h1 className="text-5xl font-bold text-gray-900 mb-6">
-            Everything You Need to
-            <span className="gradient-text"> Dominate Outreach</span>
+            Everything You Need for
+            <span className="gradient-text"> Professional Email</span>
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            From deliverability optimization to AI personalization, OPhir provides all the tools you need to scale your B2B email marketing campaigns while maintaining exceptional deliverability.
+            From unified inbox management to smart organization, BOBinbox provides all the tools you need to manage your email communication like a pro.
           </p>
         </div>
       </section>
@@ -46,121 +46,121 @@ export default function FeaturesPage() {
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-3 gap-12">
             
-            {/* Email Management */}
+            {/* Inbox Management */}
             <div className="space-y-8">
               <div className="text-center">
                 <div className="w-16 h-16 bg-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Mail className="w-8 h-8 text-purple-600" />
+                  <Inbox className="w-8 h-8 text-purple-600" />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Email Management</h2>
-                <p className="text-gray-600">Powerful tools to manage unlimited email accounts</p>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Inbox Management</h2>
+                <p className="text-gray-600">Unified inbox that brings all your email accounts together</p>
               </div>
 
               <div className="space-y-6">
                 <div className="bg-white rounded-2xl p-6 shadow-lg card-hover">
-                  <h3 className="text-lg font-bold mb-2">Unlimited Email Accounts</h3>
-                  <p className="text-gray-600 mb-4">Connect and manage unlimited email accounts from all major providers</p>
+                  <h3 className="text-lg font-bold mb-2">Unified Inbox</h3>
+                  <p className="text-gray-600 mb-4">See all your emails from multiple accounts in one streamlined view</p>
                   <div className="flex items-center text-sm text-green-600">
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    Gmail, Outlook, Custom SMTP
+                    Gmail, Outlook, IMAP support
                   </div>
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 shadow-lg card-hover">
-                  <h3 className="text-lg font-bold mb-2">Smart Rotation</h3>
-                  <p className="text-gray-600 mb-4">Automatically rotate email accounts to maximize deliverability</p>
+                  <h3 className="text-lg font-bold mb-2">Smart Threading</h3>
+                  <p className="text-gray-600 mb-4">Intelligent conversation threading keeps related emails organized</p>
                   <div className="flex items-center text-sm text-green-600">
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    AI-powered rotation logic
+                    RFC-compliant threading
                   </div>
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 shadow-lg card-hover">
-                  <h3 className="text-lg font-bold mb-2">Health Monitoring</h3>
-                  <p className="text-gray-600 mb-4">Real-time monitoring of email account health and reputation</p>
+                  <h3 className="text-lg font-bold mb-2">Advanced Search</h3>
+                  <p className="text-gray-600 mb-4">Find any email instantly with powerful search across all accounts</p>
                   <div className="flex items-center text-sm text-green-600">
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    24/7 reputation tracking
+                    Full-text search & filters
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Deliverability */}
+            {/* Productivity Tools */}
             <div className="space-y-8">
               <div className="text-center">
                 <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Shield className="w-8 h-8 text-blue-600" />
+                  <TrendingUp className="w-8 h-8 text-blue-600" />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Deliverability</h2>
-                <p className="text-gray-600">Industry-leading inbox placement rates</p>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Productivity Tools</h2>
+                <p className="text-gray-600">Professional features that save you time</p>
               </div>
 
               <div className="space-y-6">
                 <div className="bg-white rounded-2xl p-6 shadow-lg card-hover">
-                  <h3 className="text-lg font-bold mb-2">AI-Powered Warmup</h3>
-                  <p className="text-gray-600 mb-4">Intelligent warmup system that builds sender reputation gradually</p>
+                  <h3 className="text-lg font-bold mb-2">Rich Text Composition</h3>
+                  <p className="text-gray-600 mb-4">Professional email editor with formatting, attachments, and templates</p>
                   <div className="flex items-center text-sm text-green-600">
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    95%+ inbox placement rate
+                    Full HTML editor & attachments
                   </div>
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 shadow-lg card-hover">
-                  <h3 className="text-lg font-bold mb-2">Spam Protection</h3>
-                  <p className="text-gray-600 mb-4">Advanced algorithms prevent emails from landing in spam folders</p>
+                  <h3 className="text-lg font-bold mb-2">Smart Scheduling</h3>
+                  <p className="text-gray-600 mb-4">Schedule emails to send at the perfect time across timezones</p>
                   <div className="flex items-center text-sm text-green-600">
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    Real-time spam testing
+                    Timezone intelligence
                   </div>
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 shadow-lg card-hover">
-                  <h3 className="text-lg font-bold mb-2">Domain Authentication</h3>
-                  <p className="text-gray-600 mb-4">Automated SPF, DKIM, and DMARC setup for maximum trust</p>
+                  <h3 className="text-lg font-bold mb-2">Email Templates</h3>
+                  <p className="text-gray-600 mb-4">Save and reuse your most effective email templates</p>
                   <div className="flex items-center text-sm text-green-600">
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    One-click DNS setup
+                    Template library & variables
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Automation */}
+            {/* Security & Collaboration */}
             <div className="space-y-8">
               <div className="text-center">
                 <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Zap className="w-8 h-8 text-green-600" />
+                  <Shield className="w-8 h-8 text-green-600" />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Automation</h2>
-                <p className="text-gray-600">Intelligent automation that scales</p>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Security & Collaboration</h2>
+                <p className="text-gray-600">Enterprise-grade security with team features</p>
               </div>
 
               <div className="space-y-6">
                 <div className="bg-white rounded-2xl p-6 shadow-lg card-hover">
-                  <h3 className="text-lg font-bold mb-2">AI Personalization</h3>
-                  <p className="text-gray-600 mb-4">Generate personalized emails at scale using GPT-4</p>
+                  <h3 className="text-lg font-bold mb-2">OAuth2 Authentication</h3>
+                  <p className="text-gray-600 mb-4">Secure OAuth2 integration with Gmail and Outlook - no passwords stored</p>
                   <div className="flex items-center text-sm text-green-600">
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    Advanced AI models
+                    Bank-level security
                   </div>
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 shadow-lg card-hover">
-                  <h3 className="text-lg font-bold mb-2">Smart Sequences</h3>
-                  <p className="text-gray-600 mb-4">Automated follow-up sequences with intelligent timing</p>
+                  <h3 className="text-lg font-bold mb-2">Team Workspaces</h3>
+                  <p className="text-gray-600 mb-4">Organize your team with shared inboxes and collaborative features</p>
                   <div className="flex items-center text-sm text-green-600">
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    Behavioral triggers
+                    Multi-user access
                   </div>
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 shadow-lg card-hover">
-                  <h3 className="text-lg font-bold mb-2">Reply Detection</h3>
-                  <p className="text-gray-600 mb-4">Automatically pause sequences when prospects reply</p>
+                  <h3 className="text-lg font-bold mb-2">Data Encryption</h3>
+                  <p className="text-gray-600 mb-4">End-to-end encryption ensures your emails stay private and secure</p>
                   <div className="flex items-center text-sm text-green-600">
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    99% accuracy rate
+                    256-bit encryption
                   </div>
                 </div>
               </div>
@@ -174,46 +174,46 @@ export default function FeaturesPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Advanced Features for
-              <span className="gradient-text"> Enterprise Teams</span>
+              Professional Features for
+              <span className="gradient-text"> Modern Teams</span>
             </h2>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             <div className="bg-white rounded-2xl p-8 shadow-lg">
-              <BarChart3 className="w-12 h-12 text-purple-600 mb-4" />
-              <h3 className="text-xl font-bold mb-3">Advanced Analytics</h3>
-              <p className="text-gray-600">Track opens, clicks, replies, and conversions with detailed insights and attribution.</p>
+              <Search className="w-12 h-12 text-purple-600 mb-4" />
+              <h3 className="text-xl font-bold mb-3">Powerful Search</h3>
+              <p className="text-gray-600">Find any email instantly with advanced search filters across all your accounts.</p>
             </div>
 
             <div className="bg-white rounded-2xl p-8 shadow-lg">
-              <Globe className="w-12 h-12 text-blue-600 mb-4" />
-              <h3 className="text-xl font-bold mb-3">CRM Integration</h3>
-              <p className="text-gray-600">Seamlessly sync with Salesforce, HubSpot, Pipedrive, and 20+ other CRMs.</p>
+              <FileText className="w-12 h-12 text-blue-600 mb-4" />
+              <h3 className="text-xl font-bold mb-3">Attachment Management</h3>
+              <p className="text-gray-600">Easily manage, preview, and organize attachments from all your email accounts.</p>
             </div>
 
             <div className="bg-white rounded-2xl p-8 shadow-lg">
               <Users className="w-12 h-12 text-green-600 mb-4" />
-              <h3 className="text-xl font-bold mb-3">Team Collaboration</h3>
-              <p className="text-gray-600">Multi-user access with role-based permissions and team performance tracking.</p>
+              <h3 className="text-xl font-bold mb-3">Contact Management</h3>
+              <p className="text-gray-600">Smart contact organization with conversation history and interaction tracking.</p>
             </div>
 
             <div className="bg-white rounded-2xl p-8 shadow-lg">
-              <Clock className="w-12 h-12 text-yellow-600 mb-4" />
-              <h3 className="text-xl font-bold mb-3">Timezone Intelligence</h3>
-              <p className="text-gray-600">Send emails at the optimal time for each prospect's timezone automatically.</p>
+              <Calendar className="w-12 h-12 text-yellow-600 mb-4" />
+              <h3 className="text-xl font-bold mb-3">Calendar Integration</h3>
+              <p className="text-gray-600">Seamlessly integrate with your calendar for meeting scheduling and reminders.</p>
             </div>
 
             <div className="bg-white rounded-2xl p-8 shadow-lg">
-              <Target className="w-12 h-12 text-red-600 mb-4" />
-              <h3 className="text-xl font-bold mb-3">Lead Scoring</h3>
-              <p className="text-gray-600">AI-powered lead scoring to prioritize your hottest prospects automatically.</p>
+              <Globe className="w-12 h-12 text-red-600 mb-4" />
+              <h3 className="text-xl font-bold mb-3">Multi-Language Support</h3>
+              <p className="text-gray-600">Work in your preferred language with support for multiple international languages.</p>
             </div>
 
             <div className="bg-white rounded-2xl p-8 shadow-lg">
-              <Sparkles className="w-12 h-12 text-indigo-600 mb-4" />
-              <h3 className="text-xl font-bold mb-3">A/B Testing</h3>
-              <p className="text-gray-600">Test subject lines, content, and sending times to optimize performance.</p>
+              <BarChart3 className="w-12 h-12 text-indigo-600 mb-4" />
+              <h3 className="text-xl font-bold mb-3">Email Analytics</h3>
+              <p className="text-gray-600">Track your email activity and productivity with insightful analytics and reports.</p>
             </div>
           </div>
         </div>
@@ -223,11 +223,11 @@ export default function FeaturesPage() {
       <section className="py-20 gradient-bg">
         <div className="max-w-4xl mx-auto text-center px-4">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Ready to Transform Your
-            <span className="gradient-text"> Cold Email Game?</span>
+            Ready to Unify Your
+            <span className="gradient-text"> Email Experience?</span>
           </h2>
           <p className="text-xl text-gray-600 mb-8">
-            Join thousands of companies already scaling their outreach with OPhir
+            Join thousands of professionals who have simplified their email management with BOBinbox
           </p>
           <Link href="/register">
             <button className="btn-primary text-lg px-8 py-4 flex items-center justify-center mx-auto">
@@ -243,9 +243,9 @@ export default function FeaturesPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid md:grid-cols-5 gap-8 mb-8">
             <div className="col-span-2">
-              <div className="text-2xl font-bold mb-4">OPhir</div>
+              <div className="text-2xl font-bold mb-4">BOBinbox</div>
               <p className="text-gray-400 mb-4">
-                The most powerful cold email platform for modern sales teams.
+                The smart email client that unifies all your email accounts in one place.
               </p>
               <div className="flex space-x-4">
                 <div className="w-10 h-10 bg-gray-800 rounded-lg flex items-center justify-center hover:bg-gray-700 cursor-pointer">
@@ -286,7 +286,7 @@ export default function FeaturesPage() {
           </div>
           <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center">
             <p className="text-gray-400 text-sm">
-              © 2025 OPhir. All rights reserved.
+              © 2025 BOBinbox. All rights reserved.
             </p>
             <div className="flex space-x-6 mt-4 md:mt-0">
               <Link href="/terms" className="text-gray-400 text-sm hover:text-white transition">Terms</Link>

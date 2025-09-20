@@ -59,7 +59,7 @@ function InboxContent() {
   
   // Hooks
   const { getConversationsForFolder, folders, refreshFolders } = useFolders()
-  const { onSyncCompleted } = useEmailSync()
+  const { onSyncCompleted, triggerManualSync } = useEmailSync()
   const { labels } = useLabels()
   
   // Local folder state for real-time count updates
@@ -173,10 +173,17 @@ function InboxContent() {
 
   // Initialize with inbox and refresh folder counts
   useEffect(() => {
+    console.log('📥 Inbox page loaded - triggering auto-sync')
+
+    // Trigger sync when entering inbox page
+    triggerManualSync().catch(error => {
+      console.warn('⚠️ Auto-sync on page load failed:', error.message)
+    })
+
     loadFolderConversations('inbox')
     // Force refresh folder counts on first load to get accurate unread counts
     refreshFolders()
-  }, [])
+  }, [triggerManualSync])
 
 
   // Listen for sync completion and auto-refresh current folder
@@ -534,11 +541,13 @@ function InboxContent() {
               <div className="p-6 text-center">
                 <Mail className="w-8 h-8 text-gray-300 mx-auto" />
                 <p className="text-gray-500 mt-2 text-sm">
-                  {selectedLabelId && !showUnreadOnly && !searchQuery 
+                  {selectedLabelId && !showUnreadOnly && !searchQuery
                     ? `No conversations with selected label`
-                    : showUnreadOnly 
-                      ? 'No unread conversations' 
-                      : 'No conversations found'
+                    : showUnreadOnly
+                      ? 'No unread conversations'
+                      : selectedFolder === 'inbox'
+                        ? 'No campaign replies in inbox'
+                        : 'No conversations found'
                   }
                 </p>
                 {searchQuery && (

@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-import { Switch } from '../ui/switch'
 import { Badge } from '../ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog'
@@ -60,7 +59,6 @@ export default function WebhookManager() {
     name: '',
     url: '',
     secret: '',
-    is_active: true,
     events: ['label.assigned', 'label.removed', 'label.created']
   })
 
@@ -124,7 +122,7 @@ export default function WebhookManager() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({ ...formData, is_active: true })
       })
 
       if (response.ok) {
@@ -177,40 +175,12 @@ export default function WebhookManager() {
     }
   }
 
-  const handleToggleActive = async (webhookId: string, is_active: boolean) => {
-    try {
-      const response = await fetch(`/api/webhooks/${webhookId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ is_active })
-      })
-
-      if (response.ok) {
-        addToast({
-          title: is_active ? 'Webhook enabled' : 'Webhook disabled',
-          description: `The webhook is now ${is_active ? 'active' : 'inactive'}.`,
-          type: 'success'
-        })
-        fetchWebhooks()
-      }
-    } catch (error) {
-      addToast({
-        title: 'Error',
-        description: 'Failed to update webhook status.',
-        type: 'error'
-      })
-    }
-  }
 
   const resetForm = () => {
     setFormData({
       name: '',
       url: '',
       secret: '',
-      is_active: true,
       events: ['label.assigned', 'label.removed', 'label.created']
     })
     setSelectedWebhook(null)
@@ -222,7 +192,6 @@ export default function WebhookManager() {
       name: webhook.name,
       url: webhook.url,
       secret: webhook.secret || '',
-      is_active: webhook.is_active,
       events: webhook.events
     })
     setIsEditOpen(true)
@@ -249,100 +218,103 @@ export default function WebhookManager() {
   }
 
   const WebhookForm = () => (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label htmlFor="name">Name</Label>
-        <Input
-          id="name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          placeholder="My Webhook"
-          required
-        />
-      </div>
+    <div className="px-6 py-4">
+      <form onSubmit={handleSubmit} className="space-y-8">
+        <div className="grid grid-cols-1 gap-6">
+          <div className="space-y-3">
+            <Label htmlFor="name" className="text-sm font-semibold text-gray-900">Name</Label>
+            <Input
+              id="name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="My Webhook"
+              required
+              className="h-12 px-4 text-base border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+            />
+          </div>
 
-      <div>
-        <Label htmlFor="url">Webhook URL</Label>
-        <Input
-          id="url"
-          type="url"
-          value={formData.url}
-          onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-          placeholder="https://your-app.com/webhook"
-          required
-        />
-      </div>
+          <div className="space-y-3">
+            <Label htmlFor="url" className="text-sm font-semibold text-gray-900">Webhook URL</Label>
+            <Input
+              id="url"
+              type="url"
+              value={formData.url}
+              onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+              placeholder="https://your-app.com/webhook"
+              required
+              className="h-12 px-4 text-base border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+            />
+          </div>
 
-      <div>
-        <Label htmlFor="secret">Secret (optional)</Label>
-        <div className="relative">
-          <Input
-            id="secret"
-            type={showSecret ? 'text' : 'password'}
-            value={formData.secret}
-            onChange={(e) => setFormData({ ...formData, secret: e.target.value })}
-            placeholder="Optional signing secret"
-          />
+          <div className="space-y-3">
+            <Label htmlFor="secret" className="text-sm font-semibold text-gray-900">Secret (optional)</Label>
+            <div className="relative">
+              <Input
+                id="secret"
+                type={showSecret ? 'text' : 'password'}
+                value={formData.secret}
+                onChange={(e) => setFormData({ ...formData, secret: e.target.value })}
+                placeholder="Optional signing secret"
+                className="h-12 px-4 pr-14 text-base border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 hover:bg-gray-100"
+                onClick={() => setShowSecret(!showSecret)}
+              >
+                {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <Label className="text-sm font-semibold text-gray-900">Events to Subscribe</Label>
+          <div className="grid grid-cols-2 gap-4 p-5 border border-gray-200 rounded-xl bg-gray-50/50">
+            {availableEvents.map((event) => (
+              <label key={event} className="flex items-center space-x-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={formData.events.includes(event)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setFormData({ ...formData, events: [...formData.events, event] })
+                    } else {
+                      setFormData({ ...formData, events: formData.events.filter(ev => ev !== event) })
+                    }
+                  }}
+                  className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900 transition-colors">
+                  {event}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+
+        <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
           <Button
             type="button"
-            variant="ghost"
-            size="sm"
-            className="absolute right-0 top-0 h-full px-3"
-            onClick={() => setShowSecret(!showSecret)}
+            variant="outline"
+            onClick={() => {
+              setIsCreateOpen(false)
+              setIsEditOpen(false)
+              resetForm()
+            }}
+            className="px-8 py-2.5 h-11 font-medium hover:bg-gray-50"
           >
-            {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            Cancel
+          </Button>
+          <Button type="submit" className="px-8 py-2.5 h-11 font-medium bg-blue-600 hover:bg-blue-700">
+            {selectedWebhook ? 'Update' : 'Create'} Webhook
           </Button>
         </div>
-      </div>
-
-      <div>
-        <Label>Events</Label>
-        <div className="grid grid-cols-2 gap-2 mt-2">
-          {availableEvents.map((event) => (
-            <label key={event} className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={formData.events.includes(event)}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setFormData({ ...formData, events: [...formData.events, event] })
-                  } else {
-                    setFormData({ ...formData, events: formData.events.filter(ev => ev !== event) })
-                  }
-                }}
-              />
-              <span className="text-sm">{event}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex items-center space-x-2">
-        <Switch
-          id="active"
-          checked={formData.is_active}
-          onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-        />
-        <Label htmlFor="active">Active</Label>
-      </div>
-
-      <div className="flex justify-end space-x-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setIsCreateOpen(false)
-            setIsEditOpen(false)
-            resetForm()
-          }}
-        >
-          Cancel
-        </Button>
-        <Button type="submit">
-          {selectedWebhook ? 'Update' : 'Create'} Webhook
-        </Button>
-      </div>
-    </form>
+      </form>
+    </div>
   )
 
   return (
@@ -367,14 +339,16 @@ export default function WebhookManager() {
                   Add Webhook
                 </Button>
               </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create Webhook</DialogTitle>
-                  <DialogDescription>
+              <DialogContent className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <DialogHeader className="space-y-3 pb-4 border-b">
+                  <DialogTitle className="text-xl font-semibold">Create Webhook</DialogTitle>
+                  <DialogDescription className="text-gray-600">
                     Add a new webhook endpoint to receive event notifications
                   </DialogDescription>
                 </DialogHeader>
-                <WebhookForm />
+                <div className="mt-4">
+                  <WebhookForm />
+                </div>
               </DialogContent>
             </Dialog>
           </div>
@@ -399,18 +373,11 @@ export default function WebhookManager() {
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center">
                       <h3 className="font-medium">{webhook.name}</h3>
-                      <Badge
-                        variant={webhook.is_active ? 'default' : 'secondary'}
-                        className="ml-2"
-                      >
-                        {webhook.is_active ? 'Active' : 'Inactive'}
+                      <Badge variant="default" className="ml-2">
+                        Active
                       </Badge>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Switch
-                        checked={webhook.is_active}
-                        onCheckedChange={(checked) => handleToggleActive(webhook.id, checked)}
-                      />
                       <Button
                         variant="ghost"
                         size="sm"
@@ -503,14 +470,16 @@ export default function WebhookManager() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Webhook</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="space-y-3 pb-4 border-b">
+            <DialogTitle className="text-xl font-semibold">Edit Webhook</DialogTitle>
+            <DialogDescription className="text-gray-600">
               Update your webhook configuration
             </DialogDescription>
           </DialogHeader>
-          <WebhookForm />
+          <div className="mt-4">
+            <WebhookForm />
+          </div>
         </DialogContent>
       </Dialog>
     </div>

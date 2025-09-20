@@ -96,14 +96,8 @@ export function InboxMessageView({
   const [isSending, setIsSending] = useState(false)
   const [conversationLabels, setConversationLabels] = useState<Label[]>(conversation.labels || [])
   
-  // Timezone-aware date formatting
-  const { formatMessageDate, timezone } = useTimezone()
-
-  // Create a consistent formatter for inbox messages using user timezone
-  const formatEuropeRomeDate = (date: string | Date | undefined | null) => {
-    if (!date) return '';
-    return formatDateInTimezone(date, 'MMM d, yyyy h:mm a');
-  }
+  // Timezone-aware date formatting - use frontend timezone context consistently
+  const { formatDate: formatTimezoneDate, formatConversationDate: formatConversationDateContext, formatMessageDate: formatMessageDateContext, timezone } = useTimezone()
   
   // Reset labels when conversation changes
   useEffect(() => {
@@ -223,7 +217,7 @@ export function InboxMessageView({
     
     if (latestMessage) {
       const senderName = getSenderName(latestMessage)
-      const messageDate = formatDate(latestMessage)
+      const messageDate = formatMessageDate(latestMessage)
       const quotedText = latestMessage.content_plain || extractPlainText(latestMessage.content_html || '')
       
       // Plain text quote format
@@ -409,10 +403,23 @@ export function InboxMessageView({
   }
 
 
-  // Use timezone-aware formatting - use frontend timezone context for consistency
-  const formatDate = (message: Message) => {
-    // Always use frontend timezone formatting for consistency with conversation list
-    return formatDateInTimezone(message.sent_at || message.received_at, 'MMM d, yyyy h:mm a')
+  // Use timezone-aware formatting - backend already converts timestamps to user timezone
+  const formatMessageDate = (message: Message) => {
+    const timestamp = message.sent_at || message.received_at
+    if (!timestamp) return 'Unknown'
+
+    // Backend already converts timestamps to user timezone, so just format without converting
+    const dateObj = new Date(timestamp)
+    if (isNaN(dateObj.getTime())) return 'Invalid date'
+
+    return dateObj.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })
   }
 
   const renderMessageContent = (message: Message) => {
@@ -557,31 +564,11 @@ export function InboxMessageView({
               </div>
             )}
             
-            {/* Email Details */}
-            <div className="space-y-1 text-sm text-gray-700">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-800 min-w-[40px]">To:</span>
-                <span className="truncate text-gray-900">{conversation.participants?.[0] || 'Unknown'}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-800 min-w-[40px]">From:</span>
-                <span className="truncate text-gray-900">
-                  {messages?.find(m => m.direction === 'sent')?.from_email || 
-                   messages?.find(m => m.direction === 'received')?.to_email || 
-                   'Unknown sender'}
-                </span>
-              </div>
-            </div>
-            
-            {/* Subject and Date */}
+            {/* Subject */}
             <div className="mt-2 pt-2 border-t border-gray-100">
               <div className="flex items-center gap-3 text-xs text-gray-600">
                 <span className="font-medium">Subject:</span>
                 <span className="truncate flex-1">{conversation.subject || 'No subject'}</span>
-                <span>•</span>
-                <span>
-                  {conversation.last_activity_at_display || formatEuropeRomeDate(conversation.last_activity_at)} (Europe/Rome)
-                </span>
               </div>
             </div>
           </div>
@@ -702,7 +689,7 @@ export function InboxMessageView({
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <span className="text-xs text-gray-500">
-                            {formatDate(message)}
+                            {formatMessageDate(message)}
                           </span>
                           {expandedMessages.has(message.id) ? (
                             <ChevronUp className="h-4 w-4 text-blue-500 transition-all duration-200" />

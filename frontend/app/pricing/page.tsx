@@ -17,7 +17,7 @@ export default function PricingPage() {
         console.error('Failed to fetch early adopters count:', error)
       }
     }
-    
+
     fetchEarlyAdoptersCount()
   }, [])
 
@@ -28,7 +28,7 @@ export default function PricingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">OPhir</Link>
+              <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">BOBinbox</Link>
             </div>
             <div className="hidden md:flex items-center space-x-8">
               <Link href="/features" className="text-gray-600 hover:text-gray-900 transition">Features</Link>
@@ -49,35 +49,35 @@ export default function PricingPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-white to-blue-50 opacity-70" />
         <div className="absolute top-0 right-0 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob" />
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000" />
-        
+
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-full text-sm font-medium mb-6 animate-pulse">
             <Star className="w-4 h-4 mr-2" />
             LIMITED TIME: First 100 users get 50% OFF
           </div>
-          
+
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 mb-6">
-            Send 60% More Emails at
-            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent"> 75% Less Cost</span>
+            Professional Email Client at
+            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent"> Unbeatable Prices</span>
           </h1>
-          
+
           <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            While Smartlead charges $39 for 6,000 emails, we give you 8,000 emails for just €15. 
-            No credit limits, no setup fees, no catch.
+            Get all the features of premium email clients like Outlook and Thunderbird,
+            plus unified inbox management and professional tools.
           </p>
-          
+
           <div className="flex flex-wrap justify-center gap-4 mb-8">
             <div className="flex items-center text-gray-700">
               <Check className="w-5 h-5 mr-2 text-green-500" />
-              <span className="font-medium">8K emails vs competitors' 6K</span>
+              <span className="font-medium">Unified inbox for all accounts</span>
             </div>
             <div className="flex items-center text-gray-700">
               <Check className="w-5 h-5 mr-2 text-green-500" />
-              <span className="font-medium">Email warm-up included</span>
+              <span className="font-medium">Professional composition tools</span>
             </div>
             <div className="flex items-center text-gray-700">
               <Check className="w-5 h-5 mr-2 text-green-500" />
-              <span className="font-medium">No setup fees ($1K+ elsewhere)</span>
+              <span className="font-medium">Smart scheduling & templates</span>
             </div>
           </div>
         </div>
@@ -87,209 +87,209 @@ export default function PricingPage() {
       <section className="py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Basic Monthly */}
+            {/* Personal Monthly */}
             <div className="relative bg-white rounded-xl shadow-lg transition-all duration-300 hover:scale-105">
               <div className="absolute -top-3 -right-3 z-10">
                 <div className="bg-gradient-to-r from-green-500 to-blue-500 text-white px-3 py-1 rounded-full text-xs font-bold">
-                  8K ADVANTAGE
+                  STARTER
                 </div>
               </div>
-              
+
               <div className="p-6">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xl font-bold text-gray-900">Basic</h3>
+                  <h3 className="text-xl font-bold text-gray-900">Personal</h3>
                   <Zap className="w-6 h-6 text-gray-400" />
                 </div>
-                
-                <p className="text-sm text-gray-600 mb-4">Beat Smartlead's Basic plan</p>
-                
+
+                <p className="text-sm text-gray-600 mb-4">Perfect for individual professionals</p>
+
                 <div className="mb-4">
                   <div className="flex items-baseline">
                     <span className="text-3xl font-bold text-gray-900">€15</span>
                     <span className="text-gray-600 ml-1">/month</span>
                   </div>
                   <p className="text-xs text-green-600 font-medium mt-1">
-                    vs Smartlead $39 (62% cheaper)
+                    vs Gmail Business $6/user
                   </p>
                 </div>
-                
+
                 <ul className="space-y-2 mb-6">
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">8,000 emails/month</span>
+                    <span className="text-gray-700">5 email accounts</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">10 email accounts</span>
+                    <span className="text-gray-700">Unified inbox management</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">Deliverability optimization included</span>
+                    <span className="text-gray-700">Smart email threading</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">A/B testing (2 variants)</span>
+                    <span className="text-gray-700">Email templates & scheduling</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">Advanced analytics</span>
+                    <span className="text-gray-700">Rich text composition</span>
                   </li>
                 </ul>
-                
-                <Link href="/register?plan=basic_monthly">
+
+                <Link href="/register?plan=personal_monthly">
                   <button className="w-full py-2.5 px-4 rounded-lg font-medium bg-gray-100 text-gray-900 hover:bg-gray-200 transition-all duration-200">
                     Start Free Trial
                   </button>
                 </Link>
-                
+
                 <div className="mt-4 pt-3 border-t border-gray-100">
                   <div className="text-xs text-gray-600 text-center">
-                    €1.88 per 1,000 emails
+                    €3 per email account
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Full Monthly */}
+            {/* Professional Monthly */}
             <div className="relative bg-white rounded-xl shadow-lg transition-all duration-300 hover:scale-105">
               <div className="absolute -top-3 -right-3 z-10">
                 <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white px-3 py-1 rounded-full text-xs font-bold">
-                  WARM-UP FREE
+                  POPULAR
                 </div>
               </div>
-              
+
               <div className="p-6">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xl font-bold text-gray-900">Full</h3>
+                  <h3 className="text-xl font-bold text-gray-900">Professional</h3>
                   <Crown className="w-6 h-6 text-gray-400" />
                 </div>
-                
-                <p className="text-sm text-gray-600 mb-4">Beats Smartlead Pro</p>
-                
+
+                <p className="text-sm text-gray-600 mb-4">For teams and power users</p>
+
                 <div className="mb-4">
                   <div className="flex items-baseline">
                     <span className="text-3xl font-bold text-gray-900">€30</span>
                     <span className="text-gray-600 ml-1">/month</span>
                   </div>
                   <p className="text-xs text-green-600 font-medium mt-1">
-                    vs Smartlead $94 (68% cheaper)
+                    vs Outlook Business $12.50/user
                   </p>
                 </div>
-                
+
                 <ul className="space-y-2 mb-6">
-                  <li className="flex items-center text-sm">
-                    <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">50,000 emails/month</span>
-                  </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
                     <span className="text-gray-700">25 email accounts</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">Advanced deliverability optimization</span>
+                    <span className="text-gray-700">Team collaboration features</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">Professional prospecting tools</span>
+                    <span className="text-gray-700">Advanced search & filtering</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">White-label option</span>
+                    <span className="text-gray-700">Calendar integration</span>
+                  </li>
+                  <li className="flex items-center text-sm">
+                    <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
+                    <span className="text-gray-700">Priority support</span>
                   </li>
                 </ul>
-                
-                <Link href="/register?plan=full_monthly">
+
+                <Link href="/register?plan=professional_monthly">
                   <button className="w-full py-2.5 px-4 rounded-lg font-medium bg-gray-100 text-gray-900 hover:bg-gray-200 transition-all duration-200">
                     Start Free Trial
                   </button>
                 </Link>
-                
+
                 <div className="mt-4 pt-3 border-t border-gray-100">
                   <div className="text-xs text-gray-600 text-center">
-                    €0.60 per 1,000 emails
+                    €1.20 per email account
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Unlimited Monthly - Most Popular */}
+            {/* Enterprise Monthly - Most Popular */}
             <div className="relative bg-white rounded-xl shadow-xl transition-all duration-300 hover:scale-105 ring-2 ring-purple-500">
               <div className="absolute -top-4 left-0 right-0 mx-auto w-fit">
                 <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-3 py-1 rounded-full text-xs font-medium">
                   MOST POPULAR
                 </div>
               </div>
-              
+
               <div className="p-6">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xl font-bold text-gray-900">Unlimited</h3>
+                  <h3 className="text-xl font-bold text-gray-900">Enterprise</h3>
                   <Infinity className="w-6 h-6 text-purple-600" />
                 </div>
-                
-                <p className="text-sm text-gray-600 mb-4">For high-volume senders</p>
-                
+
+                <p className="text-sm text-gray-600 mb-4">For large organizations</p>
+
                 <div className="mb-4">
                   <div className="flex items-baseline">
                     <span className="text-3xl font-bold text-gray-900">€60</span>
                     <span className="text-gray-600 ml-1">/month</span>
                   </div>
                 </div>
-                
+
                 <ul className="space-y-2 mb-6">
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">Unlimited emails/month</span>
+                    <span className="text-gray-700">Unlimited email accounts</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">100 email accounts</span>
+                    <span className="text-gray-700">Advanced security features</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">White-label multi-client management</span>
+                    <span className="text-gray-700">Custom integrations</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">API access</span>
+                    <span className="text-gray-700">SSO & user management</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">Dedicated manager</span>
+                    <span className="text-gray-700">Dedicated account manager</span>
                   </li>
                 </ul>
-                
-                <Link href="/register?plan=unlimited_monthly">
+
+                <Link href="/register?plan=enterprise_monthly">
                   <button className="w-full py-2.5 px-4 rounded-lg font-medium bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200">
                     Start Free Trial
                     <ArrowRight className="inline-block w-4 h-4 ml-1" />
                   </button>
                 </Link>
-                
+
                 <div className="mt-4 pt-3 border-t border-gray-100">
                   <div className="text-xs text-gray-600 text-center">
-                    €0 per additional 1,000 emails
+                    Custom enterprise pricing
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Full Yearly - Early Adopter */}
+            {/* Professional Yearly - Early Adopter */}
             <div className="relative bg-white rounded-xl shadow-lg transition-all duration-300 hover:scale-105">
               <div className="absolute -top-3 -right-3 z-10">
                 <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold animate-bounce">
                   50% OFF
                 </div>
               </div>
-              
+
               <div className="p-6">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xl font-bold text-gray-900">Full Yearly</h3>
+                  <h3 className="text-xl font-bold text-gray-900">Professional Yearly</h3>
                   <Rocket className="w-6 h-6 text-orange-500" />
                 </div>
-                
+
                 <p className="text-sm text-gray-600 mb-4">Best value - save 50%</p>
-                
+
                 <div className="mb-4">
                   <div className="flex items-baseline">
                     <span className="text-lg text-gray-400 line-through mr-2">€300</span>
@@ -300,11 +300,11 @@ export default function PricingPage() {
                     Save €150 - Limited to first 100 users
                   </p>
                 </div>
-                
+
                 <ul className="space-y-2 mb-6">
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
-                    <span className="text-gray-700">Everything in Full</span>
+                    <span className="text-gray-700">Everything in Professional</span>
                   </li>
                   <li className="flex items-center text-sm">
                     <Check className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
@@ -319,17 +319,17 @@ export default function PricingPage() {
                     <span className="text-gray-700">Locked-in rate forever</span>
                   </li>
                 </ul>
-                
-                <Link href="/register?plan=full_yearly&promo=EARLY100">
+
+                <Link href="/register?plan=professional_yearly&promo=EARLY100">
                   <button className="w-full py-2.5 px-4 rounded-lg font-medium bg-gradient-to-r from-orange-500 to-red-500 text-white hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200">
                     Claim 50% OFF
                     <ArrowRight className="inline-block w-4 h-4 ml-1" />
                   </button>
                 </Link>
-                
+
                 <div className="mt-4 pt-3 border-t border-gray-100">
                   <div className="text-xs text-gray-600 text-center">
-                    €0.63 per 1,000 emails
+                    €0.50 per email account
                   </div>
                 </div>
               </div>
@@ -343,10 +343,10 @@ export default function PricingPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              The Real Cost of B2B Email Marketing Tools
+              Professional Email Clients Comparison
             </h2>
             <p className="text-xl text-gray-600">
-              Compare actual prices and hidden fees vs our transparent pricing
+              Compare features and pricing with other professional email solutions
             </p>
           </div>
 
@@ -355,9 +355,9 @@ export default function PricingPage() {
               {/* Our Platform */}
               <div className="p-6 bg-gradient-to-br from-purple-50 to-blue-50">
                 <div className="text-center">
-                  <div className="text-xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">OPhir Full</div>
+                  <div className="text-xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">BOBinbox Professional</div>
                   <div className="text-2xl font-bold text-gray-900 mb-1">€30</div>
-                  <div className="text-xs text-gray-600 mb-2">50K emails/month</div>
+                  <div className="text-xs text-gray-600 mb-2">25 email accounts</div>
                   <div className="text-xs text-green-600 font-medium mb-3">+ €0 setup fee</div>
                   <div className="inline-flex items-center px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
                     <Star className="w-3 h-3 mr-1" />
@@ -366,31 +366,31 @@ export default function PricingPage() {
                 </div>
               </div>
 
-              {/* Smartlead */}
+              {/* Outlook */}
               <div className="p-6 text-center">
-                <div className="text-lg font-semibold text-gray-700 mb-2">Smartlead Pro</div>
-                <div className="text-2xl font-bold text-gray-400 line-through mb-1">$94</div>
-                <div className="text-xs text-gray-600 mb-2">30K emails/month</div>
-                <div className="text-xs text-red-600 font-medium mb-3">+ Setup fees</div>
-                <div className="text-sm text-red-600 font-medium">68% more expensive</div>
-              </div>
-
-              {/* Lemlist */}
-              <div className="p-6 text-center">
-                <div className="text-lg font-semibold text-gray-700 mb-2">Lemlist Multi</div>
-                <div className="text-2xl font-bold text-gray-400 line-through mb-1">$99</div>
-                <div className="text-xs text-gray-600 mb-2">Only 15 accounts max</div>
-                <div className="text-xs text-red-600 font-medium mb-3">+ $29/mo warm-up</div>
-                <div className="text-sm text-red-600 font-medium">76% more expensive</div>
-              </div>
-
-              {/* Outreach */}
-              <div className="p-6 text-center">
-                <div className="text-lg font-semibold text-gray-700 mb-2">Outreach</div>
-                <div className="text-2xl font-bold text-gray-400 line-through mb-1">$100+</div>
+                <div className="text-lg font-semibold text-gray-700 mb-2">Outlook Business</div>
+                <div className="text-2xl font-bold text-gray-900 mb-1">$12.50</div>
                 <div className="text-xs text-gray-600 mb-2">Per user/month</div>
-                <div className="text-xs text-red-600 font-medium mb-3">+ $1K-8K setup</div>
-                <div className="text-sm text-red-600 font-medium">233% more expensive</div>
+                <div className="text-xs text-red-600 font-medium mb-3">Single account per user</div>
+                <div className="text-sm text-gray-600">Individual pricing model</div>
+              </div>
+
+              {/* Gmail Business */}
+              <div className="p-6 text-center">
+                <div className="text-lg font-semibold text-gray-700 mb-2">Gmail Business</div>
+                <div className="text-2xl font-bold text-gray-900 mb-1">$6</div>
+                <div className="text-xs text-gray-600 mb-2">Per user/month</div>
+                <div className="text-xs text-red-600 font-medium mb-3">Single account per user</div>
+                <div className="text-sm text-gray-600">Basic features only</div>
+              </div>
+
+              {/* Thunderbird */}
+              <div className="p-6 text-center">
+                <div className="text-lg font-semibold text-gray-700 mb-2">Thunderbird</div>
+                <div className="text-2xl font-bold text-green-600 mb-1">Free</div>
+                <div className="text-xs text-gray-600 mb-2">Open source</div>
+                <div className="text-xs text-red-600 font-medium mb-3">No cloud sync</div>
+                <div className="text-sm text-gray-600">Limited features</div>
               </div>
             </div>
           </div>
@@ -398,48 +398,48 @@ export default function PricingPage() {
           {/* Feature Comparison Table */}
           <div className="mt-12 bg-white rounded-2xl shadow-lg overflow-hidden">
             <div className="p-6 border-b border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900 text-center">What You Actually Get</h3>
+              <h3 className="text-xl font-bold text-gray-900 text-center">Feature Comparison</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="bg-gray-50">
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Feature</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-purple-600 uppercase tracking-wider">OPhir</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Smartlead</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Lemlist</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-purple-600 uppercase tracking-wider">BOBinbox</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Outlook</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Gmail</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   <tr>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Price/month</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-purple-600">€30</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">$94</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">$99</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Multiple accounts</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm"><Check className="w-5 h-5 text-green-500 mx-auto" /></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-red-500">Limited</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-red-500">Limited</td>
                   </tr>
                   <tr className="bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Emails/month</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-green-600">50,000</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">30,000</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">Unlimited*</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Unified inbox</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm"><Check className="w-5 h-5 text-green-500 mx-auto" /></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm"><Check className="w-5 h-5 text-green-500 mx-auto" /></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-red-500">No</td>
                   </tr>
                   <tr>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Email accounts</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-green-600">25</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">Unlimited</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-red-500">15 max</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Smart threading</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm"><Check className="w-5 h-5 text-green-500 mx-auto" /></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm"><Check className="w-5 h-5 text-green-500 mx-auto" /></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm"><Check className="w-5 h-5 text-green-500 mx-auto" /></td>
                   </tr>
                   <tr className="bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Warm-up included</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Cloud sync</td>
                     <td className="px-6 py-4 whitespace-nowrap text-center text-sm"><Check className="w-5 h-5 text-green-500 mx-auto" /></td>
                     <td className="px-6 py-4 whitespace-nowrap text-center text-sm"><Check className="w-5 h-5 text-green-500 mx-auto" /></td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-red-500">+$29/mo</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm"><Check className="w-5 h-5 text-green-500 mx-auto" /></td>
                   </tr>
                   <tr>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Setup fees</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-green-600">€0</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-red-500">Hidden</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-red-500">Hidden</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Team features</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm"><Check className="w-5 h-5 text-green-500 mx-auto" /></td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-yellow-500">Enterprise only</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-yellow-500">Limited</td>
                   </tr>
                 </tbody>
               </table>
@@ -447,9 +447,6 @@ export default function PricingPage() {
           </div>
         </div>
       </section>
-
-      {/* Feature Comparison */}
-      <FeatureComparison />
 
       {/* FAQ */}
       <section className="py-20 bg-gray-50">
@@ -462,33 +459,33 @@ export default function PricingPage() {
 
           <div className="space-y-8">
             <div className="bg-white rounded-2xl p-8">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Why do you offer 8,000 emails for €15 when Smartlead charges $39 for 6,000?</h3>
-              <p className="text-gray-600">Our professional email automation platform uses advanced API integration to eliminate per-email sending costs (typically $0.70-0.90 per 1,000 emails). While competitors rely on expensive SMTP services, we pass the savings directly to you - more emails, lower price, no catch.</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">How is BOBinbox different from Gmail or Outlook?</h3>
+              <p className="text-gray-600">BOBinbox is designed specifically for managing multiple email accounts in one unified interface. Unlike Gmail or Outlook that charge per user, we offer account-based pricing that's perfect for professionals managing multiple email addresses.</p>
             </div>
 
             <div className="bg-white rounded-2xl p-8">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Do you charge extra for email warm-up like other platforms?</h3>
-              <p className="text-gray-600">No! Professional email deliverability optimization is included free in all plans. Lemlist charges an extra $29/month for deliverability features, while we include it at no additional cost. Our system ensures your emails land in inboxes with optimal delivery rates.</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Can I import my existing emails and contacts?</h3>
+              <p className="text-gray-600">Yes! BOBinbox supports OAuth2 integration with Gmail and Outlook, and IMAP for other providers. All your existing emails, contacts, and folder structures are preserved and synced automatically.</p>
             </div>
 
             <div className="bg-white rounded-2xl p-8">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">What's the catch compared to expensive platforms like Outreach?</h3>
-              <p className="text-gray-600">There's no catch! Outreach charges $100+ per user plus $1K-8K setup fees. We offer the same core functionality at a fraction of the cost with zero setup fees. The only difference is you save thousands.</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Is my email data secure?</h3>
+              <p className="text-gray-600">Absolutely. We use OAuth2 authentication (no passwords stored), 256-bit encryption, and industry-standard security practices. Your email data remains on the original servers - we just provide a unified interface.</p>
             </div>
 
             <div className="bg-white rounded-2xl p-8">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">How can you offer 50,000 emails for €30 when Smartlead Pro costs $94?</h3>
-              <p className="text-gray-600">Smartlead Pro gives you 150,000 emails but costs $94/month. Our Full plan gives you 50,000 emails for €30 - that's €0.60 per 1,000 emails vs their $0.63. Plus we include features they charge extra for like unlimited warm-up and white-labeling.</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">What email providers do you support?</h3>
+              <p className="text-gray-600">We support Gmail, Outlook, and any email provider with IMAP access. OAuth2 integration provides the smoothest experience for Gmail and Outlook accounts.</p>
             </div>
 
             <div className="bg-white rounded-2xl p-8">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">What's the EARLY100 promotion?</h3>
-              <p className="text-gray-600">First 100 users get our Full Plan yearly for just €150/year instead of €300/year - that's 50% off! Includes everything: 50,000 emails/month, 25 accounts, warm-up, LinkedIn automation, and white-labeling. Limited to first 100 users.</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Can I try BOBinbox before purchasing?</h3>
+              <p className="text-gray-600">Yes! We offer a 14-day free trial for all plans. No credit card required to start your trial.</p>
             </div>
 
             <div className="bg-white rounded-2xl p-8">
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Why should I switch from my current platform?</h3>
-              <p className="text-gray-600">Save 60-75% on your monthly costs while getting more emails and features. No migration headaches, no setup fees, and our team will help you import your data. Most customers save $500-2000+ annually by switching.</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">Do you offer team and enterprise features?</h3>
+              <p className="text-gray-600">Yes! Our Professional and Enterprise plans include team collaboration, shared inboxes, user management, and advanced security features perfect for businesses of all sizes.</p>
             </div>
           </div>
         </div>
@@ -502,17 +499,17 @@ export default function PricingPage() {
               <Star className="w-4 h-4 mr-2" />
               Limited Time: {100 - earlyAdoptersCount} early adopter spots left
             </div>
-            
+
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Stop Overpaying for B2B Email Marketing
+              Ready to Unify Your Email Experience?
             </h2>
             <p className="text-xl text-gray-600 mb-8">
-              Get enterprise-level results at startup prices. Join the smart businesses who've already made the switch.
+              Join thousands of professionals who have simplified their email management with BOBinbox.
             </p>
           </div>
-          
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
-            <Link href="/register?plan=full_yearly&promo=EARLY100">
+            <Link href="/register?plan=professional_yearly&promo=EARLY100">
               <button className="bg-gradient-to-r from-orange-500 to-red-500 text-white text-lg px-8 py-4 rounded-lg hover:shadow-lg transition-all duration-200 flex items-center">
                 Claim 50% OFF - Limited Time
                 <ArrowRight className="ml-2 h-5 w-5" />
@@ -524,7 +521,7 @@ export default function PricingPage() {
               </button>
             </Link>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-gray-600">
             <div className="flex items-center justify-center">
               <Check className="w-4 h-4 mr-2 text-green-500" />

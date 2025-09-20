@@ -10,7 +10,6 @@ import {
   Building,
   MoreVertical 
 } from 'lucide-react'
-import { format, isToday, isYesterday, formatDistanceToNow } from 'date-fns'
 import { cn } from '../../lib/utils'
 import { ConversationLabelsCompact } from './ConversationLabels'
 import { Label } from '../../hooks/useLabels'
@@ -51,16 +50,7 @@ export function InboxConversationItem({ conversation, isSelected, isChecked, onC
   // Timezone-aware date formatting
   const { formatConversationDate, timezone } = useTimezone()
 
-  // Debug timezone conversion - only for first conversation to avoid spam
-  if (conversation.last_activity_at && conversation.last_activity_at.includes("2025-09-17T10")) {
-    console.log('🕐 FRONTEND CONVERSATION DEBUG:', {
-      raw_timestamp: conversation.last_activity_at,
-      backend_display: conversation.last_activity_at_display,
-      frontend_timezone: timezone,
-      frontend_fallback: formatConversationDate(conversation.last_activity_at),
-      final_display: conversation.last_activity_at_display || formatConversationDate(conversation.last_activity_at)
-    });
-  }
+  // Always use frontend timezone context for consistent display
   
   // Use timezone-aware formatting from context
   const formatDate = (dateStr?: string) => {
@@ -205,7 +195,7 @@ export function InboxConversationItem({ conversation, isSelected, isChecked, onC
               )}
             </div>
             <span className="text-xs text-gray-500 shrink-0 ml-2">
-              {conversation.last_activity_at_display || formatDate(conversation.last_activity_at)}
+              {formatDate(conversation.last_activity_at)}
             </span>
           </div>
 

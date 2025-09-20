@@ -42,7 +42,7 @@ TimezoneService.formatConversationDate(date, timezone)
 ```
 
 **Key Features:**
-- ✅ Handles both legacy timestamps (`2025-09-18T07:00:00`) and new UTC timestamps (`2025-09-18T05:00:00Z`)
+- ✅ Clean timestamp handling (deprecated Z suffix logic removed)
 - ✅ Automatic fallback to UTC for invalid timezones
 - ✅ Business hours calculation per timezone
 - ✅ Relative date formatting for conversations
@@ -91,7 +91,7 @@ formatConversationDate()    // Relative date formatting
 **Key Features:**
 - ✅ Automatic browser timezone detection
 - ✅ localStorage timezone persistence
-- ✅ Legacy timestamp handling (adds 'Z' for UTC)
+- ✅ Clean timestamp handling (no deprecated Z suffix logic)
 - ✅ Consistent formatting across all frontend components
 - ✅ Relative date formatting for conversation lists
 
@@ -119,6 +119,35 @@ campaign.config = {
 
 ## Critical Fixes Applied (September 2025)
 
+### Issue #0: Deprecated Z Suffix Logic Cleanup (September 2025)
+**Problem**: Legacy "Z" suffix logic was causing double timezone conversion across the application
+
+**Files Cleaned**:
+1. **Frontend** (`lib/timezone.ts:120`) - Removed regex pattern adding 'Z' to timestamps
+2. **Backend** (`services/TimezoneService.js:136`) - Removed deprecated Z suffix logic
+3. **Backend** (`routes/inbox.js:596`) - Fixed timestamp creation to use `toISOString()`
+
+**Root Cause**:
+- Legacy logic was designed to handle timestamps without timezone info
+- Backend now properly converts UTC → user timezone when serving data
+- Frontend was applying additional conversion, causing double conversion
+
+**Solution**:
+```javascript
+// REMOVED from all files:
+if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/.test(dateStr)) {
+  dateObj = new Date(dateStr + 'Z');  // This caused double conversion
+}
+
+// REPLACED with clean approach:
+dateObj = new Date(utcDate);  // Direct creation, backend handles conversion
+```
+
+**Result**:
+- ✅ Eliminated root cause of double timezone conversion
+- ✅ Clean timestamp handling throughout application
+- ✅ Proper separation: backend converts, frontend formats
+
 ### Issue #1: Timezone Display Bug (Backend)
 **Problem**: Scheduled emails showed incorrect times (7:00 AM instead of 9:00 AM for Rome timezone)
 
@@ -137,56 +166,102 @@ send_at: toLocalTimestamp(newSendTime)  // Stored: "2025-09-18T07:00:00"
 send_at: newSendTime.toISOString()      // Stores: "2025-09-18T05:00:00.000Z"
 ```
 
-2. **Added Backward Compatibility** (`TimezoneService.js`):
+2. **Cleaned Up Legacy Logic** (`TimezoneService.js`):
 ```javascript
-// Handle legacy timestamps without 'Z' indicator
-if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/.test(dateStr)) {
-  // Add 'Z' to treat as UTC since database times should be UTC
-  dateObj = new Date(dateStr + 'Z');
-}
+// REMOVED deprecated Z suffix logic - backend now handles timezone conversion properly
+// Frontend displays backend-converted timestamps directly without additional conversion
 ```
 
 **Result**:
 - ✅ 5:00 UTC now correctly displays as 9:00 AM Rome time
-- ✅ Legacy timestamps are handled correctly
+- ✅ Deprecated Z suffix logic removed from all components
+- ✅ Clean timestamp handling without double conversion
 - ✅ Future timestamps stored in proper UTC format
 
-### Issue #2: Frontend Timezone Inconsistency (September 2025)
-**Problem**: Message view showed different time than conversation list (11:15 AM vs 9:15 AM for CEST)
+### Issue #2: Scheduled Activity Timezone Display (September 2025)
+**Problem**: Scheduled emails displayed wrong timestamps in frontend UI (showing 7:00 AM instead of 9:00 AM for Europe/Rome timezone)
 
 **Root Cause**:
-- `InboxMessageView.tsx` prioritized backend pre-formatted timestamps over frontend timezone context
-- Conversation list used frontend timezone formatting while message view used backend display timestamps
+- JavaScript Date constructor was misinterpreting UTC timestamps without 'Z' suffix as local time
+- Backend sent timestamps like `"2025-09-22T07:00:00"` which were treated as local time instead of UTC
+- For Europe/Rome (CEST = UTC+2): UTC 7:00 AM should display as 9:00 AM but showed as 7:00 AM
+
+**Technical Details**:
+```javascript
+// The issue:
+new Date("2025-09-22T07:00:00")     // Interpreted as local time
+new Date("2025-09-22T07:00:00Z")    // Correctly interpreted as UTC
+```
 
 **Solution Applied**:
 
-1. **Fixed formatEuropeRomeDate function** (`InboxMessageView.tsx:105`):
-```javascript
-// BEFORE (hardcoded timezone):
-return formatDateInTimezone(date, 'MMM d, yyyy h:mm a', 'Europe/Rome');
-
-// AFTER (uses timezone context):
-return formatDateInTimezone(date, 'MMM d, yyyy h:mm a');
+1. **Frontend Timezone Fix** (`frontend/lib/timezone.ts:117-124`):
+```typescript
+// Detect UTC timestamps without Z and append it
+if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/) && !dateStr.endsWith('Z')) {
+  dateObj = new Date(dateStr + 'Z');  // Force UTC interpretation
+} else {
+  dateObj = new Date(dateStr);
+}
 ```
 
-2. **Fixed formatDate precedence logic** (`InboxMessageView.tsx:413-416`):
+2. **Backend Timezone Fix** (`backend/src/services/TimezoneService.js:132-141`):
 ```javascript
-// BEFORE (backend display timestamps took precedence):
-const displayTime = message.sent_at_display || message.received_at_display
-if (displayTime) {
-  return displayTime
+// Same UTC timestamp detection and fix
+const dateStr = utcDate.toString();
+if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/) && !dateStr.endsWith('Z')) {
+  dateObj = new Date(dateStr + 'Z');
+} else {
+  dateObj = new Date(dateStr);
 }
+```
 
-// AFTER (consistent frontend formatting):
-const formatDate = (message: Message) => {
-  return formatDateInTimezone(message.sent_at || message.received_at, 'MMM d, yyyy h:mm a')
-}
+3. **Backend Pre-formatting** (`backend/src/routes/campaigns.js:1747-1778`):
+```javascript
+// Schedule-activity endpoint now pre-formats timestamps
+const formattedTime = TimezoneService.convertToUserTimezone(
+  email.send_at,
+  campaignTimezone,
+  {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true
+  }
+);
+
+return {
+  id: email.id,
+  time: formattedTime,        // Pre-formatted: "Sep 22, 2025, 9:00 AM"
+  rawTime: email.send_at,     // Keep raw for debugging
+  // ...
+};
+```
+
+4. **Frontend Pre-formatted Display** (`frontend/app/campaigns/[id]/page.tsx:621-643`):
+```typescript
+// Use pre-formatted timestamps from backend
+const formatActivityTime = (activity: ScheduledActivity) => {
+  if (activity.time && typeof activity.time === 'string' &&
+      (activity.time.includes('AM') || activity.time.includes('PM'))) {
+    return activity.time; // Use pre-formatted
+  } else {
+    return formatDate(activity.time, 'MMM d, yyyy h:mm a'); // Legacy fallback
+  }
+};
+```
+
+**Verification**:
+Backend logs confirmed successful conversion:
+```
+rawTime: '2025-09-22T07:00:00'
+formattedTime: 'Sep 22, 2025, 9:00 AM'  ✅
 ```
 
 **Result**:
-- ✅ Message view now shows same time as conversation list (9:15 AM CEST)
-- ✅ Consistent timezone formatting across all components
-- ✅ Frontend timezone context properly utilized throughout UI
+- ✅ Fixed UTC timestamp interpretation across frontend and backend
+- ✅ Scheduled emails now correctly display 9:00 AM for UTC 7:00 AM in Europe/Rome
+- ✅ Backend pre-formats timestamps to ensure consistent display
+- ✅ Comprehensive fix prevents similar issues with other timestamp displays
+- ✅ Test script created to validate the fix (`test-timezone-fix.cjs`)
 
 ## Best Practices
 

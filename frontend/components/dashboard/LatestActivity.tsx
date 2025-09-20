@@ -29,7 +29,7 @@ export default function LatestActivity({
   limit = 8
 }: LatestActivityProps) {
   const router = useRouter()
-  const { formatDateInTimezone } = useTimezone()
+  const { formatDate } = useTimezone()
 
   const { data: activities = [], isLoading, error } = useQuery({
     queryKey: ['latest-activity'],
@@ -134,7 +134,7 @@ export default function LatestActivity({
     if (diffMins < 1) return 'Just now'
     if (diffMins < 60) return `${diffMins}m ago`
     if (diffHours < 24) return `${diffHours}h ago`
-    return formatDateInTimezone(timestamp, 'MMM d')
+    return formatDate(timestamp, 'MMM d')
   }
 
   const handleActivityClick = (activity: ActivityItem) => {
@@ -194,7 +194,7 @@ export default function LatestActivity({
         <div className="flex items-center justify-between">
           <div>
             <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Last emails sent from this campaign</CardDescription>
+            <CardDescription>Recent email activities and interactions</CardDescription>
           </div>
           <Button 
             variant="outline" 
@@ -214,10 +214,10 @@ export default function LatestActivity({
             >
               <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
               <span className="font-medium text-gray-900">
-                {formatDateInTimezone(activity.timestamp, 'MMM d, yyyy h:mm a')}
+                {formatDate(activity.timestamp, 'MMM d, yyyy h:mm a')}
               </span>
               <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
-                {activity.type === 'sent' ? 'Delivered' : activity.type === 'reply' ? 'Reply' : 'Opened'}
+                {activity.type === 'sent' ? 'Sent' : activity.type === 'reply' ? 'Reply' : 'Opened'}
               </Badge>
               <span className="text-gray-600">
                 From {activity.fromEmail} → {activity.toEmail}

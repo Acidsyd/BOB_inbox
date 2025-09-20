@@ -8,7 +8,7 @@ import {
   getBrowserTimezone,
   formatDateInTimezone,
   formatInboxMessageDate,
-  formatConversationDate,
+  formatConversationDate as libFormatConversationDate,
   getTimezoneInfo,
   watchTimezoneChanges,
   detectUserTimezone,
@@ -56,9 +56,10 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
       setTimezoneAbbreviation(detection.abbreviation);
       setIsTimezoneDetected(detection.isValid);
 
-      console.log('🌐 Enhanced TimezoneProvider initialized:', {
-        detection,
-        browserTimezone: getBrowserTimezone()
+      console.log('🌐 TimezoneProvider initialized:', {
+        timezone: detectedTimezone,
+        abbreviation: detection.abbreviation,
+        isValid: detection.isValid
       });
     } catch (error) {
       console.error('🌐 Error initializing timezone:', error);
@@ -114,6 +115,17 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
 
   const formatDate = (date: string | Date | undefined | null, formatString?: string) => {
     if (!isClient) return '';
+
+    // Debug logging for scheduled activity timestamps
+    if (date && typeof date === 'string' && date.includes('2025-09-22')) {
+      console.log('🕐 TimezoneContext formatDate:', {
+        inputDate: date,
+        timezone,
+        formatString,
+        isClient
+      });
+    }
+
     return formatDateInTimezone(date, formatString, timezone);
   };
 
@@ -125,8 +137,6 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
 
   const formatConversationDateFunc = (date: string | Date | undefined | null) => {
     if (!isClient) return '';
-
-    // Replicate formatConversationDate logic but use the context timezone instead of getUserTimezone()
     if (!date) return '';
 
     try {

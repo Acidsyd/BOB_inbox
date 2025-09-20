@@ -1,9 +1,5 @@
-const { createClient } = require('@supabase/supabase-js');
-
-// Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+// Use centralized Supabase client to avoid connection pool issues
+const supabase = require('../config/supabase');
 
 /**
  * FolderService - Gmail-style folder management
@@ -14,7 +10,71 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
  */
 class FolderService {
   constructor() {
-    console.log('📁 FolderService initialized');
+    // Add caching and request deduplication to prevent database connection pool exhaustion
+    this.folderCountCache = new Map();
+    this.ongoingRequests = new Map();
+    this.cacheTimeout = 30000; // 30 seconds cache
+
+    console.log('📁 FolderService initialized with request deduplication');
+  }
+
+  /**
+   * Cache-aware operation to prevent duplicate concurrent requests
+   */
+  async getCachedOrExecute(cacheKey, operation) {
+    // Check cache first
+    const cached = this.folderCountCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < this.cacheTimeout) {
+      console.log('🔄 Using cached result for:', cacheKey);
+      return cached.data;
+    }
+
+    // Check if request is already in progress
+    if (this.ongoingRequests.has(cacheKey)) {
+      console.log('⏳ Waiting for ongoing request:', cacheKey);
+      return await this.ongoingRequests.get(cacheKey);
+    }
+
+    // Execute operation
+    const promise = operation();
+    this.ongoingRequests.set(cacheKey, promise);
+
+    try {
+      const result = await promise;
+
+      // Cache the result
+      this.folderCountCache.set(cacheKey, {
+        data: result,
+        timestamp: Date.now()
+      });
+
+      return result;
+    } finally {
+      // Clean up ongoing request
+      this.ongoingRequests.delete(cacheKey);
+    }
+  }
+
+  /**
+   * Retry mechanism for database operations to handle connection issues
+   */
+  async retryDatabaseOperation(operation, maxRetries = 3, delay = 1000) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        console.log(`🔄 Database operation attempt ${attempt}/${maxRetries} failed:`, error.message);
+
+        if (attempt === maxRetries) {
+          throw error;
+        }
+
+        // Exponential backoff
+        const waitTime = delay * Math.pow(2, attempt - 1);
+        console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
   }
 
   /**
@@ -88,9 +148,13 @@ class FolderService {
    * Get conversations for a specific folder type
    */
   async getConversationsForFolder(organizationId, folderType, options = {}) {
-    try {
-      console.log('🐛 DEBUG: options received:', JSON.stringify(options));
-      const { limit = 50, offset = 0, search, unreadOnly = false, labelIds = null } = options;
+    // Use shorter cache for conversations (5 seconds) since they change more frequently
+    const cacheKey = `conversations:${organizationId}:${folderType}:${JSON.stringify(options)}`;
+
+    return await this.getCachedOrExecute(cacheKey, async () => {
+      try {
+        console.log('🐛 DEBUG: options received:', JSON.stringify(options));
+        const { limit = 50, offset = 0, search, unreadOnly = false, labelIds = null } = options;
       console.log('🐛 DEBUG: extracted search (NEW VERSION):', search);
       console.log('🐛 DEBUG: unreadOnly filter:', unreadOnly);
       console.log('🐛 DEBUG: labelIds filter (updated):', labelIds);
@@ -133,12 +197,58 @@ class FolderService {
         .order('last_activity_at', { ascending: false });
 
       // Apply folder-specific filtering
+      console.log('🔍 DEBUG BEFORE SWITCH: folderType =', JSON.stringify(folderType), 'type:', typeof folderType);
+      console.log('🔍 DEBUG BEFORE SWITCH: About to enter switch statement');
+      console.log('🔍 DEBUG SWITCH: folderType =', JSON.stringify(folderType), 'type:', typeof folderType);
       switch (folderType) {
         case 'inbox':
-          // Campaign conversations - show ALL non-archived campaign conversations
-          query = query
-            .eq('conversation_type', 'campaign')
-            .neq('status', 'archived'); // Exclude only archived conversations
+          console.log('🔍 DEBUG: ENTERED INBOX CASE');
+          // Campaign conversations - show only campaign conversations that have received replies
+          // First get conversation IDs that have received messages
+          const { data: repliedCampaignIds, error: replyError } = await this.retryDatabaseOperation(
+            () => supabase
+              .from('conversation_messages')
+              .select('conversation_id')
+              .eq('organization_id', organizationId)
+              .eq('direction', 'received')
+          );
+
+          if (replyError) throw replyError;
+
+          console.log('🔍 DEBUG INBOX: Found conversations with received messages:', repliedCampaignIds?.length || 0);
+
+          if (!repliedCampaignIds || repliedCampaignIds.length === 0) {
+            // No conversations with replies found - return empty result
+            console.log('🔍 DEBUG INBOX: No replies found - returning empty result');
+            return [];
+          }
+
+          const uniqueIds = [...new Set(repliedCampaignIds.map(msg => msg.conversation_id))];
+          console.log('🔍 DEBUG INBOX: Unique conversation IDs with replies:', uniqueIds.length);
+
+          // Get campaign conversations from those IDs
+          const { data: campaignConversationsWithReplies, error: campaignError } = await this.retryDatabaseOperation(
+            () => supabase
+              .from('conversations')
+              .select('id')
+              .eq('organization_id', organizationId)
+              .eq('conversation_type', 'campaign')
+              .neq('status', 'archived')
+              .in('id', uniqueIds)
+          );
+
+          if (campaignError) throw campaignError;
+
+          console.log('🔍 DEBUG INBOX: Campaign conversations with replies:', campaignConversationsWithReplies?.length || 0);
+
+          if (!campaignConversationsWithReplies || campaignConversationsWithReplies.length === 0) {
+            // No campaign conversations with replies found - return empty result
+            console.log('🔍 DEBUG INBOX: No campaign conversations with replies - returning empty result');
+            return [];
+          }
+
+          const finalIds = campaignConversationsWithReplies.map(c => c.id);
+          query = query.in('id', finalIds);
           break;
 
         case 'sent':
@@ -179,6 +289,7 @@ class FolderService {
           console.log('🔍 DEBUG: Found', sortedConversations.length, 'total conversations with sent messages');
 
           if (sortedConversations.length === 0) {
+            // No sent messages found - return empty array directly for sent folder
             return [];
           }
 
@@ -434,46 +545,69 @@ class FolderService {
         });
       }
 
-      console.log(`✅ Retrieved ${processedConversations.length} conversations for ${folderType}`);
-      return processedConversations;
+        console.log(`✅ Retrieved ${processedConversations.length} conversations for ${folderType}`);
+        return processedConversations;
 
-    } catch (error) {
-      console.error('❌ FolderService.getConversationsForFolder failed:', error);
-      console.error('❌ Error name:', error.name);
-      console.error('❌ Error message:', error.message);
-      console.error('❌ Error stack:', error.stack);
-      console.error('❌ Full error object:', JSON.stringify(error, null, 2));
-      console.error('❌ Query parameters:', { organizationId, folderType, options });
-      console.error('❌ Search term:', options.search && options.search.trim() ? options.search.toLowerCase().trim() : 'none');
-      throw error;
-    }
+      } catch (error) {
+        console.error('❌ FolderService.getConversationsForFolder failed:', error);
+        console.error('❌ Error name:', error.name);
+        console.error('❌ Error message:', error.message);
+        console.error('❌ Error stack:', error.stack);
+        console.error('❌ Full error object:', JSON.stringify(error, null, 2));
+        console.error('❌ Query parameters:', { organizationId, folderType, options });
+        console.error('❌ Search term:', options.search && options.search.trim() ? options.search.toLowerCase().trim() : 'none');
+        throw error;
+      }
+    });
   }
 
   /**
    * Get individual folder count (real-time)
    */
   async getFolderCount(organizationId, folderType) {
-    try {
-      console.log(`🔢 Getting count for folder: ${folderType}`);
-      if (folderType === 'sent') {
-        console.log('🚨 SENT FOLDER COUNT - NEW CODE ACTIVE');
-      }
+    const cacheKey = `folderCount:${organizationId}:${folderType}`;
+
+    return await this.getCachedOrExecute(cacheKey, async () => {
+      try {
+        console.log(`🔢 Getting count for folder: ${folderType}`);
+        if (folderType === 'sent') {
+          console.log('🚨 SENT FOLDER COUNT - NEW CODE ACTIVE');
+        }
 
       let count = 0;
 
       switch (folderType) {
         case 'inbox':
-          // Campaign conversations - count UNREAD non-archived campaign conversations
-          const { count: inboxCount, error: inboxError } = await supabase
-            .from('conversations')
-            .select('id', { count: 'exact', head: true })
-            .eq('organization_id', organizationId)
-            .eq('conversation_type', 'campaign')
-            .neq('status', 'archived')
-            .gt('unread_count', 0); // Only count conversations with unread messages
+          // Campaign conversations - count only campaign conversations that have received replies
+          const { data: repliedCampaignIdsCount, error: replyCountError } = await this.retryDatabaseOperation(
+            () => supabase
+              .from('conversation_messages')
+              .select('conversation_id')
+              .eq('organization_id', organizationId)
+              .eq('direction', 'received')
+          );
 
-          if (inboxError) throw inboxError;
-          count = inboxCount || 0;
+          if (replyCountError) throw replyCountError;
+
+          if (repliedCampaignIdsCount && repliedCampaignIdsCount.length > 0) {
+            const uniqueIdsCount = [...new Set(repliedCampaignIdsCount.map(msg => msg.conversation_id))];
+
+            const { count: inboxCount, error: inboxError } = await this.retryDatabaseOperation(
+              () => supabase
+                .from('conversations')
+                .select('id', { count: 'exact', head: true })
+                .eq('organization_id', organizationId)
+                .eq('conversation_type', 'campaign')
+                .neq('status', 'archived')
+                .gt('unread_count', 0) // Only count conversations with unread messages
+                .in('id', uniqueIdsCount) // Only conversations that have received replies
+            );
+
+            if (inboxError) throw inboxError;
+            count = inboxCount || 0;
+          } else {
+            count = 0; // No conversations with replies
+          }
           break;
 
         case 'sent':
@@ -481,13 +615,15 @@ class FolderService {
           console.log('🔍 DEBUG: Calculating sent folder count using fallback method');
           
           // Get ALL conversations that have sent messages (no RPC dependency)
-          const { data: sentConversations, error: fallbackError } = await supabase
-            .from('conversation_messages')
-            .select('conversation_id, conversations!inner(status)')
-            .eq('organization_id', organizationId)
-            .eq('direction', 'sent')
-            .eq('conversations.status', 'active')
-            .limit(2000); // High limit to get all conversations
+          const { data: sentConversations, error: fallbackError } = await this.retryDatabaseOperation(
+            () => supabase
+              .from('conversation_messages')
+              .select('conversation_id, conversations!inner(status)')
+              .eq('organization_id', organizationId)
+              .eq('direction', 'sent')
+              .eq('conversations.status', 'active')
+              .limit(2000) // High limit to get all conversations
+          );
           
           if (fallbackError) throw fallbackError;
           
@@ -499,13 +635,15 @@ class FolderService {
 
         case 'untracked_replies':
           // Organic conversations - count UNREAD ones only
-          const { count: untrackedCount, error: untrackedError } = await supabase
-            .from('conversations')
-            .select('id', { count: 'exact', head: true })
-            .eq('organization_id', organizationId)
-            .eq('conversation_type', 'organic')
-            .eq('status', 'active')
-            .gt('unread_count', 0); // Only count conversations with unread messages
+          const { count: untrackedCount, error: untrackedError } = await this.retryDatabaseOperation(
+            () => supabase
+              .from('conversations')
+              .select('id', { count: 'exact', head: true })
+              .eq('organization_id', organizationId)
+              .eq('conversation_type', 'organic')
+              .eq('status', 'active')
+              .gt('unread_count', 0) // Only count conversations with unread messages
+          );
 
           if (untrackedError) throw untrackedError;
           count = untrackedCount || 0;
@@ -513,24 +651,28 @@ class FolderService {
 
         case 'bounces':
           // Bounce conversations - count UNREAD conversations with bounce messages
-          const { data: bounceConversations } = await supabase
-            .from('conversation_messages')
-            .select('conversation_id')
-            .eq('organization_id', organizationId)
-            .eq('direction', 'received')
-            .or('from_email.ilike.%daemon%,from_email.ilike.%delivery%,subject.ilike.%bounce%,subject.ilike.%delivery%,subject.ilike.%undelivered%');
+          const { data: bounceConversations } = await this.retryDatabaseOperation(
+            () => supabase
+              .from('conversation_messages')
+              .select('conversation_id')
+              .eq('organization_id', organizationId)
+              .eq('direction', 'received')
+              .or('from_email.ilike.%daemon%,from_email.ilike.%delivery%,subject.ilike.%bounce%,subject.ilike.%delivery%,subject.ilike.%undelivered%')
+          );
 
           if (bounceConversations) {
             const uniqueBounceIds = [...new Set(bounceConversations.map(c => c.conversation_id))];
             
             // Count UNREAD active conversations from the bounce IDs
-            const { count: bounceCount, error: bounceError } = await supabase
-              .from('conversations')
-              .select('id', { count: 'exact', head: true })
-              .eq('organization_id', organizationId)
-              .eq('status', 'active')
-              .gt('unread_count', 0) // Only count conversations with unread messages
-              .in('id', uniqueBounceIds);
+            const { count: bounceCount, error: bounceError } = await this.retryDatabaseOperation(
+              () => supabase
+                .from('conversations')
+                .select('id', { count: 'exact', head: true })
+                .eq('organization_id', organizationId)
+                .eq('status', 'active')
+                .gt('unread_count', 0) // Only count conversations with unread messages
+                .in('id', uniqueBounceIds)
+            );
 
             if (bounceError) throw bounceError;
             count = bounceCount || 0;
@@ -543,13 +685,14 @@ class FolderService {
           throw new Error(`Invalid folder type: ${folderType}`);
       }
 
-      console.log(`✅ Count for ${folderType}: ${count}`);
-      return count;
+        console.log(`✅ Count for ${folderType}: ${count}`);
+        return count;
 
-    } catch (error) {
-      console.error(`❌ Error getting count for ${folderType}:`, error);
-      return 0;
-    }
+      } catch (error) {
+        console.error(`❌ Error getting count for ${folderType}:`, error);
+        return 0;
+      }
+    });
   }
 
   /**
@@ -619,12 +762,11 @@ class FolderService {
     try {
       console.log('📊 Getting folder statistics for:', organizationId);
 
-      const [inboxCount, sentCount, untrackedCount, bounceCount] = await Promise.all([
-        this.getFolderCount(organizationId, 'inbox'),
-        this.getFolderCount(organizationId, 'sent'),
-        this.getFolderCount(organizationId, 'untracked_replies'),
-        this.getFolderCount(organizationId, 'bounces')
-      ]);
+      // Sequential folder counts to prevent connection pool exhaustion
+      const inboxCount = await this.getFolderCount(organizationId, 'inbox');
+      const sentCount = await this.getFolderCount(organizationId, 'sent');
+      const untrackedCount = await this.getFolderCount(organizationId, 'untracked_replies');
+      const bounceCount = await this.getFolderCount(organizationId, 'bounces');
 
       const stats = {
         organizationId,
@@ -655,7 +797,9 @@ class FolderService {
       console.log('🔄 Refreshing folder counts for:', organizationId);
 
       // If using materialized view, refresh it
-      const { error } = await supabase.rpc('refresh_folder_counts');
+      const { error } = await this.retryDatabaseOperation(
+        () => supabase.rpc('refresh_folder_counts')
+      );
       
       if (error) {
         console.log('ℹ️ Materialized view refresh failed (may not exist):', error.message);

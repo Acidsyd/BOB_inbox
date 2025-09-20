@@ -16,28 +16,23 @@ const emailService = new EmailService();
 function formatCampaignDate(date, timezone = 'UTC', format = 'MMM d, yyyy h:mm a') {
   if (!date) return null;
 
-  // Convert format string to Intl.DateTimeFormat options
-  let options = {
-    timeZone: timezone
-  };
+  // Convert format string to Intl.DateTimeFormat options (without timeZone property)
+  let options = {};
 
   if (format === 'yyyy-MM-dd') {
     options = {
-      ...options,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit'
     };
   } else if (format === 'MMM d') {
     options = {
-      ...options,
       month: 'short',
       day: 'numeric'
     };
   } else {
     // Default format: 'MMM d, yyyy h:mm a'
     options = {
-      ...options,
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -1749,14 +1744,31 @@ router.get('/:id/scheduled-activity', authenticateToken, async (req, res) => {
         senderEmail = accountLookup[email.email_account_id];
       }
 
-      // Convert time to campaign timezone for display using helper function
-      console.log('🕐 Converting time:', email.send_at, 'to timezone:', campaignTimezone);
-      const formattedTime = formatCampaignDate(email.send_at, campaignTimezone);
-      console.log('🕐 Formatted result:', formattedTime);
+      // CRITICAL FIX: Format timestamp using TimezoneService with campaign timezone
+      // This ensures the 'Z' suffix fix is applied before sending to frontend
+      const formattedTime = TimezoneService.convertToUserTimezone(
+        email.send_at,
+        campaignTimezone,
+        {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        }
+      );
+
+      console.log('🕐 Timezone conversion for scheduled activity:', {
+        rawTime: email.send_at,
+        campaignTimezone,
+        formattedTime
+      });
 
       return {
         id: email.id,
-        time: formattedTime,
+        time: formattedTime, // Properly formatted timestamp with timezone conversion
+        rawTime: email.send_at, // Keep raw for debugging
         from: senderEmail || 'Unknown',
         to: email.to_email || 'Unknown',
         subject: email.subject || 'No subject',

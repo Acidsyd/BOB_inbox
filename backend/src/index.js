@@ -64,7 +64,7 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 Health check available at: http://localhost:${PORT}/health`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -81,6 +81,13 @@ app.listen(PORT, () => {
     const bounceDetector = new AsyncBounceDetector();
     bounceDetector.startPeriodicDetection();
     console.log('🔍 AsyncBounceDetector started - checking for bounces every 5 minutes');
+  }
+
+  // Start background sync service
+  if (process.env.NODE_ENV !== 'test') {
+    const backgroundSyncService = require('./services/BackgroundSyncService');
+    backgroundSyncService.start();
+    console.log('🔄 BackgroundSyncService started - syncing emails every 15 minutes');
   }
 });
 

@@ -33,37 +33,18 @@ export interface ManualSyncResponse {
   timestamp: string
 }
 
-export interface AutoSyncStatus {
-  activeAccounts: number
-  accounts: Record<string, {
-    email: string
-    interval: number
-    startedAt: string
-    lastSync: string | null
-    status: 'active' | 'stopped'
-    consecutiveErrors: number
-    isActive: boolean
-    lastResult?: {
-      success: boolean
-      newMessages: number
-      updatedMessages: number
-      syncTime: number
-    }
-    lastError?: {
-      message: string
-      timestamp: string
-    }
-  }>
-  totalErrors: number
-}
 
-export interface AutoSyncHealth {
-  status: 'healthy' | 'degraded' | 'error'
-  activeAccounts: number
-  healthyAccounts: number
-  errorAccounts: number
-  staleAccounts: number
-  timestamp: string
+export interface AutosyncStatus {
+  isRunning: boolean
+  isSyncing: boolean
+  intervalMinutes: number
+  nextSyncEstimate: string | null
+  lastAutosync: {
+    timestamp: string
+    successCount: number
+    errorCount: number
+    durationMs: number
+  } | null
 }
 
 export function useEmailSync() {
@@ -71,11 +52,7 @@ export function useEmailSync() {
   const [lastSync, setLastSync] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [syncCompletedListeners, setSyncCompletedListeners] = useState<Set<(result: ManualSyncResponse) => void>>(new Set())
-  
-  // Auto sync states
-  const [autoSyncStatus, setAutoSyncStatus] = useState<AutoSyncStatus | null>(null)
-  const [autoSyncHealth, setAutoSyncHealth] = useState<AutoSyncHealth | null>(null)
-  const [isAutoSyncActive, setIsAutoSyncActive] = useState(false)
+  const [autosyncStatus, setAutosyncStatus] = useState<AutosyncStatus | null>(null)
 
   // Trigger manual sync for all accounts
   const triggerManualSync = useCallback(async (accountId?: string): Promise<ManualSyncResponse> => {
@@ -204,213 +181,32 @@ export function useEmailSync() {
     setError(null)
   }, [])
 
-  // ============================================================================
-  // AUTOMATIC SYNC FUNCTIONS
-  // ============================================================================
-
-  // Start automatic sync for all accounts
-  const startAutoSync = useCallback(async (): Promise<{ success: boolean, message: string, error?: string }> => {
+  // Get autosync status
+  const getAutosyncStatus = useCallback(async (): Promise<AutosyncStatus | null> => {
     try {
-      console.log('🚀 Starting automatic sync...')
-      
-      const response = await api.post('/inbox/sync/auto/start')
-      
-      console.log('✅ Automatic sync started:', response.data)
-      setIsAutoSyncActive(true)
-      
-      // Refresh status after starting
-      setTimeout(() => {
-        getAutoSyncStatus()
-        getAutoSyncHealth()
-      }, 1000)
-      
-      return {
-        success: true,
-        message: response.data.message
-      }
-      
-    } catch (err: any) {
-      console.error('❌ Failed to start automatic sync:', err)
-      const errorMessage = err.response?.data?.error || 'Failed to start automatic sync'
-      setError(errorMessage)
-      return {
-        success: false,
-        message: 'Failed to start automatic sync',
-        error: errorMessage
-      }
-    }
-  }, [])
+      console.log('📊 Getting autosync status...')
+      const response = await api.get('/inbox/sync/autosync-status')
 
-  // Stop automatic sync for all accounts
-  const stopAutoSync = useCallback(async (): Promise<{ success: boolean, message: string, error?: string }> => {
-    try {
-      console.log('⏹️ Stopping automatic sync...')
-      
-      const response = await api.post('/inbox/sync/auto/stop')
-      
-      console.log('✅ Automatic sync stopped:', response.data)
-      setIsAutoSyncActive(false)
-      
-      // Refresh status after stopping
-      setTimeout(() => {
-        getAutoSyncStatus()
-        getAutoSyncHealth()
-      }, 1000)
-      
-      return {
-        success: true,
-        message: response.data.message
-      }
-      
-    } catch (err: any) {
-      console.error('❌ Failed to stop automatic sync:', err)
-      const errorMessage = err.response?.data?.error || 'Failed to stop automatic sync'
-      setError(errorMessage)
-      return {
-        success: false,
-        message: 'Failed to stop automatic sync',
-        error: errorMessage
-      }
-    }
-  }, [])
+      console.log('✅ Autosync status retrieved:', response.data.autosyncStatus)
+      setAutosyncStatus(response.data.autosyncStatus)
+      return response.data.autosyncStatus
 
-  // Start automatic sync for specific account
-  const startAccountAutoSync = useCallback(async (accountId: string): Promise<{ success: boolean, message: string, error?: string }> => {
-    try {
-      console.log(`🚀 Starting automatic sync for account: ${accountId}`)
-      
-      const response = await api.post(`/inbox/sync/auto/account/${accountId}/start`)
-      
-      console.log('✅ Account automatic sync started:', response.data)
-      
-      // Refresh status after starting
-      setTimeout(() => {
-        getAutoSyncStatus()
-        getAutoSyncHealth()
-      }, 1000)
-      
-      return {
-        success: true,
-        message: response.data.message
-      }
-      
     } catch (err: any) {
-      console.error('❌ Failed to start account automatic sync:', err)
-      const errorMessage = err.response?.data?.error || 'Failed to start account automatic sync'
-      return {
-        success: false,
-        message: 'Failed to start account automatic sync',
-        error: errorMessage
-      }
-    }
-  }, [])
-
-  // Stop automatic sync for specific account
-  const stopAccountAutoSync = useCallback(async (accountId: string): Promise<{ success: boolean, message: string, error?: string }> => {
-    try {
-      console.log(`⏹️ Stopping automatic sync for account: ${accountId}`)
-      
-      const response = await api.post(`/inbox/sync/auto/account/${accountId}/stop`)
-      
-      console.log('✅ Account automatic sync stopped:', response.data)
-      
-      // Refresh status after stopping
-      setTimeout(() => {
-        getAutoSyncStatus()
-        getAutoSyncHealth()
-      }, 1000)
-      
-      return {
-        success: true,
-        message: response.data.message
-      }
-      
-    } catch (err: any) {
-      console.error('❌ Failed to stop account automatic sync:', err)
-      const errorMessage = err.response?.data?.error || 'Failed to stop account automatic sync'
-      return {
-        success: false,
-        message: 'Failed to stop account automatic sync',
-        error: errorMessage
-      }
-    }
-  }, [])
-
-  // Get automatic sync status
-  const getAutoSyncStatus = useCallback(async (): Promise<AutoSyncStatus | null> => {
-    try {
-      console.log('📊 Getting automatic sync status...')
-      
-      const response = await api.get('/inbox/sync/auto/status')
-      const status = response.data as AutoSyncStatus
-      
-      setAutoSyncStatus(status)
-      setIsAutoSyncActive(status.activeAccounts > 0)
-      
-      console.log('✅ Automatic sync status retrieved:', status)
-      return status
-      
-    } catch (err: any) {
-      console.error('❌ Error getting automatic sync status:', err)
+      console.error('❌ Error getting autosync status:', err)
       return null
     }
   }, [])
 
-  // Get automatic sync health
-  const getAutoSyncHealth = useCallback(async (): Promise<AutoSyncHealth | null> => {
-    try {
-      console.log('🏥 Getting automatic sync health...')
-      
-      const response = await api.get('/inbox/sync/auto/health')
-      const health = response.data as AutoSyncHealth
-      
-      setAutoSyncHealth(health)
-      
-      console.log('✅ Automatic sync health retrieved:', health)
-      return health
-      
-    } catch (err: any) {
-      console.error('❌ Error getting automatic sync health:', err)
-      return null
-    }
-  }, [])
-
-  // Get sync intervals configuration  
-  const getSyncIntervals = useCallback(async (): Promise<Record<string, number> | null> => {
-    try {
-      console.log('⏱️ Getting sync intervals...')
-      
-      const response = await api.get('/inbox/sync/auto/intervals')
-      
-      console.log('✅ Sync intervals retrieved:', response.data.intervals)
-      return response.data.intervals
-      
-    } catch (err: any) {
-      console.error('❌ Error getting sync intervals:', err)
-      return null
-    }
-  }, [])
-
-  // Toggle automatic sync (start/stop based on current state)
-  const toggleAutoSync = useCallback(async (): Promise<{ success: boolean, message: string, error?: string }> => {
-    if (isAutoSyncActive) {
-      return await stopAutoSync()
-    } else {
-      return await startAutoSync()
-    }
-  }, [isAutoSyncActive, startAutoSync, stopAutoSync])
 
   return {
     // Manual sync state
     syncing,
     lastSync,
     error,
-    
-    // Auto sync state
-    autoSyncStatus,
-    autoSyncHealth,
-    isAutoSyncActive,
-    
+
+    // Autosync state
+    autosyncStatus,
+
     // Manual sync actions
     triggerManualSync,
     getSyncStatus,
@@ -419,16 +215,9 @@ export function useEmailSync() {
     getSyncCapabilities,
     clearError,
     onSyncCompleted,
-    
-    // Auto sync actions
-    startAutoSync,
-    stopAutoSync,
-    startAccountAutoSync,
-    stopAccountAutoSync,
-    getAutoSyncStatus,
-    getAutoSyncHealth,
-    getSyncIntervals,
-    toggleAutoSync
+
+    // Autosync actions
+    getAutosyncStatus
   }
 }
 

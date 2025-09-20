@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { format } from 'date-fns'
 import { 
   X, 
   Archive, 
@@ -55,7 +54,7 @@ export function MessageThread({ conversation, onClose, onArchive, onMarkRead }: 
   const [isReplying, setIsReplying] = useState(false)
   const [replyContent, setReplyContent] = useState('')
 
-  const { timezone } = useTimezone()
+  const { timezone, formatDate } = useTimezone()
   const { messages, isLoading, error, refreshMessages } = useInboxMessages(conversation.id, timezone)
 
   useEffect(() => {
@@ -146,20 +145,6 @@ export function MessageThread({ conversation, onClose, onArchive, onMarkRead }: 
               <span className="flex items-center gap-1">
                 <Mail className="h-4 w-4" />
                 {messages?.length || 0} messages
-              </span>
-              <span className="flex items-center gap-1">
-                <Calendar className="h-4 w-4" />
-                {(() => {
-                  const date = conversation.last_activity_at || conversation.last_message_at
-                  if (!date) return 'Unknown'
-                  const d = new Date(date)
-                  if (isNaN(d.getTime())) return 'Invalid date'
-                  try {
-                    return format(d, 'MMM d, yyyy')
-                  } catch (error) {
-                    return 'Invalid date'
-                  }
-                })()}
               </span>
             </div>
             <div className="flex gap-2 mt-2">
@@ -258,10 +243,8 @@ export function MessageThread({ conversation, onClose, onArchive, onMarkRead }: 
                         {(() => {
                           const date = message.sent_at || message.received_at
                           if (!date) return 'Unknown'
-                          const d = new Date(date)
-                          if (isNaN(d.getTime())) return 'Invalid date'
                           try {
-                            return format(d, 'MMM d, yyyy h:mm a')
+                            return formatDate(date, 'MMM d, yyyy h:mm a')
                           } catch (error) {
                             return 'Invalid date'
                           }

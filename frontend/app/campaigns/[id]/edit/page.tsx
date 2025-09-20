@@ -254,13 +254,13 @@ function EditCampaignPageContent({
   }, [emailAccounts, campaignData.emailAccounts, testSenderAccountId])
 
   const emailVariables = [
-    { key: 'first_name', label: 'First Name' },
-    { key: 'last_name', label: 'Last Name' },
-    { key: 'full_name', label: 'Full Name' },
-    { key: 'email', label: 'Email' },
-    { key: 'company', label: 'Company' },
-    { key: 'job_title', label: 'Job Title' },
-    { key: 'website', label: 'Website' },
+    { key: 'first_name', label: 'First Name', value: 'John' },
+    { key: 'last_name', label: 'Last Name', value: 'Doe' },
+    { key: 'full_name', label: 'Full Name', value: 'John Doe' },
+    { key: 'email', label: 'Email', value: 'john@example.com' },
+    { key: 'company', label: 'Company', value: 'Acme Corp' },
+    { key: 'job_title', label: 'Job Title', value: 'Marketing Manager' },
+    { key: 'website', label: 'Website', value: 'example.com' },
   ]
 
   const handleSendTestEmail = async () => {

@@ -83,23 +83,57 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
     // Get email stats from scheduled_emails with period filter
     const { data: emails, error: emailsError } = await supabase
       .from('scheduled_emails')
-      .select('id, status, send_at, sent_at')
+      .select('id, status, send_at, sent_at, to_email')
       .eq('organization_id', organizationId)
       .gte('send_at', startDate.toISOString())
       .lte('send_at', endDate.toISOString());
-    
+
     if (emailsError) throw emailsError;
 
-    // Get conversation messages for reply stats in period
-    const { data: replies, error: repliesError } = await supabase
+
+    // Get total sent emails count (for accurate reply rate calculation)
+    const { data: totalSentEmails, error: totalSentError } = await supabase
+      .from('scheduled_emails')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .in('status', ['sent', 'delivered']);
+
+    if (totalSentError) console.error('Error fetching total sent emails:', totalSentError);
+
+    // Get total replies count (all time, for accurate reply rate)
+    // Only count replies from campaign conversations, not untracked emails
+    const { data: totalReplies, error: totalRepliesError } = await supabase
       .from('conversation_messages')
-      .select('id, direction, created_at')
+      .select(`
+        id,
+        conversations!inner(conversation_type)
+      `)
       .eq('organization_id', organizationId)
       .eq('direction', 'received')
-      .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString());
-    
-    if (repliesError) console.error('Error fetching replies:', repliesError);
+      .eq('conversations.conversation_type', 'campaign')
+      .not('received_at', 'is', null);
+
+    if (totalRepliesError) console.error('Error fetching total replies:', totalRepliesError);
+
+    // Get replies received in current period (for period-specific metrics)
+    // Only count replies from campaign conversations, not untracked emails
+    const { data: periodReplies, error: periodRepliesError } = await supabase
+      .from('conversation_messages')
+      .select(`
+        id, direction, received_at, from_email, to_email,
+        conversations!inner(conversation_type)
+      `)
+      .eq('organization_id', organizationId)
+      .eq('direction', 'received')
+      .eq('conversations.conversation_type', 'campaign')
+      .gte('received_at', startDate.toISOString())
+      .lte('received_at', endDate.toISOString())
+      .not('received_at', 'is', null);
+
+    if (periodRepliesError) console.error('Error fetching period replies:', periodRepliesError);
+
+    const replies = periodReplies || [];
+
 
     // Get label statistics
     const { data: labelAssignments, error: labelError } = await supabase
@@ -144,7 +178,7 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
       }).length;
       
       const dayReplies = replies ? replies.filter(r => {
-        const replyDate = new Date(r.created_at);
+        const replyDate = new Date(r.received_at);
         return replyDate >= currentDate && replyDate < nextDate;
       }).length : 0;
       
@@ -188,9 +222,13 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
     const bouncedEmails = emails.filter(e => e.status === 'bounced' || e.status === 'failed').length;
     const repliedEmails = replies ? replies.length : 0;
     
-    // Calculate rates
-    const replyRate = sentEmails > 0 ? ((repliedEmails / sentEmails) * 100).toFixed(1) : '0.0';
+    // Calculate rates using total sent emails for accurate reply rate
+    const totalSentCount = totalSentEmails ? totalSentEmails.length : 0;
+    const totalReplyCount = totalReplies ? totalReplies.length : 0;
+
+    const replyRate = totalSentCount > 0 ? ((totalReplyCount / totalSentCount) * 100).toFixed(1) : '0.0';
     const bounceRate = sentEmails > 0 ? ((bouncedEmails / sentEmails) * 100).toFixed(1) : '0.0';
+
     
     // Account health
     const totalAccounts = accounts.length;

@@ -130,12 +130,13 @@ class TimezoneService {
       dateObj = utcDate;
     } else {
       const dateStr = utcDate.toString();
-      // If timestamp lacks timezone info and matches ISO format, treat as UTC (legacy format)
-      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/.test(dateStr)) {
-        // Legacy timestamps without 'Z' should be treated as UTC and converted
+      // CRITICAL FIX: Ensure UTC interpretation for timestamps without timezone
+      // Backend sends timestamps like "2025-09-22T07:00:00" which should be treated as UTC
+      if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/) && !dateStr.endsWith('Z')) {
+        // Add Z suffix to force UTC interpretation
         dateObj = new Date(dateStr + 'Z');
       } else {
-        dateObj = new Date(utcDate);
+        dateObj = new Date(dateStr);
       }
     }
 

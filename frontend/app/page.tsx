@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowRight, CheckCircle, Zap, Shield, Users, BarChart3, Mail, Globe, Sparkles, TrendingUp } from 'lucide-react'
+import { ArrowRight, CheckCircle, Zap, Shield, Users, BarChart3, Mail, Globe, Sparkles, TrendingUp, Inbox, Search, Calendar } from 'lucide-react'
 
 export default function LandingPage() {
   const handleButtonClick = (buttonName: string) => {
@@ -15,8 +15,8 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center space-x-4">
-              <img src="/mailsender-icon.png" alt="Mailsender" className="w-12 h-12 rounded-xl shadow-md" />
-              <span className="text-3xl font-bold gradient-text">Mailsender</span>
+              <img src="/mailsender-icon.png" alt="BOBinbox" className="w-12 h-12 rounded-xl shadow-md" />
+              <span className="text-3xl font-bold gradient-text">BOBinbox</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
               <Link href="/features" className="text-gray-600 hover:text-gray-900 transition">Features</Link>
@@ -38,19 +38,19 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center">
             <div className="inline-flex items-center px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm font-medium mb-6">
-              <Sparkles className="w-4 h-4 mr-2" />
-              #1 B2B Email Marketing Platform for 2025
+              <Mail className="w-4 h-4 mr-2" />
+              The Smart Email Client for Modern Professionals
             </div>
             <h1 className="text-6xl font-bold text-gray-900 mb-6 leading-tight">
-              Scale Your Outreach to
-              <span className="gradient-text"> Millions</span>
+              Unify All Your Email
+              <span className="gradient-text"> In One Place</span>
               <br />
-              With AI-Powered Automation
+              Like Gmail, But Smarter
             </h1>
             <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-              The only B2B email marketing automation platform that combines professional email account management, 
-              advanced AI personalization, and enterprise-grade deliverability 
-              to help you book more meetings.
+              A professional email client that brings together all your email accounts with intelligent
+              organization, advanced search, and productivity features that help you manage
+              your communication more efficiently.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
               <Link href="/register">
@@ -92,20 +92,20 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="text-center">
-              <div className="text-4xl font-bold gradient-text mb-2">10M+</div>
-              <div className="text-gray-600">Emails Sent Monthly</div>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-bold gradient-text mb-2">95%</div>
-              <div className="text-gray-600">Inbox Placement Rate</div>
+              <div className="text-4xl font-bold gradient-text mb-2">100+</div>
+              <div className="text-gray-600">Email Accounts</div>
             </div>
             <div className="text-center">
               <div className="text-4xl font-bold gradient-text mb-2">15K+</div>
               <div className="text-gray-600">Active Users</div>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold gradient-text mb-2">3.5x</div>
-              <div className="text-gray-600">ROI Increase</div>
+              <div className="text-4xl font-bold gradient-text mb-2">99.9%</div>
+              <div className="text-gray-600">Uptime</div>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl font-bold gradient-text mb-2">24/7</div>
+              <div className="text-gray-600">Email Sync</div>
             </div>
           </div>
         </div>
@@ -116,22 +116,22 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Everything You Need to
-              <span className="gradient-text"> Dominate Outreach</span>
+              Everything You Need for
+              <span className="gradient-text"> Professional Email</span>
             </h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              From email warmup to AI personalization, we've got you covered
+              From unified inbox to smart organization, all your email tools in one place
             </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
             <div className="bg-white rounded-2xl p-8 shadow-lg card-hover">
               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-6">
-                <Mail className="w-6 h-6 text-purple-600" />
+                <Inbox className="w-6 h-6 text-purple-600" />
               </div>
-              <h3 className="text-xl font-bold mb-3">Professional Email Account Management</h3>
+              <h3 className="text-xl font-bold mb-3">Unified Inbox</h3>
               <p className="text-gray-600 mb-4">
-                Connect multiple email accounts and manage them automatically with advanced rotation to maximize deliverability
+                Connect all your email accounts (Gmail, Outlook, IMAP) and manage them from one intelligent inbox with conversation threading
               </p>
               <Link href="/features" className="text-purple-600 font-medium flex items-center">
                 Learn more <ArrowRight className="w-4 h-4 ml-1" />
@@ -140,11 +140,11 @@ export default function LandingPage() {
 
             <div className="bg-white rounded-2xl p-8 shadow-lg card-hover">
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-6">
-                <Zap className="w-6 h-6 text-blue-600" />
+                <Search className="w-6 h-6 text-blue-600" />
               </div>
-              <h3 className="text-xl font-bold mb-3">AI-Powered Deliverability Optimization</h3>
+              <h3 className="text-xl font-bold mb-3">Smart Search & Organization</h3>
               <p className="text-gray-600 mb-4">
-                Our intelligent system builds your sender reputation through gradual engagement to ensure inbox placement
+                Find any email instantly with advanced search, smart filters, and automatic organization across all your accounts
               </p>
               <Link href="/features" className="text-purple-600 font-medium flex items-center">
                 Learn more <ArrowRight className="w-4 h-4 ml-1" />
@@ -153,11 +153,11 @@ export default function LandingPage() {
 
             <div className="bg-white rounded-2xl p-8 shadow-lg card-hover">
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-6">
-                <TrendingUp className="w-6 h-6 text-green-600" />
+                <Mail className="w-6 h-6 text-green-600" />
               </div>
-              <h3 className="text-xl font-bold mb-3">Advanced Analytics</h3>
+              <h3 className="text-xl font-bold mb-3">Rich Text Composition</h3>
               <p className="text-gray-600 mb-4">
-                Track opens, clicks, replies, and conversions with our comprehensive analytics dashboard
+                Compose beautiful emails with our advanced rich text editor, templates, and variable insertion for professional communication
               </p>
               <Link href="/features" className="text-purple-600 font-medium flex items-center">
                 Learn more <ArrowRight className="w-4 h-4 ml-1" />
@@ -166,11 +166,11 @@ export default function LandingPage() {
 
             <div className="bg-white rounded-2xl p-8 shadow-lg card-hover">
               <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center mb-6">
-                <Sparkles className="w-6 h-6 text-yellow-600" />
+                <Calendar className="w-6 h-6 text-yellow-600" />
               </div>
-              <h3 className="text-xl font-bold mb-3">AI Personalization</h3>
+              <h3 className="text-xl font-bold mb-3">Smart Scheduling</h3>
               <p className="text-gray-600 mb-4">
-                Generate personalized emails at scale using GPT-4 and your prospect data
+                Schedule emails across timezones, set follow-up sequences, and automate your communication workflow
               </p>
               <Link href="/features" className="text-purple-600 font-medium flex items-center">
                 Learn more <ArrowRight className="w-4 h-4 ml-1" />
@@ -181,9 +181,9 @@ export default function LandingPage() {
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mb-6">
                 <Shield className="w-6 h-6 text-red-600" />
               </div>
-              <h3 className="text-xl font-bold mb-3">Spam Protection</h3>
+              <h3 className="text-xl font-bold mb-3">Enterprise Security</h3>
               <p className="text-gray-600 mb-4">
-                Advanced algorithms prevent your emails from landing in spam folders
+                OAuth2 authentication, end-to-end encryption, and enterprise-grade security for your sensitive communications
               </p>
               <Link href="/features" className="text-purple-600 font-medium flex items-center">
                 Learn more <ArrowRight className="w-4 h-4 ml-1" />
@@ -192,11 +192,11 @@ export default function LandingPage() {
 
             <div className="bg-white rounded-2xl p-8 shadow-lg card-hover">
               <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center mb-6">
-                <Globe className="w-6 h-6 text-indigo-600" />
+                <TrendingUp className="w-6 h-6 text-indigo-600" />
               </div>
-              <h3 className="text-xl font-bold mb-3">CRM Integration</h3>
+              <h3 className="text-xl font-bold mb-3">Productivity Analytics</h3>
               <p className="text-gray-600 mb-4">
-                Seamlessly sync with Salesforce, HubSpot, Pipedrive, and 20+ CRMs
+                Track email activity, response times, and communication patterns to improve your productivity
               </p>
               <Link href="/features" className="text-purple-600 font-medium flex items-center">
                 Learn more <ArrowRight className="w-4 h-4 ml-1" />
@@ -211,10 +211,10 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Trusted by <span className="gradient-text">15,000+</span> Sales Teams
+              Trusted by <span className="gradient-text">15,000+</span> Professionals
             </h2>
             <p className="text-xl text-gray-600">
-              From startups to Fortune 500 companies
+              From freelancers to Fortune 500 companies
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
@@ -225,7 +225,7 @@ export default function LandingPage() {
                 ))}
               </div>
               <p className="text-gray-700 mb-4">
-                "Mailsender transformed our outreach. We went from 20 meetings/month to 150+ in just 3 months."
+                "BOBinbox revolutionized how I manage email. All my accounts in one place with smart organization - it's like having a personal assistant."
               </p>
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-purple-100 rounded-full mr-3"></div>
@@ -243,7 +243,7 @@ export default function LandingPage() {
                 ))}
               </div>
               <p className="text-gray-700 mb-4">
-                "The AI personalization is incredible. Our reply rates increased by 300% overnight."
+                "The unified inbox and smart search saved me hours every week. Finding emails across 5 accounts is now instant."
               </p>
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-blue-100 rounded-full mr-3"></div>
@@ -261,7 +261,7 @@ export default function LandingPage() {
                 ))}
               </div>
               <p className="text-gray-700 mb-4">
-                "Best investment we made. The ROI is insane - paid for itself in the first week."
+                "Finally, an email client that works like I think. Thread conversations, smart scheduling, and beautiful composition."
               </p>
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-green-100 rounded-full mr-3"></div>
@@ -279,10 +279,10 @@ export default function LandingPage() {
       <section className="py-20 gradient-bg">
         <div className="max-w-4xl mx-auto text-center px-4">
           <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Ready to <span className="gradient-text">10x Your Outreach?</span>
+            Ready to <span className="gradient-text">Transform Your Email?</span>
           </h2>
           <p className="text-xl text-gray-600 mb-8">
-            Join thousands of companies booking more meetings with BOBinbox
+            Join thousands of professionals managing their email smarter with BOBinbox
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/register">
@@ -308,7 +308,7 @@ export default function LandingPage() {
             <div className="col-span-2">
               <div className="text-2xl font-bold mb-4">BOBinbox</div>
               <p className="text-gray-400 mb-4">
-                The most powerful B2B email marketing automation platform for modern sales teams.
+                The smart email client that unifies all your accounts with professional productivity features.
               </p>
               <div className="flex space-x-4">
                 <div className="w-10 h-10 bg-gray-800 rounded-lg flex items-center justify-center hover:bg-gray-700 cursor-pointer">

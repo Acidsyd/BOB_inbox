@@ -4,7 +4,6 @@ const jwt = require('jsonwebtoken');
 const UnifiedInboxService = require('../services/UnifiedInboxService');
 const FolderService = require('../services/FolderService');
 const EmailSyncService = require('../services/EmailSyncService');
-const SyncSchedulerService = require('../services/SyncSchedulerService');
 const WebhookService = require('../services/WebhookService');
 const TimezoneService = require('../services/TimezoneService');
 const { createClient } = require('@supabase/supabase-js');
@@ -18,7 +17,6 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const unifiedInboxService = new UnifiedInboxService();
 const folderService = new FolderService();
 const emailSyncService = new EmailSyncService();
-const syncSchedulerService = new SyncSchedulerService();
 const webhookService = new WebhookService();
 
 // Helper function to create proper names from email addresses
@@ -1399,12 +1397,43 @@ router.post('/sync/manual', authenticateToken, async (req, res) => {
         }
       }
 
+      // Record manual sync in sync_history table
+      const syncEndTime = new Date();
+      const successCount = syncResults.filter(r => r.success).length;
+      const errorCount = syncResults.filter(r => !r.success).length;
+
+      try {
+        await supabase
+          .from('sync_history')
+          .insert({
+            organization_id: organizationId,
+            sync_type: 'manual',
+            started_at: syncEndTime.toISOString(),
+            completed_at: syncEndTime.toISOString(),
+            duration_ms: 0, // Manual sync is instant from user perspective
+            status: 'completed',
+            accounts_total: accounts?.length || 0,
+            accounts_success: successCount,
+            accounts_failed: errorCount,
+            messages_synced: 0,
+            messages_new: 0,
+            sync_details: {
+              sync_timestamp: syncEndTime.toISOString(),
+              trigger: 'manual_user_action',
+              results: syncResults
+            }
+          });
+        console.log('📊 Manual sync recorded in sync_history');
+      } catch (historyError) {
+        console.warn('⚠️ Could not record manual sync in history:', historyError.message);
+      }
+
       res.json({
         success: true,
         syncType: 'all_accounts',
         accountCount: accounts?.length || 0,
         results: syncResults,
-        timestamp: new Date().toISOString()
+        timestamp: syncEndTime.toISOString()
       });
     }
 
@@ -1963,223 +1992,89 @@ router.post('/sync/test/:accountId', authenticateToken, async (req, res) => {
   }
 });
 
-// ============================================================================
-// SMART SYNC SCHEDULER ENDPOINTS
-// ============================================================================
 
 /**
- * POST /api/inbox/sync/auto/start
- * Start automatic sync for organization
+ * GET /api/inbox/sync/autosync-status
+ * Get autosync (background sync) status and timing information
  */
-router.post('/sync/auto/start', authenticateToken, async (req, res) => {
+router.get('/sync/autosync-status', authenticateToken, async (req, res) => {
   try {
-    const { organizationId } = req.user;
-    
-    console.log(`🚀 Starting automatic sync for organization: ${organizationId}`);
-    
-    const result = await syncSchedulerService.startOrganizationSync(organizationId);
-    
-    if (result.success) {
-      res.json({
-        success: true,
-        message: `Automatic sync started for ${result.accountsStarted}/${result.totalAccounts} accounts`,
-        ...result
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        error: result.error || 'Failed to start automatic sync'
-      });
+    const backgroundSyncService = require('../services/BackgroundSyncService');
+
+    // Get background sync status
+    const syncStatus = backgroundSyncService.getSyncStatus();
+
+    // Get last autosync from sync_history table (if exists) or oauth2_tokens table
+    let lastAutosync = null;
+
+    try {
+      const { data: lastSyncHistory, error: historyError } = await supabase
+        .from('sync_history')
+        .select('completed_at, accounts_success, accounts_failed, duration_ms')
+        .eq('organization_id', req.user.organizationId)
+        .eq('sync_type', 'background')
+        .eq('status', 'completed')
+        .order('completed_at', { ascending: false })
+        .limit(1);
+
+      if (historyError) {
+        console.warn('⚠️ Could not fetch sync history:', historyError.message);
+
+        // Fallback: Get the most recent sync timestamp from oauth2_tokens
+        const { data: accounts, error: accountError } = await supabase
+          .from('oauth2_tokens')
+          .select('last_sync_timestamp')
+          .eq('organization_id', req.user.organizationId)
+          .eq('status', 'linked_to_account')
+          .not('last_sync_timestamp', 'is', null)
+          .order('last_sync_timestamp', { ascending: false })
+          .limit(1);
+
+        if (!accountError && accounts && accounts.length > 0) {
+          lastAutosync = {
+            timestamp: accounts[0].last_sync_timestamp,
+            successCount: null,
+            errorCount: null,
+            durationMs: null
+          };
+        }
+      } else if (lastSyncHistory && lastSyncHistory.length > 0) {
+        lastAutosync = {
+          timestamp: lastSyncHistory[0].completed_at,
+          successCount: lastSyncHistory[0].accounts_success,
+          errorCount: lastSyncHistory[0].accounts_failed,
+          durationMs: lastSyncHistory[0].duration_ms
+        };
+      }
+    } catch (fallbackError) {
+      console.warn('⚠️ Could not fetch autosync information:', fallbackError.message);
     }
-    
-  } catch (error) {
-    console.error('❌ Error starting automatic sync:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to start automatic sync',
-      details: error.message
-    });
-  }
-});
 
-/**
- * POST /api/inbox/sync/auto/stop
- * Stop automatic sync for organization
- */
-router.post('/sync/auto/stop', authenticateToken, async (req, res) => {
-  try {
-    const { organizationId } = req.user;
-    
-    console.log(`⏹️ Stopping automatic sync for organization: ${organizationId}`);
-    
-    const result = syncSchedulerService.stopOrganizationSync(organizationId);
-    
-    res.json({
-      success: true,
-      message: `Automatic sync stopped for ${result.accountsStopped} accounts`,
-      ...result
-    });
-    
-  } catch (error) {
-    console.error('❌ Error stopping automatic sync:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to stop automatic sync',
-      details: error.message
-    });
-  }
-});
-
-/**
- * POST /api/inbox/sync/auto/account/:accountId/start
- * Start automatic sync for specific account
- */
-router.post('/sync/auto/account/:accountId/start', authenticateToken, async (req, res) => {
-  try {
-    const { organizationId } = req.user;
-    const { accountId } = req.params;
-    
-    console.log(`🚀 Starting automatic sync for account: ${accountId}`);
-    
-    const started = await syncSchedulerService.startAccountSync(accountId, organizationId);
-    
-    if (started) {
-      res.json({
-        success: true,
-        message: `Automatic sync started for account ${accountId}`,
-        accountId
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        error: 'Failed to start automatic sync for account',
-        accountId
-      });
+    // Calculate fixed next sync time: last sync + 15 minutes
+    let nextSyncFixed = null;
+    if (lastAutosync && lastAutosync.timestamp) {
+      const lastSyncTime = new Date(lastAutosync.timestamp);
+      nextSyncFixed = new Date(lastSyncTime.getTime() + (15 * 60 * 1000)).toISOString();
     }
-    
-  } catch (error) {
-    console.error('❌ Error starting account sync:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to start account sync',
-      details: error.message,
-      accountId: req.params.accountId
-    });
-  }
-});
 
-/**
- * POST /api/inbox/sync/auto/account/:accountId/stop
- * Stop automatic sync for specific account
- */
-router.post('/sync/auto/account/:accountId/stop', authenticateToken, async (req, res) => {
-  try {
-    const { accountId } = req.params;
-    
-    console.log(`⏹️ Stopping automatic sync for account: ${accountId}`);
-    
-    const stopped = syncSchedulerService.stopAccountSync(accountId);
-    
-    if (stopped) {
-      res.json({
-        success: true,
-        message: `Automatic sync stopped for account ${accountId}`,
-        accountId
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        message: `Account ${accountId} was not running automatic sync`,
-        accountId
-      });
-    }
-    
-  } catch (error) {
-    console.error('❌ Error stopping account sync:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to stop account sync',
-      details: error.message,
-      accountId: req.params.accountId
-    });
-  }
-});
-
-/**
- * GET /api/inbox/sync/auto/status
- * Get current automatic sync status
- */
-router.get('/sync/auto/status', authenticateToken, async (req, res) => {
-  try {
-    const status = syncSchedulerService.getSyncStatus();
-    
     res.json({
-      success: true,
-      ...status
+      autosyncStatus: {
+        isRunning: syncStatus.isRunning,
+        isSyncing: syncStatus.isSyncing,
+        intervalMinutes: syncStatus.intervalMinutes,
+        nextSyncEstimate: nextSyncFixed, // Fixed time based on last sync + 15min
+        lastAutosync: lastAutosync ? {
+          timestamp: lastAutosync.timestamp,
+          successCount: lastAutosync.successCount,
+          errorCount: lastAutosync.errorCount,
+          durationMs: lastAutosync.durationMs
+        } : null
+      }
     });
-    
   } catch (error) {
-    console.error('❌ Error getting sync status:', error);
+    console.error('❌ Error getting autosync status:', error);
     res.status(500).json({
-      success: false,
-      error: 'Failed to get sync status',
-      details: error.message
-    });
-  }
-});
-
-/**
- * GET /api/inbox/sync/auto/health
- * Get sync scheduler health status
- */
-router.get('/sync/auto/health', authenticateToken, async (req, res) => {
-  try {
-    const health = syncSchedulerService.getHealthStatus();
-    
-    // Set appropriate HTTP status code based on health
-    const statusCode = health.status === 'healthy' ? 200 : 503;
-    
-    res.status(statusCode).json({
-      success: health.status === 'healthy',
-      ...health
-    });
-    
-  } catch (error) {
-    console.error('❌ Error getting sync health:', error);
-    res.status(500).json({
-      success: false,
-      status: 'error',
-      error: 'Failed to get sync health',
-      details: error.message
-    });
-  }
-});
-
-/**
- * GET /api/inbox/sync/auto/intervals
- * Get current sync intervals configuration
- */
-router.get('/sync/auto/intervals', authenticateToken, async (req, res) => {
-  try {
-    const intervals = {
-      campaign: 1,    // 1 minute for active campaign accounts
-      high: 2,        // 2 minutes for high-activity accounts  
-      medium: 5,      // 5 minutes for medium-activity accounts
-      low: 15,        // 15 minutes for low-activity accounts
-      inactive: 30    // 30 minutes for inactive accounts
-    };
-    
-    res.json({
-      success: true,
-      intervals,
-      description: 'Sync interval minutes by activity level'
-    });
-    
-  } catch (error) {
-    console.error('❌ Error getting sync intervals:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get sync intervals',
+      error: 'Failed to get autosync status',
       details: error.message
     });
   }

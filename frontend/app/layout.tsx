@@ -142,7 +142,7 @@ export default function RootLayout({
           `
         }} />
       </head>
-      <body className={inter.className}>
+      <body className={`${inter.className} bg-white text-gray-900`}>
         <Providers>
           {children}
         </Providers>

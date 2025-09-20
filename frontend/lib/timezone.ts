@@ -114,9 +114,10 @@ export function formatDateInTimezone(
       dateObj = date;
     } else {
       const dateStr = date.toString();
-      // Handle legacy timestamps without timezone info - treat as UTC
-      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/.test(dateStr)) {
-        // Legacy timestamps without 'Z' should be treated as UTC
+      // CRITICAL FIX: Ensure UTC interpretation for timestamps without timezone
+      // Backend sends timestamps like "2025-09-22T07:00:00" which should be treated as UTC
+      if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/) && !dateStr.endsWith('Z')) {
+        // Add Z suffix to force UTC interpretation
         dateObj = new Date(dateStr + 'Z');
       } else {
         dateObj = new Date(dateStr);
@@ -129,7 +130,21 @@ export function formatDateInTimezone(
       return 'Invalid date';
     }
 
-    return formatInTimeZone(dateObj, userTimezone, formatString);
+    const result = formatInTimeZone(dateObj, userTimezone, formatString);
+
+    // Debug logging for scheduled activity timestamps
+    if (date && typeof date === 'string' && (date.includes('2025-09-22') || date.includes('2025-09-19'))) {
+      console.log('🕐 formatDateInTimezone debug (FIXED):', {
+        inputDate: date,
+        wasFixed: date.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/) && !date.endsWith('Z'),
+        dateObj: dateObj.toISOString(),
+        userTimezone,
+        formatString,
+        result
+      });
+    }
+
+    return result;
   } catch (error) {
     console.error('Error formatting date in timezone:', error, { date, formatString, timezone });
     return 'Error formatting date';
@@ -228,14 +243,71 @@ export function getTimezoneAbbreviation(timezone?: string, date: Date = new Date
   }
 
   try {
-    return date.toLocaleDateString('en', {
+    // First try to get a proper timezone abbreviation using a more reliable method
+    // Use formatToParts to get timezone name
+    const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: tz,
       timeZoneName: 'short'
-    }).split(', ')[1] || 'UTC';
+    });
+
+    const parts = formatter.formatToParts(date);
+    const timeZonePart = parts.find(part => part.type === 'timeZoneName');
+    let rawAbbreviation = timeZonePart?.value || 'UTC';
+
+    // If we get a generic offset like "GMT+2", try to map to proper abbreviation
+    if (rawAbbreviation.includes('GMT+') || rawAbbreviation.includes('GMT-')) {
+      const abbreviation = mapTimezoneToAbbreviation(tz, date);
+      if (abbreviation) {
+        return abbreviation;
+      }
+    }
+
+    // Clean up timezone abbreviation by removing offset information
+    // e.g., "CEST+2" becomes "CEST", "GMT+1" becomes "GMT"
+    return rawAbbreviation.replace(/[+-]\d+/, '');
   } catch (error) {
     console.error('Error getting timezone abbreviation:', error);
     return 'UTC';
   }
+}
+
+/**
+ * Map common timezones to their proper abbreviations
+ * @param {string} timezone - IANA timezone identifier
+ * @param {Date} date - Date to check for DST
+ * @returns {string|null} Proper timezone abbreviation or null if not found
+ */
+function mapTimezoneToAbbreviation(timezone: string, date: Date): string | null {
+  const isDST = isDaylightSavingTime(date);
+
+  const timezoneMap: Record<string, { standard: string; daylight: string }> = {
+    'Europe/Rome': { standard: 'CET', daylight: 'CEST' },
+    'Europe/Paris': { standard: 'CET', daylight: 'CEST' },
+    'Europe/Berlin': { standard: 'CET', daylight: 'CEST' },
+    'Europe/Madrid': { standard: 'CET', daylight: 'CEST' },
+    'Europe/Amsterdam': { standard: 'CET', daylight: 'CEST' },
+    'Europe/Brussels': { standard: 'CET', daylight: 'CEST' },
+    'Europe/Vienna': { standard: 'CET', daylight: 'CEST' },
+    'Europe/Zurich': { standard: 'CET', daylight: 'CEST' },
+
+    'Europe/London': { standard: 'GMT', daylight: 'BST' },
+
+    'America/New_York': { standard: 'EST', daylight: 'EDT' },
+    'America/Chicago': { standard: 'CST', daylight: 'CDT' },
+    'America/Denver': { standard: 'MST', daylight: 'MDT' },
+    'America/Los_Angeles': { standard: 'PST', daylight: 'PDT' },
+
+    'Asia/Tokyo': { standard: 'JST', daylight: 'JST' },
+    'Asia/Shanghai': { standard: 'CST', daylight: 'CST' },
+    'Australia/Sydney': { standard: 'AEST', daylight: 'AEDT' },
+  };
+
+  const timezoneInfo = timezoneMap[timezone];
+  if (!timezoneInfo) {
+    return null;
+  }
+
+  return isDST ? timezoneInfo.daylight : timezoneInfo.standard;
 }
 
 /**

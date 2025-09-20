@@ -1,16 +1,16 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { cn } from '../../lib/utils'
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
 import useFolders, { type Folder } from '../../hooks/useFolders'
 import useEmailSync from '../../hooks/useEmailSync'
-import AutoSyncControl from './AutoSyncControl'
-import { 
-  Inbox, 
-  Send, 
-  MessageCircle, 
+import { useTimezone } from '../../contexts/TimezoneContext'
+import {
+  Inbox,
+  Send,
+  MessageCircle,
   RefreshCw,
   Loader2,
   Menu,
@@ -34,9 +34,9 @@ const folderIcons = {
   untracked_replies: MessageCircle
 }
 
-export function InboxSidebar({ 
-  selectedFolder, 
-  onFolderSelect, 
+export function InboxSidebar({
+  selectedFolder,
+  onFolderSelect,
   className,
   collapsed = false,
   onToggleCollapsed,
@@ -45,7 +45,8 @@ export function InboxSidebar({
 }: InboxSidebarProps) {
   const { folders: hookFolders, loading, refreshFolders } = useFolders()
   const folders = propFolders || hookFolders
-  const { triggerManualSync, syncing } = useEmailSync()
+  const { triggerManualSync, syncing, lastSync, autosyncStatus, getAutosyncStatus } = useEmailSync()
+  const { formatDate } = useTimezone()
   const [refreshing, setRefreshing] = useState(false)
   const [syncProgress, setSyncProgress] = useState<{
     stage: 'connecting' | 'syncing' | 'processing' | 'complete'
@@ -56,6 +57,11 @@ export function InboxSidebar({
   
   // Test console logging
   console.log('🟢 InboxSidebar RENDERED - Component is active')
+
+  // Fetch autosync status on mount
+  useEffect(() => {
+    getAutosyncStatus()
+  }, [getAutosyncStatus])
 
   const handleFolderClick = (folderType: string) => {
     console.log(`📂 Selecting folder: ${folderType}`)
@@ -231,7 +237,7 @@ export function InboxSidebar({
                   <span className="ml-1">
                     {syncProgress?.stage === 'connecting' && 'Connecting...'}
                     {syncProgress?.stage === 'syncing' && 'Syncing...'}
-                    {syncProgress?.stage === 'processing' && syncProgress.messagesProcessed !== undefined && 
+                    {syncProgress?.stage === 'processing' && syncProgress.messagesProcessed !== undefined &&
                       `${syncProgress.messagesProcessed} msgs`}
                     {syncProgress?.stage === 'complete' && '✓ Complete'}
                     {!syncProgress && 'Syncing...'}
@@ -245,14 +251,38 @@ export function InboxSidebar({
               </>
             )}
           </Button>
+
+          {/* Sync Timestamps */}
+          {!collapsed && (
+            <div className="mt-1 text-center space-y-0.5">
+              <div className="text-xs text-gray-500">
+                {lastSync
+                  ? `Last sync: ${formatDate(lastSync, 'MMM d, h:mm a')}`
+                  : 'Never synced'
+                }
+              </div>
+
+              {/* Autosync Status */}
+              {autosyncStatus && (
+                <div className="space-y-0.5">
+                  <div className="text-xs text-gray-400">
+                    {autosyncStatus.lastAutosync
+                      ? `Last autosync: ${formatDate(new Date(autosyncStatus.lastAutosync.timestamp), 'MMM d, h:mm a')}`
+                      : 'No autosync yet'
+                    }
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {autosyncStatus.nextSyncEstimate
+                      ? `Next autosync: ${formatDate(new Date(autosyncStatus.nextSyncEstimate), 'MMM d, h:mm a')}`
+                      : 'Autosync disabled'
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Auto Sync Control - Only show when not collapsed */}
-        {!collapsed && (
-          <div className="mt-2 px-1">
-            <AutoSyncControl className="w-full" />
-          </div>
-        )}
       </div>
     </div>
   )
