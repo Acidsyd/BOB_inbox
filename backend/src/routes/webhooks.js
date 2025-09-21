@@ -256,6 +256,218 @@ router.get('/deliveries', authenticateToken, async (req, res) => {
 });
 
 /**
+ * POST /api/webhooks/test
+ * Test a webhook with form data (for new webhooks)
+ */
+router.post('/test', authenticateToken, async (req, res) => {
+  try {
+    const { organizationId } = req.user;
+    const { url, secret, events } = req.body;
+
+    // Validate required fields
+    if (!url) {
+      return res.status(400).json({ error: 'URL is required' });
+    }
+
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    // Create temporary webhook config for testing
+    const crypto = require('crypto');
+    const testWebhook = {
+      id: crypto.randomUUID(),
+      organization_id: organizationId,
+      name: 'Test Webhook',
+      url: url.trim(),
+      secret: secret?.trim() || null,
+      events: events || ['webhook.test'],
+      is_active: true
+    };
+
+    // Create enriched test payload with example data
+    const testPayload = {
+      message: 'This is a test webhook delivery from form data',
+      webhook_url: testWebhook.url,
+      test_timestamp: new Date().toISOString(),
+
+      // Example label event data
+      label_id: 'example-label-uuid-12345',
+      label_name: 'Interested',
+      conversation_id: 'example-conversation-uuid-67890',
+      action: 'assigned', // or 'removed'
+      assigned_by: 'user@example.com',
+
+      // Example conversation data
+      conversation: {
+        id: 'example-conversation-uuid-67890',
+        organization_id: organizationId,
+        conversation_type: 'email',
+        participants: ['lead@company.com', 'user@example.com'],
+        subject: 'Re: Partnership Opportunity',
+        last_message_at: new Date().toISOString(),
+        message_count: 3,
+        status: 'active',
+        created_at: new Date(Date.now() - 86400000).toISOString() // 1 day ago
+      },
+
+      // Example lead data
+      leads: [
+        {
+          id: 'example-lead-uuid-11111',
+          organization_id: organizationId,
+          email: 'lead@company.com',
+          first_name: 'John',
+          last_name: 'Smith',
+          company: 'Tech Solutions Inc',
+          position: 'Marketing Director',
+          phone: '+1-555-0123',
+          linkedin_url: 'https://linkedin.com/in/johnsmith',
+          website: 'https://techsolutions.com',
+          industry: 'Technology',
+          employee_count: '50-100',
+          location: 'San Francisco, CA',
+          lead_status: 'qualified',
+          lead_score: 85,
+          last_contacted: new Date(Date.now() - 43200000).toISOString(), // 12 hours ago
+          campaign_id: 'example-campaign-uuid-22222',
+          lead_list_id: 'example-list-uuid-33333',
+          custom_fields: {
+            budget: '$50,000',
+            timeline: 'Q1 2025',
+            pain_point: 'Manual processes'
+          },
+          created_at: new Date(Date.now() - 604800000).toISOString() // 1 week ago
+        }
+      ],
+
+      // Example campaign data
+      campaigns: [
+        {
+          id: 'example-campaign-uuid-22222',
+          organization_id: organizationId,
+          name: 'Tech Industry Outreach Q4 2024',
+          status: 'active',
+          campaign_type: 'cold_outreach',
+          total_leads: 1250,
+          emails_sent: 890,
+          replies_received: 67,
+          open_rate: 0.34,
+          reply_rate: 0.075,
+          bounce_rate: 0.02,
+          config: {
+            emailSubject: 'Partnership Opportunity with {{company}}',
+            emailsPerDay: 50,
+            sendingInterval: 15,
+            sendingHours: { start: 9, end: 17 },
+            activeDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+            enableJitter: true,
+            trackOpens: true,
+            trackClicks: true,
+            stopOnReply: true
+          },
+          created_at: new Date(Date.now() - 2592000000).toISOString(), // 30 days ago
+          updated_at: new Date(Date.now() - 3600000).toISOString() // 1 hour ago
+        }
+      ],
+
+      // Example organization data
+      organization: {
+        id: organizationId,
+        name: 'Example Organization',
+        domain: 'example.com',
+        industry: 'Software',
+        employee_count: '11-50',
+        plan_type: 'professional',
+        webhook_quota: 10000,
+        webhooks_used: 1250,
+        created_at: new Date(Date.now() - 7776000000).toISOString() // 90 days ago
+      },
+
+      // Example user data
+      user: {
+        id: 'example-user-uuid-44444',
+        email: 'user@example.com',
+        first_name: 'Jane',
+        last_name: 'Doe',
+        role: 'Sales Manager',
+        timezone: 'America/New_York',
+        last_login: new Date(Date.now() - 1800000).toISOString(), // 30 minutes ago
+        preferences: {
+          email_notifications: true,
+          webhook_notifications: true,
+          daily_summary: true
+        }
+      },
+
+      // Example email accounts
+      email_accounts: [
+        {
+          id: 'example-account-uuid-55555',
+          organization_id: organizationId,
+          email: 'user@example.com',
+          provider: 'gmail',
+          status: 'active',
+          daily_quota: 500,
+          emails_sent_today: 23,
+          last_sync: new Date(Date.now() - 900000).toISOString(), // 15 minutes ago
+          oauth2_status: 'linked_to_account',
+          created_at: new Date(Date.now() - 5184000000).toISOString() // 60 days ago
+        }
+      ]
+    };
+
+    console.log(`🧪 Testing webhook form data at ${testWebhook.url} with enriched example data`);
+
+    // Send test webhook directly without creating delivery record
+    const payload = {
+      event: 'label.assigned', // Use actual label event type instead of webhook.test
+      timestamp: new Date().toISOString(),
+      organization_id: organizationId,
+      data: testPayload
+    };
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mailsender-Webhooks/1.0'
+    };
+
+    // Add HMAC signature if secret is configured
+    if (testWebhook.secret) {
+      const crypto = require('crypto');
+      const signature = crypto
+        .createHmac('sha256', testWebhook.secret)
+        .update(JSON.stringify(payload), 'utf8')
+        .digest('hex');
+      headers['X-Webhook-Signature'] = signature;
+    }
+
+    console.log(`🚀 Sending test webhook to ${testWebhook.url}`);
+
+    const response = await fetch(testWebhook.url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      timeout: 10000
+    });
+
+    console.log(`📡 Webhook response: ${response.status} ${response.statusText}`);
+
+    res.json({
+      message: 'Test webhook sent successfully',
+      url: testWebhook.url
+    });
+
+  } catch (error) {
+    console.error('Error testing webhook with form data:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
  * POST /api/webhooks/:id/test
  * Test a webhook by sending a sample payload
  */
