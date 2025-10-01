@@ -10,7 +10,7 @@ class HealthCheckService {
 
   // Called by cron processor every minute
   async recordCronHeartbeat() {
-    const timestamp = toLocalTimestamp();
+    const timestamp = new Date().toISOString();
     try {
       // Update heartbeat in database
       await this.supabase

@@ -26,6 +26,7 @@ import CSVFieldMapper from './CSVFieldMapper'
 import EmailPreviewAndTest from './EmailPreviewAndTest'
 import ABTestingConfiguration from './ABTestingConfiguration'
 import { useEmailAccountsSelection } from '../../hooks/useEmailAccountsSelection'
+import { api } from '../../lib/api'
 
 interface CampaignData {
   // Basic Info
@@ -52,6 +53,9 @@ interface CampaignData {
 
   // Email Accounts
   emailAccounts: string[]
+
+  // Webhooks
+  assignedWebhooks: string[]
 
   // Timing
   emailsPerDay: number
@@ -136,12 +140,18 @@ const steps = [
   },
   {
     id: 8,
+    name: 'Webhooks',
+    description: 'Event notifications',
+    icon: Settings
+  },
+  {
+    id: 9,
     name: 'Advanced Settings',
     description: 'Campaign optimization',
     icon: Settings
   },
   {
-    id: 9,
+    id: 10,
     name: 'Review & Launch',
     description: 'Final review and launch',
     icon: Play
@@ -170,6 +180,7 @@ export default function CampaignWizard({ onComplete, onCancel }: CampaignWizardP
     csvRawData: [],
     selectedLeads: [],
     emailAccounts: [],
+    assignedWebhooks: [],
     emailsPerDay: 50,
     emailsPerHour: 5,
     emailsPerMinute: 1,
@@ -193,6 +204,24 @@ export default function CampaignWizard({ onComplete, onCancel }: CampaignWizardP
   })
 
   const { accounts: emailAccounts, loading: accountsLoading } = useEmailAccountsSelection()
+  const [webhooks, setWebhooks] = useState<any[]>([])
+  const [webhooksLoading, setWebhooksLoading] = useState(false)
+
+  // Fetch webhooks when component mounts
+  useEffect(() => {
+    const fetchWebhooks = async () => {
+      try {
+        setWebhooksLoading(true)
+        const response = await api.get('/webhooks')
+        setWebhooks(response.data)
+      } catch (error) {
+        console.error('Failed to fetch webhooks:', error)
+      } finally {
+        setWebhooksLoading(false)
+      }
+    }
+    fetchWebhooks()
+  }, [])
 
   const updateCampaignData = (data: Partial<CampaignData>) => {
     setCampaignData(prev => ({ ...prev, ...data }))
@@ -226,9 +255,11 @@ export default function CampaignWizard({ onComplete, onCancel }: CampaignWizardP
         return campaignData.emailAccounts.length > 0
       case 7: // Timing
         return campaignData.emailsPerDay > 0 && campaignData.activeDays.length > 0
-      case 8: // Advanced Settings
+      case 8: // Webhooks
+        return true // Optional
+      case 9: // Advanced Settings
         return true
-      case 9: // Review & Launch
+      case 10: // Review & Launch
         return true
       default:
         return false
@@ -460,10 +491,85 @@ export default function CampaignWizard({ onComplete, onCancel }: CampaignWizardP
               </div>
             )}
 
+            {currentStep === 8 && (
+              <div className="space-y-6">
+                <div className="text-center mb-6">
+                  <h3 className="text-lg font-semibold mb-2">Webhook Notifications</h3>
+                  <p className="text-gray-600">Choose webhooks to receive notifications for this campaign (optional)</p>
+                </div>
+
+                {webhooksLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+                    ))}
+                  </div>
+                ) : webhooks.length === 0 ? (
+                  <div className="text-center py-8">
+                    <h4 className="text-lg font-medium text-gray-900 mb-2">No webhooks configured</h4>
+                    <p className="text-gray-600 mb-4">
+                      Create webhooks in your settings to receive campaign notifications
+                    </p>
+                    <Button variant="outline" onClick={() => window.open('/settings/webhooks', '_blank')}>
+                      Configure Webhooks
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-sm text-gray-600 mb-4">
+                      Select which webhooks should receive notifications for events from this campaign.
+                      If none are selected, organization-level webhooks will be used.
+                    </div>
+                    {webhooks.map((webhook) => (
+                      <label
+                        key={webhook.id}
+                        className="flex items-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={campaignData.assignedWebhooks.includes(webhook.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              updateCampaignData({
+                                assignedWebhooks: [...campaignData.assignedWebhooks, webhook.id]
+                              })
+                            } else {
+                              updateCampaignData({
+                                assignedWebhooks: campaignData.assignedWebhooks.filter(id => id !== webhook.id)
+                              })
+                            }
+                          }}
+                          className="h-4 w-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+                        />
+                        <div className="ml-3 flex-1">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-medium text-gray-900">{webhook.name}</h4>
+                            <Badge variant="outline" className="text-xs">
+                              {webhook.is_active ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {webhook.url}
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {webhook.events.map((event: string) => (
+                              <Badge key={event} variant="outline" className="text-xs">
+                                {event}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Other steps would continue here... */}
             {/* For brevity, I'm showing the key steps. The remaining steps would follow similar patterns */}
 
-            {currentStep === 9 && (
+            {currentStep === 10 && (
               <div className="space-y-6">
                 <div className="text-center mb-6">
                   <h3 className="text-lg font-semibold mb-2">Campaign Review</h3>
@@ -508,6 +614,7 @@ export default function CampaignWizard({ onComplete, onCancel }: CampaignWizardP
                       <div className="space-y-2 text-sm">
                         <div><span className="font-medium">Emails:</span> {1 + campaignData.emailSequence.length}</div>
                         <div><span className="font-medium">A/B Testing:</span> {campaignData.abTestEnabled ? 'Enabled' : 'Disabled'}</div>
+                        <div><span className="font-medium">Webhooks:</span> {campaignData.assignedWebhooks.length || 'Organization-level'}</div>
                         <div><span className="font-medium">Launch:</span> {campaignData.scheduleType}</div>
                       </div>
                     </CardContent>

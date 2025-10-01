@@ -176,7 +176,7 @@ class ProcessManagerService {
           service,
           event,
           metadata,
-          timestamp: toLocalTimestamp()
+          timestamp: new Date().toISOString()
         });
     } catch (error) {
       console.error('❌ Failed to log process event:', error);

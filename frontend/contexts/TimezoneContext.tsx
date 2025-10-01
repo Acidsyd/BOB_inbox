@@ -140,7 +140,20 @@ export function TimezoneProvider({ children }: TimezoneProviderProps) {
     if (!date) return '';
 
     try {
-      const dateObj = typeof date === 'string' ? new Date(date) : date;
+      let dateObj: Date;
+
+      if (date instanceof Date) {
+        dateObj = date;
+      } else {
+        const dateStr = date.toString();
+        // IMPORTANT: Database timestamps are now stored in UTC
+        // Add 'Z' suffix to timestamps without timezone info to ensure UTC interpretation
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/) && !dateStr.endsWith('Z')) {
+          dateObj = new Date(dateStr + 'Z');
+        } else {
+          dateObj = new Date(dateStr);
+        }
+      }
 
       if (isNaN(dateObj.getTime())) {
         return '';

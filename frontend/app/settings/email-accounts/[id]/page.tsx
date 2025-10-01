@@ -12,11 +12,11 @@ import { Button } from '../../../../components/ui/button'
 import { Badge } from '../../../../components/ui/badge'
 import { Skeleton } from '../../../../components/ui/skeleton'
 import { useToast } from '../../../../components/ui/toast'
-import { 
-  ArrowLeft, 
-  Settings, 
-  TrendingUp, 
-  Heart, 
+import {
+  ArrowLeft,
+  Settings,
+  TrendingUp,
+  Heart,
   BarChart3,
   User,
   Clock,
@@ -34,7 +34,8 @@ import {
   Globe,
   Palette,
   Sliders,
-  TestTube
+  TestTube,
+  Webhook
 } from 'lucide-react'
 
 interface EmailAccount {
@@ -97,6 +98,17 @@ interface AccountHealth {
   }>
 }
 
+interface WebhookConfig {
+  id: string
+  name: string
+  url: string
+  secret?: string
+  is_active: boolean
+  events: string[]
+  created_at: string
+  updated_at: string
+}
+
 function AccountConfigurationContent() {
   const params = useParams()
   const router = useRouter()
@@ -109,6 +121,9 @@ function AccountConfigurationContent() {
   const [testing, setTesting] = useState(false)
   const [health, setHealth] = useState<AccountHealth | null>(null)
   const [stats, setStats] = useState<AccountStats | null>(null)
+  const [webhooks, setWebhooks] = useState<WebhookConfig[]>([])
+  const [assignedWebhookIds, setAssignedWebhookIds] = useState<string[]>([])
+  const [loadingWebhooks, setLoadingWebhooks] = useState(false)
 
   // Find the account from the loaded accounts
   const account = accounts.find(acc => acc.id === accountId)
@@ -163,6 +178,78 @@ function AccountConfigurationContent() {
       })
     }
   }, [account, activeTab, stats])
+
+  // Load webhooks and account webhook assignments
+  useEffect(() => {
+    if (account && activeTab === 'webhooks' && webhooks.length === 0) {
+      fetchWebhooksAndAssignments()
+    }
+  }, [account, activeTab, webhooks.length])
+
+  // Fetch webhooks and current assignments
+  const fetchWebhooksAndAssignments = async () => {
+    if (!account) return
+
+    try {
+      setLoadingWebhooks(true)
+
+      // Fetch all webhooks
+      const webhooksResponse = await api.get('/webhooks')
+      setWebhooks(webhooksResponse.data)
+
+      // Fetch current webhook assignments for this account
+      const accountResponse = await api.get(`/email-accounts/${account.id}`)
+      const currentAssignments = accountResponse.data.assigned_webhooks || []
+      setAssignedWebhookIds(currentAssignments)
+
+    } catch (error) {
+      console.error('Failed to fetch webhooks:', error)
+      addToast({
+        title: 'Error',
+        description: 'Failed to load webhook assignments',
+        type: 'error'
+      })
+    } finally {
+      setLoadingWebhooks(false)
+    }
+  }
+
+  // Save webhook assignments
+  const saveWebhookAssignments = async () => {
+    if (!account) return
+
+    try {
+      setSaving(true)
+
+      await api.put(`/email-accounts/${account.id}/webhook-assignments`, {
+        assigned_webhooks: assignedWebhookIds
+      })
+
+      addToast({
+        title: 'Webhooks updated',
+        description: 'Webhook assignments saved successfully',
+        type: 'success'
+      })
+    } catch (error) {
+      console.error('Failed to save webhook assignments:', error)
+      addToast({
+        title: 'Error',
+        description: 'Failed to save webhook assignments',
+        type: 'error'
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Handle webhook selection
+  const handleWebhookToggle = (webhookId: string) => {
+    setAssignedWebhookIds(prev =>
+      prev.includes(webhookId)
+        ? prev.filter(id => id !== webhookId)
+        : [...prev, webhookId]
+    )
+  }
 
   // Helper function to safely get account settings
   const getAccountSettings = (account: any) => {
@@ -621,6 +708,124 @@ function AccountConfigurationContent() {
     </div>
   )
 
+  const renderWebhooksTab = () => (
+    <div className="space-y-6">
+      {/* Webhook Assignment */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Webhook className="h-5 w-5 mr-2" />
+            Webhook Assignment
+          </CardTitle>
+          <CardDescription>
+            Assign specific webhooks to this email account for targeted event notifications
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loadingWebhooks ? (
+            <div className="space-y-4">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : webhooks.length === 0 ? (
+            <div className="text-center py-8">
+              <Webhook className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No webhooks available</h3>
+              <p className="text-gray-600 mb-4">
+                Create webhooks first to assign them to this account
+              </p>
+              <Link href="/settings/webhooks">
+                <Button variant="outline">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Manage Webhooks
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center">
+                  <AlertTriangle className="h-4 w-4 text-blue-600 mr-2" />
+                  <span className="text-sm font-medium text-blue-800">
+                    Account-level webhook assignment
+                  </span>
+                </div>
+                <p className="text-sm text-blue-700 mt-1">
+                  Webhooks assigned here will receive events from this specific email account.
+                  If no webhooks are assigned, organization-level webhooks will be used.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {webhooks.map((webhook) => (
+                  <div
+                    key={webhook.id}
+                    className={`border rounded-lg p-4 transition-colors ${
+                      assignedWebhookIds.includes(webhook.id)
+                        ? 'border-blue-200 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          checked={assignedWebhookIds.includes(webhook.id)}
+                          onChange={() => handleWebhookToggle(webhook.id)}
+                          className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <h4 className="font-medium text-gray-900">{webhook.name}</h4>
+                            <Badge variant={webhook.is_active ? 'default' : 'secondary'}>
+                              {webhook.is_active ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {webhook.url}
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {webhook.events.map((event) => (
+                              <Badge key={event} variant="outline" className="text-xs">
+                                {event}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+                <div className="text-sm text-gray-600">
+                  {assignedWebhookIds.length === 0 ? (
+                    'Using organization-level webhooks (default)'
+                  ) : (
+                    `${assignedWebhookIds.length} webhook${assignedWebhookIds.length === 1 ? '' : 's'} assigned`
+                  )}
+                </div>
+                <Button
+                  onClick={saveWebhookAssignments}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Settings className="h-4 w-4 mr-2" />
+                  )}
+                  Save Assignment
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+
   const renderManagementTab = () => (
     <div className="space-y-6">
       {/* Account Info */}
@@ -715,6 +920,7 @@ function AccountConfigurationContent() {
         <nav className="flex space-x-8">
           {[
             { id: 'settings', label: 'Account Settings', icon: Settings },
+            { id: 'webhooks', label: 'Webhooks', icon: Webhook },
             { id: 'health', label: 'Health Monitoring', icon: Heart },
             { id: 'stats', label: 'Statistics', icon: BarChart3 },
             { id: 'management', label: 'Account Management', icon: User }
@@ -737,6 +943,7 @@ function AccountConfigurationContent() {
 
       {/* Tab Content */}
       {activeTab === 'settings' && renderSettingsTab()}
+      {activeTab === 'webhooks' && renderWebhooksTab()}
       {activeTab === 'health' && renderHealthTab()}
       {activeTab === 'stats' && renderStatsTab()}
       {activeTab === 'management' && renderManagementTab()}

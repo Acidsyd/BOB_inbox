@@ -151,6 +151,14 @@ class CampaignScheduler {
       // Jitter can push time backwards, potentially outside business hours
       jitteredTime = this.moveToNextValidSendingWindow(jitteredTime);
 
+      // CRITICAL FIX: Ensure jittered time is never in the past
+      // If jitter moved time backwards past "now", advance to next valid window
+      const now = new Date();
+      if (jitteredTime < now) {
+        // Start from "now" and find next valid sending window
+        jitteredTime = this.moveToNextValidSendingWindow(now);
+      }
+
       // Schedule the email
       schedules.push({
         lead,

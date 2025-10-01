@@ -358,10 +358,44 @@ Per-timezone business hours are configured in `TimezoneService.BUSINESS_HOURS`:
 - **No migration required**: System handles both formats transparently
 - **Future data**: Will be stored in proper UTC format
 
+### Historical Data Migration (October 2025)
+**Problem**: Old timestamps (before Oct 1, 2025) were stored in Europe/Rome local time without timezone indicators, causing incorrect display after frontend timezone fixes.
+
+**Migration Applied**: Full database migration to convert all old Rome timestamps to UTC
+- **Script**: `scripts/migrate-timestamps-to-utc.cjs`
+- **Tables migrated**:
+  - `conversation_messages`: 1,926 rows (sent_at, received_at, created_at)
+  - `conversations`: 462 rows (last_activity, created_at, updated_at)
+  - `scheduled_emails`: 612 rows (send_at, sent_at, created_at, updated_at)
+  - `campaigns`: 9 rows (all timestamp columns)
+  - `oauth2_tokens`: 9 rows (created_at, updated_at)
+  - `system_health`: 1 row (last_heartbeat, created_at, updated_at)
+- **Total rows updated**: 3,019
+- **Logic**:
+  - Old timestamps (before Oct 1, 2025): Subtract 2 hours (CEST offset) to convert Rome → UTC
+  - Recent timestamps (Oct 1, 2025+): Preserved as-is (already UTC)
+  - Format: Converted to ISO 8601 with milliseconds and Z suffix
+
+**Migration Command**:
+```bash
+# Dry run (preview changes)
+node scripts/migrate-timestamps-to-utc.cjs
+
+# Apply migration
+DRY_RUN=false node scripts/migrate-timestamps-to-utc.cjs
+```
+
+**Result**:
+- ✅ All historical data now in proper UTC format
+- ✅ Consistent timestamp display across all dates
+- ✅ No double conversion issues
+- ✅ Frontend correctly displays Rome time (UTC+2)
+
 ### Deployment Considerations
 - **No breaking changes**: Backward compatibility maintained
 - **Immediate effect**: Timezone display fixes apply immediately
-- **Database**: No schema changes required
+- **Database**: Migration applied October 2025 for historical data
+- **Future data**: Automatically stored in proper UTC format via .toISOString()
 
 ## Debugging Timezone Issues
 

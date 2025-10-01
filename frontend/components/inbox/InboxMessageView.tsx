@@ -403,42 +403,43 @@ export function InboxMessageView({
   }
 
 
-  // Use timezone-aware formatting - backend already converts timestamps to user timezone
+  // Use timezone-aware formatting from frontend context
   const formatMessageDate = (message: Message) => {
     const timestamp = message.sent_at || message.received_at
     if (!timestamp) return 'Unknown'
 
-    // Backend already converts timestamps to user timezone, so just format without converting
-    const dateObj = new Date(timestamp)
-    if (isNaN(dateObj.getTime())) return 'Invalid date'
-
-    return dateObj.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    })
+    // Use frontend timezone formatting for consistency
+    return formatDateInTimezone(timestamp, 'MMM d, yyyy h:mm a')
   }
 
   const renderMessageContent = (message: Message) => {
     if (message.content_html) {
-      // Sanitize HTML: remove scripts AND tracking pixels to prevent self-tracking
+      // Sanitize HTML: remove scripts, global styles (but keep inline styles for formatting)
       const sanitizedHtml = message.content_html
         .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // Remove scripts
-      
+        .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '') // Remove style tags (global CSS)
+        .replace(/<link\b[^>]*>/gi, '') // Remove external stylesheet links
+
       const cleanedHtml = stripTrackingElements(sanitizedHtml) // Remove tracking pixels/links
-      
+
       return (
-        <div 
-          className="prose prose-sm max-w-none"
-          dangerouslySetInnerHTML={{ __html: cleanedHtml }} 
+        <div
+          className="email-content text-sm leading-relaxed text-gray-900"
+          style={{
+            color: '#111827',
+            lineHeight: '1.6',
+            isolation: 'isolate',
+            contain: 'layout style paint',
+            position: 'relative',
+            zIndex: 1,
+            backgroundColor: '#ffffff'
+          }}
+          dangerouslySetInnerHTML={{ __html: cleanedHtml }}
         />
       )
     }
     return (
-      <div className="whitespace-pre-wrap text-sm text-gray-700">
+      <div className="whitespace-pre-wrap text-sm text-gray-900 leading-relaxed">
         {message.content_plain || 'No content'}
       </div>
     )
@@ -534,9 +535,9 @@ export function InboxMessageView({
   }
 
   return (
-    <div className="h-full flex flex-col relative bg-white">
+    <div className="h-full flex flex-col relative bg-gray-50">
       {/* Client-Focused Header */}
-      <div className="border-b px-4 py-4 bg-white">
+      <div className="border-b px-4 py-4 bg-white shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex-1 min-w-0">
             {/* Client Name - Big */}
@@ -591,10 +592,7 @@ export function InboxMessageView({
       </div>
 
       {/* Messages */}
-      <div className={cn(
-        "overflow-y-auto px-4 py-2",
-        isReplying ? "flex-1" : "flex-1"
-      )}>
+      <div className="flex-1 overflow-y-auto px-4 py-4" style={{ backgroundColor: '#f9fafb' }}>
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
@@ -615,44 +613,44 @@ export function InboxMessageView({
             </div>
           </div>
         ) : (
-          <div className="space-y-2 max-w-4xl">
+          <div className="space-y-3 pb-4">
             {messages?.map((message) => (
-              <div 
-                key={message.id} 
+              <div
+                key={message.id}
                 className={cn(
-                  "border rounded-md shadow-sm transition-all duration-200",
+                  "border rounded-lg shadow-sm transition-all duration-200",
                   expandedMessages.has(message.id) && "ring-2 ring-blue-500 shadow-md",
-                  message.direction === 'sent' 
+                  message.direction === 'sent'
                     ? expandedMessages.has(message.id)
-                      ? "bg-gray-50 border-gray-200" 
+                      ? "bg-white border-gray-300"
                       : "bg-gray-50/50 border-gray-100"
                     : expandedMessages.has(message.id)
-                      ? "bg-gray-50 border-gray-200"
+                      ? "bg-white border-gray-300"
                       : "bg-white border-gray-200"
                 )}
               >
                 {/* Compact Message Header with Enhanced Selection Indicator */}
-                <div 
+                <div
                   className={cn(
-                    "p-3 cursor-pointer transition-all duration-200 relative",
-                    expandedMessages.has(message.id) && "bg-gradient-to-r from-gray-100 to-transparent",
-                    message.direction === 'sent' 
-                      ? "hover:bg-gray-100" 
+                    "p-3 cursor-pointer transition-all duration-200 relative bg-white",
+                    expandedMessages.has(message.id) && "border-b border-gray-200",
+                    message.direction === 'sent'
+                      ? "hover:bg-gray-50"
                       : "hover:bg-gray-50"
                   )}
                   onClick={() => toggleMessage(message.id)}
                 >
                   {/* Selection indicator bar */}
                   {expandedMessages.has(message.id) && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 rounded-r-full" />
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600 rounded-r-full" />
                   )}
                   <div className="flex items-start gap-2">
                     <div className={cn(
-                      "w-6 h-6 rounded-full flex items-center justify-center text-white font-medium text-xs flex-shrink-0 mt-0.5 transition-all duration-200",
-                      expandedMessages.has(message.id) && "ring-2 ring-white ring-offset-2 ring-offset-blue-100 scale-110",
-                      message.direction === 'sent' 
-                        ? expandedMessages.has(message.id) 
-                          ? "bg-blue-600" 
+                      "w-8 h-8 rounded-full flex items-center justify-center text-white font-medium text-xs flex-shrink-0 mt-0.5 transition-all duration-200",
+                      expandedMessages.has(message.id) && "ring-2 ring-blue-500",
+                      message.direction === 'sent'
+                        ? expandedMessages.has(message.id)
+                          ? "bg-blue-600"
                           : "bg-blue-500"
                         : expandedMessages.has(message.id)
                           ? "bg-gray-700"
@@ -700,19 +698,19 @@ export function InboxMessageView({
                       </div>
                       
                       {!expandedMessages.has(message.id) && (
-                        <div className="text-xs text-gray-500 truncate">
+                        <div className="text-xs text-gray-600 truncate">
                           {message.content_plain?.substring(0, 80)}...
                         </div>
                       )}
-                      
+
                       {expandedMessages.has(message.id) && (
-                        <div className="text-xs text-gray-600 mt-1 space-y-0.5">
+                        <div className="text-xs text-gray-700 mt-1 space-y-0.5">
                           <div className="flex items-center gap-1">
-                            <span className="font-medium text-gray-700 min-w-[35px]">From:</span>
+                            <span className="font-semibold text-gray-800 min-w-[35px]">From:</span>
                             <span className="truncate">{message.from_email || 'Unknown sender'}</span>
                           </div>
                           <div className="flex items-center gap-1">
-                            <span className="font-medium text-gray-700 min-w-[35px]">To:</span>
+                            <span className="font-semibold text-gray-800 min-w-[35px]">To:</span>
                             <span className="break-all">{message.to_email || 'Unknown recipient'}</span>
                           </div>
                         </div>
@@ -721,21 +719,21 @@ export function InboxMessageView({
                   </div>
                 </div>
 
-                {/* Compact Message Content */}
+                {/* Message Content - Always fully visible */}
                 {expandedMessages.has(message.id) && (
                   <>
-                    <Separator />
-                    <div className="p-3">
-                      <div className="text-sm">
+                    <Separator className="bg-gray-200" />
+                    <div className="p-4 bg-white opacity-100">
+                      <div className="text-sm text-gray-900 leading-relaxed opacity-100">
                         {renderMessageContent(message)}
                       </div>
-                      
-                      <div className="flex items-center gap-2 mt-3 pt-2 border-t">
+
+                      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-200">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={handleStartReply}
-                          className="h-7 px-3 text-xs hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700"
+                          className="h-8 px-3 text-xs hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700"
                         >
                           <Reply className="h-3 w-3 mr-1" />
                           Reply

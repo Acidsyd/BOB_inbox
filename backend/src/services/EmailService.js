@@ -398,7 +398,7 @@ class EmailService {
         from: accountId,
         to: to,
         subject: subject,
-        timestamp: toLocalTimestamp()
+        timestamp: new Date().toISOString()
       };
     }
   }
@@ -489,7 +489,7 @@ class EmailService {
         from: account.email,
         to: to,
         subject: subject,
-        timestamp: toLocalTimestamp(),
+        timestamp: new Date().toISOString(),
         provider: 'smtp'
       };
 
@@ -507,7 +507,7 @@ class EmailService {
         from: account.email,
         to: to,
         subject: subject,
-        timestamp: toLocalTimestamp()
+        timestamp: new Date().toISOString()
       };
     }
   }

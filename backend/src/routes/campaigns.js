@@ -16,16 +16,42 @@ const emailService = new EmailService();
 function formatCampaignDate(date, timezone = 'UTC', format = 'MMM d, yyyy h:mm a') {
   if (!date) return null;
 
-  // Convert format string to Intl.DateTimeFormat options (without timeZone property)
+  // Convert string dates to Date objects
+  let dateObj;
+  if (date instanceof Date) {
+    dateObj = date;
+  } else {
+    const dateStr = date.toString();
+    // Handle timestamps without timezone suffix
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/) && !dateStr.endsWith('Z')) {
+      dateObj = new Date(dateStr + 'Z');
+    } else {
+      dateObj = new Date(dateStr);
+    }
+  }
+
+  // For yyyy-MM-dd format, we need to extract the date parts in the target timezone
+  if (format === 'yyyy-MM-dd') {
+    try {
+      const tzDate = new Date(dateObj.toLocaleString('en-US', { timeZone: timezone }));
+      const year = tzDate.getFullYear();
+      const month = String(tzDate.getMonth() + 1).padStart(2, '0');
+      const day = String(tzDate.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch (error) {
+      console.error('Error formatting date to yyyy-MM-dd:', error);
+      // Fallback to UTC
+      const year = dateObj.getUTCFullYear();
+      const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  }
+
+  // For other formats, use TimezoneService
   let options = {};
 
-  if (format === 'yyyy-MM-dd') {
-    options = {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    };
-  } else if (format === 'MMM d') {
+  if (format === 'MMM d') {
     options = {
       month: 'short',
       day: 'numeric'
@@ -82,53 +108,47 @@ const getLeadCount = async (leadListId, organizationId) => {
 // Helper function to get campaign metrics from scheduled_emails table and bounce tracking
 const getCampaignMetrics = async (campaignId, organizationId) => {
   try {
-    // Get all scheduled emails for this campaign (skip bounce stats for now)
-    const { data: scheduledEmails, error } = await supabase
+    // Use COUNT queries to avoid 1000-row limit and improve performance
+    const { count: deliveredCount } = await supabase
       .from('scheduled_emails')
-      .select('status, sent_at, error_message')
+      .select('*', { count: 'exact', head: true })
       .eq('campaign_id', campaignId)
-      .eq('organization_id', organizationId);
-      
-    if (error) {
-      console.error('❌ Error fetching campaign metrics:', error);
-      return {
-        sent: 0,
-        delivered: 0,
-        opened: 0,
-        clicked: 0,
-        replied: 0,
-        bounced: 0,
-        failed: 0,
-        openRate: 0,
-        clickRate: 0,
-        replyRate: 0,
-        bounceRate: 0,
-        hardBounces: 0,
-        softBounces: 0
-      };
-    }
+      .eq('organization_id', organizationId)
+      .eq('status', 'sent');
 
-    // Calculate metrics from scheduled emails
-    // Count bounces first: either status='bounced' OR status='failed' with bounce in error message
-    const bounced = scheduledEmails.filter(email => 
-      email.status === 'bounced' || 
-      (email.status === 'failed' && email.error_message && 
-       (email.error_message.toLowerCase().includes('bounce') || 
-        email.error_message.toLowerCase().includes('domain') ||
-        email.error_message.toLowerCase().includes('nxdomain')))
-    ).length;
-    
-    // Successfully sent emails (delivered)
-    const delivered = scheduledEmails.filter(email => email.status === 'sent').length;
-    
+    // Count bounced emails (status='bounced')
+    const { count: bouncedStatusCount } = await supabase
+      .from('scheduled_emails')
+      .select('*', { count: 'exact', head: true })
+      .eq('campaign_id', campaignId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'bounced');
+
+    // Count failed emails with bounce-related error messages
+    const { data: failedEmails } = await supabase
+      .from('scheduled_emails')
+      .select('error_message')
+      .eq('campaign_id', campaignId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'failed');
+
+    // Filter failed emails that are actually bounces
+    const bounceRelatedFailed = (failedEmails || []).filter(e => {
+      const msg = (e.error_message || '').toLowerCase();
+      return msg.includes('bounce') ||
+             msg.includes('domain') ||
+             msg.includes('nxdomain') ||
+             msg.includes('mailbox') ||
+             msg.includes('recipient') ||
+             msg.includes('inesistente');
+    }).length;
+
+    const delivered = deliveredCount || 0;
+    const bounced = (bouncedStatusCount || 0) + bounceRelatedFailed;
+    const failed = (failedEmails?.length || 0) - bounceRelatedFailed; // Non-bounce failures
+
     // Total attempted includes both delivered and bounced
     const sent = delivered + bounced;
-    
-    // Failed emails (non-bounce failures)
-    const failed = scheduledEmails.filter(email => 
-      email.status === 'failed' && 
-      (!email.error_message || !email.error_message.toLowerCase().includes('bounce'))
-    ).length;
     
     // Get bounce breakdown from email_bounces table if available
     let hardBounces = 0;
@@ -446,9 +466,12 @@ router.get('/', authenticateToken, async (req, res) => {
 
     console.log(`📊 Found ${userCampaigns?.length || 0} campaigns for organization ${req.user.organizationId}`);
 
-    // PERFORMANCE OPTIMIZATION: Return campaigns with basic data only
-    // Individual metrics will be fetched on-demand when viewing specific campaign
-    const expandedCampaigns = (userCampaigns || []).map(campaign => {
+    // Load metrics for each campaign
+    const expandedCampaigns = await Promise.all((userCampaigns || []).map(async campaign => {
+      // Get actual lead count and metrics for this campaign
+      const actualLeadCount = await getLeadCount(campaign.config?.leadListId, req.user.organizationId);
+      const metrics = await getCampaignMetrics(campaign.id, req.user.organizationId);
+
       const expanded = {
         id: campaign.id,
         name: campaign.name,
@@ -463,26 +486,26 @@ router.get('/', authenticateToken, async (req, res) => {
         type: campaign.config?.type || 'outbound',
         // Keep original config for reference
         _config: campaign.config,
-        // Set default metrics (will be loaded on demand)
-        leads: 0,
-        sent: 0,
-        delivered: 0,
-        opened: 0,
-        clicked: 0,
-        replied: 0,
-        bounced: 0,
-        openRate: 0,
-        clickRate: 0,
-        replyRate: 0,
-        bounceRate: 0
+        // Add real metrics
+        leads: actualLeadCount,
+        sent: metrics.sent,
+        delivered: metrics.delivered,
+        opened: metrics.opened,
+        clicked: metrics.clicked,
+        replied: metrics.replied,
+        bounced: metrics.bounced,
+        openRate: metrics.openRate,
+        clickRate: metrics.clickRate,
+        replyRate: metrics.replyRate,
+        bounceRate: metrics.bounceRate
       };
-      
-      console.log(`📊 Campaign ${campaign.name}: metrics will load on demand`);
-      
-      return expanded;
-    });
 
-    console.log(`⚡ OPTIMIZED: Returned ${expandedCampaigns.length} campaigns in minimal time (no individual DB calls)`);
+      console.log(`📊 Campaign ${campaign.name}: ${actualLeadCount} leads, ${metrics.sent} sent, ${metrics.opened} opened`);
+
+      return expanded;
+    }));
+
+    console.log(`✅ Returned ${expandedCampaigns.length} campaigns with real metrics`);
 
     res.json({
       success: true,
@@ -818,7 +841,7 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
       .from('campaigns')
       .update({ 
         status: 'active',
-        updated_at: toLocalTimestamp()
+        updated_at: new Date().toISOString()
       })
       .eq('id', campaignId)
       .eq('organization_id', req.user.organizationId)
@@ -1188,7 +1211,7 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
       emailsScheduled: scheduledEmails.length,
       firstEmailAt: scheduledEmails[0]?.send_at,
       lastEmailAt: scheduledEmails[scheduledEmails.length - 1]?.send_at,
-      startedAt: toLocalTimestamp(),
+      startedAt: new Date().toISOString(),
       campaign: expandedCampaign
     });
 
@@ -1266,7 +1289,7 @@ router.post('/:id/pause', authenticateToken, async (req, res) => {
       .from('campaigns')
       .update({ 
         status: 'paused',
-        updated_at: toLocalTimestamp()
+        updated_at: new Date().toISOString()
       })
       .eq('id', campaignId)
       .eq('organization_id', organizationId)
@@ -1297,7 +1320,7 @@ router.post('/:id/pause', authenticateToken, async (req, res) => {
       campaignId: campaignId,
       status: 'paused',
       message: 'Campaign paused successfully',
-      pausedAt: toLocalTimestamp()
+      pausedAt: new Date().toISOString()
     });
 
   } catch (error) {
@@ -1351,7 +1374,7 @@ router.post('/:id/stop', authenticateToken, async (req, res) => {
       .from('campaigns')
       .update({ 
         status: 'stopped',
-        updated_at: toLocalTimestamp()
+        updated_at: new Date().toISOString()
       })
       .eq('id', campaignId)
       .eq('organization_id', organizationId)
@@ -1380,7 +1403,7 @@ router.post('/:id/stop', authenticateToken, async (req, res) => {
       .from('scheduled_emails')
       .update({ 
         status: 'skipped',
-        updated_at: toLocalTimestamp()
+        updated_at: new Date().toISOString()
       })
       .eq('campaign_id', campaignId)
       .eq('organization_id', organizationId)
@@ -1401,7 +1424,7 @@ router.post('/:id/stop', authenticateToken, async (req, res) => {
       campaignId: campaignId,
       status: 'completed',
       message: 'Campaign stopped successfully',
-      stoppedAt: toLocalTimestamp(),
+      stoppedAt: new Date().toISOString(),
       cancelledEmails: cancelledEmails?.length || 0
     });
 
@@ -1523,6 +1546,28 @@ router.get('/:id/daily-stats', authenticateToken, async (req, res) => {
     const campaignId = req.params.id;
     const organizationId = req.user.organizationId;
 
+    console.log(`📊 Fetching daily stats for campaign ${campaignId}, org ${organizationId}`);
+
+    // First, let's check ALL emails for this campaign to see what statuses exist
+    const { data: allEmails, error: allError } = await supabase
+      .from('scheduled_emails')
+      .select('status, sent_at, created_at')
+      .eq('campaign_id', campaignId)
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (allEmails && allEmails.length > 0) {
+      const statusCounts = {};
+      allEmails.forEach(e => {
+        statusCounts[e.status] = (statusCounts[e.status] || 0) + 1;
+      });
+      console.log('📧 Sample statuses in scheduled_emails:', statusCounts);
+      console.log('📧 Sample email:', allEmails[0]);
+    } else {
+      console.log('⚠️ NO emails found in scheduled_emails for this campaign!');
+    }
+
     // Get daily email sending stats for the last 30 days (sent emails)
     const { data: emailStats, error: emailError } = await supabase
       .from('scheduled_emails')
@@ -1542,6 +1587,12 @@ router.get('/:id/daily-stats', authenticateToken, async (req, res) => {
         success: false,
         error: 'Failed to fetch email stats'
       });
+    }
+
+    console.log(`📧 Found ${emailStats?.length || 0} sent emails in last 30 days`);
+    if (emailStats && emailStats.length > 0) {
+      console.log(`📧 First sent email: ${emailStats[0].sent_at}`);
+      console.log(`📧 Last sent email: ${emailStats[emailStats.length - 1].sent_at}`);
     }
 
     // Get daily bounce stats for the last 30 days
@@ -1638,6 +1689,13 @@ router.get('/:id/daily-stats', authenticateToken, async (req, res) => {
         replies: repliesByDate[dateStr] || 0
       });
     }
+
+    // Log summary
+    const totalSent = Object.values(emailsByDate).reduce((a, b) => a + b, 0);
+    const totalBounces = Object.values(bouncesByDate).reduce((a, b) => a + b, 0);
+    const totalReplies = Object.values(repliesByDate).reduce((a, b) => a + b, 0);
+    console.log(`📊 Stats summary - Sent: ${totalSent}, Bounces: ${totalBounces}, Replies: ${totalReplies}`);
+    console.log(`📊 Returning ${stats.length} days of stats`);
 
     res.json({
       success: true,
@@ -1857,7 +1915,7 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
       .from('scheduled_emails')
       .update({ 
         status: 'skipped', 
-        updated_at: toLocalTimestamp(),
+        updated_at: new Date().toISOString(),
         error_message: 'Campaign restarted - rescheduling'
       })
       .eq('campaign_id', campaignId)
@@ -2045,7 +2103,7 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
       emailsCancelled: cancelledEmails?.length || 0,
       firstEmailAt: leadSchedules[0]?.sendAt,
       lastEmailAt: leadSchedules[leadSchedules.length - 1]?.sendAt,
-      restartedAt: toLocalTimestamp()
+      restartedAt: new Date().toISOString()
     });
 
   } catch (error) {
@@ -2276,7 +2334,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         name: name,
         description: description,
         config: campaignConfig,
-        updated_at: toLocalTimestamp()
+        updated_at: new Date().toISOString()
       })
       .eq('id', campaignId)
       .eq('organization_id', organizationId)

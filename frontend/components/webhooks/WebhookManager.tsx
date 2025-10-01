@@ -19,9 +19,11 @@ import {
   AlertCircle,
   Copy,
   Eye,
-  EyeOff
+  EyeOff,
+  Send
 } from 'lucide-react'
 import { useToast } from '../ui/toast'
+import { api } from '../../lib/api'
 
 interface WebhookConfig {
   id: string
@@ -79,15 +81,8 @@ export default function WebhookManager() {
 
   const fetchWebhooks = async () => {
     try {
-      const response = await fetch('/api/webhooks', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setWebhooks(data)
-      }
+      const response = await api.get('/webhooks')
+      setWebhooks(response.data)
     } catch (error) {
       console.error('Failed to fetch webhooks:', error)
     }
@@ -95,15 +90,8 @@ export default function WebhookManager() {
 
   const fetchDeliveries = async () => {
     try {
-      const response = await fetch('/api/webhooks/deliveries', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setDeliveries(data)
-      }
+      const response = await api.get('/webhooks/deliveries')
+      setDeliveries(response.data)
     } catch (error) {
       console.error('Failed to fetch deliveries:', error)
     }
@@ -113,31 +101,23 @@ export default function WebhookManager() {
     e.preventDefault()
 
     try {
-      const url = selectedWebhook ? `/api/webhooks/${selectedWebhook.id}` : '/api/webhooks'
-      const method = selectedWebhook ? 'PUT' : 'POST'
+      const webhookData = { ...formData, is_active: true }
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ ...formData, is_active: true })
-      })
-
-      if (response.ok) {
-        addToast({
-          title: selectedWebhook ? 'Webhook updated' : 'Webhook created',
-          description: 'Your webhook configuration has been saved.',
-          type: 'success'
-        })
-        setIsCreateOpen(false)
-        setIsEditOpen(false)
-        resetForm()
-        fetchWebhooks()
+      if (selectedWebhook) {
+        await api.put(`/webhooks/${selectedWebhook.id}`, webhookData)
       } else {
-        throw new Error('Failed to save webhook')
+        await api.post('/webhooks', webhookData)
       }
+
+      addToast({
+        title: selectedWebhook ? 'Webhook updated' : 'Webhook created',
+        description: 'Your webhook configuration has been saved.',
+        type: 'success'
+      })
+      setIsCreateOpen(false)
+      setIsEditOpen(false)
+      resetForm()
+      fetchWebhooks()
     } catch (error) {
       addToast({
         title: 'Error',
@@ -151,25 +131,48 @@ export default function WebhookManager() {
     if (!confirm('Are you sure you want to delete this webhook?')) return
 
     try {
-      const response = await fetch(`/api/webhooks/${webhookId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+      await api.delete(`/webhooks/${webhookId}`)
+      addToast({
+        title: 'Webhook deleted',
+        description: 'The webhook has been removed.',
+        type: 'success'
       })
-
-      if (response.ok) {
-        addToast({
-          title: 'Webhook deleted',
-          description: 'The webhook has been removed.',
-          type: 'success'
-        })
-        fetchWebhooks()
-      }
+      fetchWebhooks()
     } catch (error) {
       addToast({
         title: 'Error',
         description: 'Failed to delete webhook.',
+        type: 'error'
+      })
+    }
+  }
+
+  const handleTest = async (webhookId?: string) => {
+    try {
+      if (webhookId) {
+        // Test existing webhook
+        await api.post(`/webhooks/${webhookId}/test`)
+      } else {
+        // Test current form data (for new webhooks)
+        const testData = {
+          url: formData.url,
+          secret: formData.secret,
+          events: formData.events
+        }
+        await api.post('/webhooks/test', testData)
+      }
+
+      addToast({
+        title: 'Test webhook sent',
+        description: 'A test payload has been sent to your webhook endpoint.',
+        type: 'success'
+      })
+      // Refresh deliveries to show the test delivery
+      fetchDeliveries()
+    } catch (error) {
+      addToast({
+        title: 'Error',
+        description: 'Failed to send test webhook.',
         type: 'error'
       })
     }
@@ -296,22 +299,52 @@ export default function WebhookManager() {
         </div>
 
 
-        <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setIsCreateOpen(false)
-              setIsEditOpen(false)
-              resetForm()
-            }}
-            className="px-8 py-2.5 h-11 font-medium hover:bg-gray-50"
-          >
-            Cancel
-          </Button>
-          <Button type="submit" className="px-8 py-2.5 h-11 font-medium bg-blue-600 hover:bg-blue-700">
-            {selectedWebhook ? 'Update' : 'Create'} Webhook
-          </Button>
+        <div className="flex justify-between items-center pt-6 border-t border-gray-200">
+          <div>
+            {/* Show test button for existing webhooks */}
+            {selectedWebhook && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleTest(selectedWebhook.id)}
+                className="px-6 py-2.5 h-11 font-medium text-blue-600 border-blue-600 hover:bg-blue-50"
+              >
+                <Send className="h-4 w-4 mr-2" />
+                Send Test
+              </Button>
+            )}
+          </div>
+          <div className="flex space-x-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsCreateOpen(false)
+                setIsEditOpen(false)
+                resetForm()
+              }}
+              className="px-8 py-2.5 h-11 font-medium hover:bg-gray-50"
+            >
+              Cancel
+            </Button>
+
+            {/* Test button for new webhooks - shown only when creating */}
+            {!selectedWebhook && formData.url && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleTest()}
+                className="px-6 py-2.5 h-11 font-medium text-blue-600 border-blue-600 hover:bg-blue-50"
+              >
+                <Send className="h-4 w-4 mr-2" />
+                Test
+              </Button>
+            )}
+
+            <Button type="submit" className="px-8 py-2.5 h-11 font-medium bg-blue-600 hover:bg-blue-700">
+              {selectedWebhook ? 'Update' : 'Create'} Webhook
+            </Button>
+          </div>
         </div>
       </form>
     </div>
@@ -382,6 +415,7 @@ export default function WebhookManager() {
                         variant="ghost"
                         size="sm"
                         onClick={() => openEditDialog(webhook)}
+                        title="Edit webhook"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -389,6 +423,7 @@ export default function WebhookManager() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleDelete(webhook.id)}
+                        title="Delete webhook"
                       >
                         <Trash2 className="h-4 w-4 text-red-600" />
                       </Button>

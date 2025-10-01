@@ -591,7 +591,7 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
         subject: emailData.subject,
         content_html: emailData.html, // Store the rich HTML content
         content_plain: emailData.text, // Store the derived plain text content
-        sent_at: new Date().toLocaleString('sv-SE').replace(' ', 'T') + 'Z', // Store local time as ISO format
+        sent_at: new Date().toISOString(), // Store UTC timestamp with milliseconds
         in_reply_to: threadingReference?.message_id_header, // Critical for threading
         message_references: threadingReference?.message_references || threadingReference?.message_id_header,
         organization_id: organizationId
@@ -1254,13 +1254,20 @@ router.get('/folders/:type/conversations', authenticateToken, async (req, res) =
       hasLabelIds: !!req.query.labelIds,
       labelIds: req.query.labelIds
     });
-    const { 
+    const {
       limit = 50,
       offset = 0,
       search = null,
       unreadOnly = false,
-      labelIds = null
+      labelIds = null,
+      timezone
     } = req.query;
+
+    // Clean up timezone parameter - ignore if null, undefined, or string versions
+    // Default to 'Europe/Rome' for conversation view timezone consistency
+    const cleanTimezone = (timezone && timezone !== 'null' && timezone !== 'undefined' && timezone !== null && timezone !== undefined) ? timezone : 'Europe/Rome';
+
+    console.log(`🔍 FOLDERS API: raw timezone = "${timezone}", cleaned timezone = "${cleanTimezone}"`);
 
     // Process labelIds parameter (can be single value or array)
     let processedLabelIds = null;
@@ -1279,14 +1286,15 @@ router.get('/folders/:type/conversations', authenticateToken, async (req, res) =
     }
 
     const conversations = await folderService.getConversationsForFolder(
-      organizationId, 
-      folderType, 
+      organizationId,
+      folderType,
       {
         limit: parseInt(limit),
         offset: parseInt(offset),
         search,
         unreadOnly: unreadOnly === 'true',
-        labelIds: processedLabelIds
+        labelIds: processedLabelIds,
+        timezone: cleanTimezone
       }
     );
 

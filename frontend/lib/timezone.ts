@@ -116,7 +116,8 @@ export function formatDateInTimezone(
       const dateStr = date.toString();
       // CRITICAL FIX: Ensure UTC interpretation for timestamps without timezone
       // Backend sends timestamps like "2025-09-22T07:00:00" which should be treated as UTC
-      if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?$/) && !dateStr.endsWith('Z')) {
+      // Support variable decimal precision: .1, .12, .123, etc.
+      if (dateStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/) && !dateStr.endsWith('Z')) {
         // Add Z suffix to force UTC interpretation
         dateObj = new Date(dateStr + 'Z');
       } else {

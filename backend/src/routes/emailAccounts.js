@@ -711,4 +711,80 @@ router.put('/bulk-update-limits', authenticateToken, async (req, res) => {
   }
 });
 
+// PUT /api/email-accounts/:id/webhook-assignments - Update webhook assignments for an account
+router.put('/:id/webhook-assignments', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assigned_webhooks } = req.body;
+
+    console.log(`🔗 Updating webhook assignments for account ${id}`);
+
+    // Validate webhook IDs array
+    if (assigned_webhooks !== null && assigned_webhooks !== undefined) {
+      if (!Array.isArray(assigned_webhooks)) {
+        return res.status(400).json({
+          success: false,
+          error: 'assigned_webhooks must be an array or null'
+        });
+      }
+
+      // Validate that all provided webhook IDs exist and belong to the organization
+      if (assigned_webhooks.length > 0) {
+        const { data: webhooks, error: webhookError } = await supabase
+          .from('webhooks')
+          .select('id')
+          .in('id', assigned_webhooks)
+          .eq('organization_id', req.user.organizationId);
+
+        if (webhookError) {
+          console.error('❌ Error validating webhooks:', webhookError);
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to validate webhook assignments'
+          });
+        }
+
+        if (webhooks.length !== assigned_webhooks.length) {
+          return res.status(400).json({
+            success: false,
+            error: 'One or more webhook IDs are invalid'
+          });
+        }
+      }
+    }
+
+    // Update email account with webhook assignments
+    const { error } = await supabase
+      .from('email_accounts')
+      .update({
+        assigned_webhooks,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .eq('organization_id', req.user.organizationId);
+
+    if (error) {
+      console.error('❌ Error updating webhook assignments:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to update webhook assignments'
+      });
+    }
+
+    console.log(`✅ Webhook assignments updated for account ${id}`);
+    res.json({
+      success: true,
+      message: 'Webhook assignments updated successfully',
+      assigned_webhooks
+    });
+
+  } catch (error) {
+    console.error('❌ Error in PUT /api/email-accounts/:id/webhook-assignments:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update webhook assignments'
+    });
+  }
+});
+
 module.exports = router;

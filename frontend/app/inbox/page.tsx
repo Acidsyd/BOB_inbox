@@ -25,6 +25,7 @@ import { useInbox } from '../../hooks/useInbox'
 import useFolders from '../../hooks/useFolders'
 import { useEmailSync } from '../../hooks/useEmailSync'
 import { useLabels } from '../../hooks/useLabels'
+import { useTimezone } from '../../contexts/TimezoneContext'
 import { 
   Select, 
   SelectContent, 
@@ -61,6 +62,7 @@ function InboxContent() {
   const { getConversationsForFolder, folders, refreshFolders } = useFolders()
   const { onSyncCompleted, triggerManualSync } = useEmailSync()
   const { labels } = useLabels()
+  const { timezone } = useTimezone()
   
   // Local folder state for real-time count updates
   const [localFolders, setLocalFolders] = useState([])
@@ -124,7 +126,8 @@ function InboxContent() {
         offset: offset,
         search: searchQuery || undefined,
         unreadOnly: showUnreadOnly,
-        labelIds: selectedLabelId ? [selectedLabelId] : undefined
+        labelIds: selectedLabelId ? [selectedLabelId] : undefined,
+        timezone: timezone
       })
       
       if (isLoadMore) {

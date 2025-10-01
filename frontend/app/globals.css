@@ -210,8 +210,65 @@ button, a, [role="button"] {
   .pricing-card {
     transform: none !important;
   }
-  
+
   .pricing-card:hover {
     transform: translateY(-4px) !important;
   }
+}
+
+/* Email content isolation - prevent CSS bleeding */
+.email-content {
+  background-color: white !important;
+  isolation: isolate !important;
+  contain: layout style paint !important;
+  position: relative !important;
+  overflow: auto !important;
+}
+
+.email-content * {
+  max-width: 100% !important;
+}
+
+.email-content table {
+  border-collapse: collapse !important;
+  width: auto !important;
+}
+
+.email-content img {
+  max-width: 100% !important;
+  height: auto !important;
+  display: inline-block !important;
+}
+
+.email-content a {
+  text-decoration: underline !important;
+  cursor: pointer !important;
+}
+
+/* Prevent email content from modifying scrollbars */
+.email-content *::-webkit-scrollbar {
+  display: none !important;
+}
+
+.email-content * {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+/* Force default scrollbar styling on parent container */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 8px !important;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #cbd5e1 !important;
+  border-radius: 4px !important;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8 !important;
 }

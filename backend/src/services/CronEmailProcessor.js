@@ -232,7 +232,7 @@ class CronEmailProcessor {
         status: 'failed',
         error: errorMessage,
         attempts: (email.attempts || 0) + 1,
-        updated_at: toLocalTimestamp()
+        updated_at: new Date().toISOString()
       }));
 
       // Use batch update for efficiency
@@ -261,7 +261,7 @@ class CronEmailProcessor {
               status: 'failed',
               error: errorMessage,
               attempts: (email.attempts || 0) + 1,
-              updated_at: toLocalTimestamp()
+              updated_at: new Date().toISOString()
             })
             .eq('id', email.id);
         } catch (dbError) {
@@ -388,7 +388,7 @@ class CronEmailProcessor {
         message_id_header,
         thread_id
       `) // Only select needed columns instead of *
-      .lte('send_at', new Date().toISOString()) // FIXED: Use UTC timestamp instead of toLocalTimestamp()
+      .lte('send_at', new Date().toISOString()) // FIXED: Use UTC timestamp instead of new Date().toISOString()
       .eq('status', 'scheduled')
       .order('send_at', { ascending: true })
       .limit(batchSize);
@@ -955,11 +955,11 @@ class CronEmailProcessor {
   async updateEmailStatus(emailId, status, messageId = null, errorMessage = null, actualMessageId = null, threadId = null) {
     const updateData = {
       status: status,
-      updated_at: toLocalTimestamp()
+      updated_at: new Date().toISOString()
     };
 
     if (status === 'sent') {
-      updateData.sent_at = toLocalTimestamp();
+      updateData.sent_at = new Date().toISOString();
       if (messageId) updateData.message_id = messageId;
       if (actualMessageId) updateData.message_id_header = actualMessageId;
       if (threadId) updateData.thread_id = threadId;
@@ -1042,7 +1042,7 @@ class CronEmailProcessor {
         .update({
           send_at: rescheduleTime.toISOString(),
           status: 'scheduled',
-          updated_at: toLocalTimestamp()
+          updated_at: new Date().toISOString()
         })
         .eq('id', email.id);
 
@@ -1051,7 +1051,7 @@ class CronEmailProcessor {
         throw new Error(`Failed to reschedule email ${email.id}: ${error.message}`);
       }
 
-      console.log(`⏰ Email ${email.id.substring(0, 8)}... rescheduled to ${toLocalTimestamp(rescheduleTime)}`);
+      console.log(`⏰ Email ${email.id.substring(0, 8)}... rescheduled to ${rescheduleTime.toISOString()}`);
     }
 
     console.log(`⏰ Successfully rescheduled batch of ${emails.length} emails`);
@@ -1073,7 +1073,7 @@ class CronEmailProcessor {
           .update({
             send_at: rescheduleTime.toISOString(),
             status: 'scheduled',
-            updated_at: toLocalTimestamp()
+            updated_at: new Date().toISOString()
           })
           .eq('id', email.id);
 
@@ -1172,7 +1172,7 @@ class CronEmailProcessor {
         subject: email.subject,
         content_html: email.content,
         content_plain: (email.content || '').replace(/<[^>]*>/g, ''),
-        sent_at: toLocalTimestamp(),
+        sent_at: new Date().toISOString(),
         campaign_id: email.campaign_id,
         lead_id: email.lead_id,
         scheduled_email_id: email.id,

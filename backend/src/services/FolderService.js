@@ -1,5 +1,6 @@
 // Use centralized Supabase client to avoid connection pool issues
 const supabase = require('../config/supabase');
+const TimezoneService = require('./TimezoneService');
 
 /**
  * FolderService - Gmail-style folder management
@@ -154,7 +155,7 @@ class FolderService {
     return await this.getCachedOrExecute(cacheKey, async () => {
       try {
         console.log('🐛 DEBUG: options received:', JSON.stringify(options));
-        const { limit = 50, offset = 0, search, unreadOnly = false, labelIds = null } = options;
+        const { limit = 50, offset = 0, search, unreadOnly = false, labelIds = null, timezone } = options;
       console.log('🐛 DEBUG: extracted search (NEW VERSION):', search);
       console.log('🐛 DEBUG: unreadOnly filter:', unreadOnly);
       console.log('🐛 DEBUG: labelIds filter (updated):', labelIds);
@@ -538,6 +539,10 @@ class FolderService {
             lead_name,
             // CRITICAL FIX: Add is_read property based on unread_count
             is_read: (conversation.unread_count || 0) === 0,
+            // Convert last_activity_at to user timezone if timezone is provided
+            last_activity_at_display: timezone
+              ? TimezoneService.convertToUserTimezone(conversation.last_activity_at, timezone)
+              : null,
             conversation_label_assignments: undefined, // Remove nested structure
             campaigns: undefined, // Remove nested structure
             leads: undefined // Remove nested structure

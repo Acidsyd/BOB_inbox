@@ -62,23 +62,25 @@ export function useFolders() {
 
   // Get conversations for a specific folder
   const getConversationsForFolder = useCallback(async (
-    folderType: string, 
+    folderType: string,
     options: {
       limit?: number
       offset?: number
       search?: string
       unreadOnly?: boolean
       labelIds?: string[]
+      timezone?: string
     } = {}
   ): Promise<{ conversations: Conversation[], hasMore: boolean }> => {
     try {
       console.log(`📂 Fetching conversations for folder: ${folderType}`)
-      
+
       const params = new URLSearchParams()
       if (options.limit) params.append('limit', options.limit.toString())
       if (options.offset) params.append('offset', options.offset.toString())
       if (options.search) params.append('search', options.search)
       if (options.unreadOnly) params.append('unreadOnly', 'true')
+      if (options.timezone) params.append('timezone', options.timezone)
       if (options.labelIds && options.labelIds.length > 0) {
         // Add each labelId as a separate parameter for backend processing
         options.labelIds.forEach(labelId => params.append('labelIds', labelId))

@@ -173,3 +173,4 @@ package-lock.json
 .mcp.json
 .env.digitalocean
 .do/
+config/.env.production

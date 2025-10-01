@@ -199,7 +199,7 @@ class OAuth2Service {
         .update({
           encrypted_tokens: JSON.stringify(credentials),
           expires_at: new Date(credentials.expiry_date),
-          updated_at: toLocalTimestamp()
+          updated_at: new Date().toISOString()
         })
         .eq('email', userEmail)
         .eq('organization_id', organizationId)
@@ -344,7 +344,7 @@ class OAuth2Service {
         from: fromEmail,
         to: toEmail,
         subject: subject,
-        timestamp: toLocalTimestamp(),
+        timestamp: new Date().toISOString(),
         provider: 'gmail-api'
       };
 
@@ -360,7 +360,7 @@ class OAuth2Service {
         from: fromEmail,
         to: toEmail,
         subject: subject,
-        timestamp: toLocalTimestamp(),
+        timestamp: new Date().toISOString(),
         provider: 'gmail-api',
         bounceInfo: bounceInfo // Add bounce information for caller
       };
@@ -536,8 +536,8 @@ class OAuth2Service {
           expires_at: new Date(tokens.expiry_date),
           scopes: this.scopes,
           status: 'active',
-          created_at: toLocalTimestamp(),
-          updated_at: toLocalTimestamp()
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }, {
           onConflict: 'email,organization_id,provider'
         });
