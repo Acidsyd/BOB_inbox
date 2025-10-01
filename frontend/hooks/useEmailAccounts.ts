@@ -27,6 +27,14 @@ interface EmailAccountResponse {
   rotation_priority: number
   rotation_weight: number
   last_activity: string | null
+  last_sync_at: string | null
+  connection_health: {
+    status: 'healthy' | 'warning' | 'critical' | 'unknown'
+    last_check_at: string | null
+    last_successful_check: string | null
+    consecutive_failures: number
+    error_message: string | null
+  }
   settings: any
   created_at: string
   updated_at: string
@@ -54,6 +62,14 @@ export interface EmailAccount {
   rotation_priority: number
   rotation_weight: number
   lastActivity: string
+  lastSyncAt: string | null
+  connectionHealth: {
+    status: 'healthy' | 'warning' | 'critical' | 'unknown'
+    last_check_at: string | null
+    last_successful_check: string | null
+    consecutive_failures: number
+    error_message: string | null
+  }
   createdAt: string
   warmup_status: 'pending' | 'in_progress' | 'completed' | 'active' | 'warming'
   display_name: string
@@ -116,13 +132,14 @@ interface UseEmailAccountsReturn {
   resetAccountUsage: (accountId: string, resetType?: 'daily' | 'hourly' | 'both') => Promise<boolean>
   getRotationPreview: (strategy?: string) => Promise<RotationPreview[]>
   bulkUpdateLimits: (updates: Array<{ id: string } & AccountSettings>) => Promise<any>
+  testConnection: (accountId: string) => Promise<any>
   isUpdating: boolean
 }
 
 function mapApiResponseToUI(row: EmailAccountResponse): EmailAccount {
   // Use the enhanced data from the API
   const status = (row.status || row.warmup_status) as 'active' | 'warming' | 'paused' | 'error'
-  
+
   return {
     id: row.id,
     email: row.email,
@@ -145,6 +162,14 @@ function mapApiResponseToUI(row: EmailAccountResponse): EmailAccount {
     rotation_priority: row.rotation_priority || 1,
     rotation_weight: row.rotation_weight || 1.0,
     lastActivity: row.last_activity || row.updated_at,
+    lastSyncAt: row.last_sync_at,
+    connectionHealth: row.connection_health || {
+      status: 'unknown',
+      last_check_at: null,
+      last_successful_check: null,
+      consecutive_failures: 0,
+      error_message: null
+    },
     createdAt: row.created_at,
     display_name: row.display_name || row.email
   }
@@ -338,7 +363,7 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
     setIsUpdating(true)
     try {
       const response = await api.put('/email-accounts/bulk-update-limits', { updates })
-      
+
       if (response.data.success || response.data.summary?.successful > 0) {
         // Refresh accounts to get updated data
         await fetchAccounts()
@@ -353,6 +378,28 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
       throw new Error(errorMessage)
     } finally {
       setIsUpdating(false)
+    }
+  }, [user?.organizationId, isAuthenticated, fetchAccounts])
+
+  const testConnection = useCallback(async (accountId: string): Promise<any> => {
+    if (!isAuthenticated || !user?.organizationId) {
+      throw new Error('Not authenticated')
+    }
+
+    try {
+      const response = await api.post(`/email-accounts/${accountId}/test-connection`)
+
+      if (response.data.success) {
+        // Refresh accounts to get updated connection health
+        await fetchAccounts()
+        return response.data.result
+      } else {
+        throw new Error('Connection test failed')
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to test connection'
+      console.error('❌ useEmailAccounts: Error testing connection:', err)
+      throw new Error(errorMessage)
     }
   }, [user?.organizationId, isAuthenticated, fetchAccounts])
 
@@ -374,6 +421,7 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
     resetAccountUsage,
     getRotationPreview,
     bulkUpdateLimits,
+    testConnection,
     isUpdating
   }
 }

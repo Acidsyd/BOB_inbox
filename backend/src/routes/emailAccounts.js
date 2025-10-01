@@ -42,10 +42,17 @@ router.get('/', authenticateToken, async (req, res) => {
       .select('*')
       .eq('organization_id', req.user.organizationId);
 
-    // Also query OAuth2 accounts
+    // Query email_accounts table (for accounts that have been migrated)
+    const { data: emailAccounts, error: emailAccountsError } = await supabase
+      .from('email_accounts')
+      .select('id, email, provider, is_active, health_score, daily_limit, last_sync_at, connection_health, created_at, updated_at')
+      .eq('organization_id', req.user.organizationId)
+      .eq('is_active', true);
+
+    // Also query OAuth2 tokens for linked accounts (legacy/non-migrated accounts)
     const { data: oauth2Accounts, error: oauth2Error } = await supabase
       .from('oauth2_tokens')
-      .select('id, email, provider, created_at, updated_at')
+      .select('id, email, provider, created_at, updated_at, metadata, last_sync_at')
       .eq('organization_id', req.user.organizationId)
       .eq('status', 'linked_to_account');
 
@@ -57,27 +64,107 @@ router.get('/', authenticateToken, async (req, res) => {
       });
     }
 
+    if (oauth2Error) {
+      console.error('❌ Error fetching OAuth2 accounts:', oauth2Error);
+      // Don't fail completely, just log and continue with empty oauth2 accounts
+    }
+
     const accounts = accountsData || [];
-    const oauth2AccountsTransformed = (oauth2Accounts || []).map(oauth2Account => ({
-      id: oauth2Account.id,
-      email: oauth2Account.email,
-      provider: `${oauth2Account.provider}-oauth2`,
-      status: 'active',
-      daily_limit: 50,
-      hourly_limit: 5,
-      health_score: 85,
-      daily_sent: 0,
-      hourly_sent: 0,
-      daily_remaining: 50,
-      hourly_remaining: 5,
-      availability_status: 'available',
-      rotation_priority: 1,
-      rotation_weight: 1.0,
-      created_at: oauth2Account.created_at,
-      updated_at: oauth2Account.updated_at
+
+    // Get today's sent count for each account
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Process email_accounts table entries
+    const emailAccountsEnhanced = await Promise.all((emailAccounts || []).map(async (account) => {
+      // Query actual sent emails today
+      const { count: sentToday } = await supabase
+        .from('scheduled_emails')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', req.user.organizationId)
+        .eq('email_account_id', account.id)
+        .eq('status', 'sent')
+        .gte('sent_at', today.toISOString());
+
+      const dailySent = sentToday || 0;
+      const dailyLimit = account.daily_limit || 50;
+      const hourlyLimit = 5;
+
+      return {
+        id: account.id,
+        email: account.email,
+        provider: account.provider,
+        status: account.is_active ? 'active' : 'paused',
+        daily_limit: dailyLimit,
+        hourly_limit: hourlyLimit,
+        health_score: account.health_score || 100,
+        daily_sent: dailySent,
+        hourly_sent: 0,
+        daily_remaining: Math.max(0, dailyLimit - dailySent),
+        hourly_remaining: hourlyLimit,
+        availability_status: dailySent >= dailyLimit ? 'daily_limit_reached' : 'available',
+        rotation_priority: 1,
+        rotation_weight: 1.0,
+        last_sync_at: account.last_sync_at,
+        connection_health: account.connection_health || {
+          status: 'unknown',
+          last_check_at: null,
+          last_successful_check: null,
+          consecutive_failures: 0,
+          error_message: null
+        },
+        created_at: account.created_at,
+        updated_at: account.updated_at
+      };
     }));
 
-    const allAccounts = [...accounts, ...oauth2AccountsTransformed];
+    // Process OAuth2 accounts (legacy accounts not yet migrated to email_accounts table)
+    const oauth2AccountsEnhanced = await Promise.all((oauth2Accounts || []).map(async (account) => {
+      // Query actual sent emails today using oauth2 token ID
+      const { count: sentToday } = await supabase
+        .from('scheduled_emails')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', req.user.organizationId)
+        .eq('email_account_id', account.id)
+        .eq('status', 'sent')
+        .gte('sent_at', today.toISOString());
+
+      const dailySent = sentToday || 0;
+      const dailyLimit = 50;
+      const hourlyLimit = 5;
+
+      // Extract connection_health from metadata if available
+      const connectionHealth = account.metadata?.connection_health || {
+        status: 'unknown',
+        last_check_at: null,
+        last_successful_check: null,
+        consecutive_failures: 0,
+        error_message: null
+      };
+
+      return {
+        id: account.id,
+        email: account.email,
+        provider: `${account.provider}-oauth2`,
+        status: 'active',
+        daily_limit: dailyLimit,
+        hourly_limit: hourlyLimit,
+        health_score: 100, // Default to 100 for OAuth2 accounts
+        daily_sent: dailySent,
+        hourly_sent: 0,
+        daily_remaining: Math.max(0, dailyLimit - dailySent),
+        hourly_remaining: hourlyLimit,
+        availability_status: dailySent >= dailyLimit ? 'daily_limit_reached' : 'available',
+        rotation_priority: 1,
+        rotation_weight: 1.0,
+        last_sync_at: account.last_sync_at,
+        connection_health: connectionHealth,
+        created_at: account.created_at,
+        updated_at: account.updated_at
+      };
+    }));
+
+    const allAccounts = [...accounts, ...emailAccountsEnhanced, ...oauth2AccountsEnhanced];
 
     // Transform to frontend format
     const transformedAccounts = allAccounts.map(account => {
@@ -100,7 +187,7 @@ router.get('/', authenticateToken, async (req, res) => {
         warmup_status: warmupStatus,
         warmupProgress: account.warmup_progress || 0,
         warmupDaysRemaining: warmupStatus === 'warming' ? Math.max(0, 30 - Math.floor((account.warmup_progress || 0) / 100 * 30)) : 0,
-        reputation: account.health_score >= 90 ? 'excellent' : 
+        reputation: account.health_score >= 90 ? 'excellent' :
                    account.health_score >= 70 ? 'good' : 'fair',
         availability_status: account.availability_status || 'available',
         daily_remaining: account.daily_remaining || account.daily_limit || 50,
@@ -108,6 +195,15 @@ router.get('/', authenticateToken, async (req, res) => {
         rotation_priority: account.rotation_priority || 1,
         rotation_weight: account.rotation_weight || 1.0,
         last_activity: account.last_health_check || account.updated_at,
+        last_sync_at: account.last_sync_at,
+        lastSyncAt: account.last_sync_at, // Frontend expects camelCase
+        connection_health: account.connection_health || {
+          status: 'unknown',
+          last_check_at: null,
+          last_successful_check: null,
+          consecutive_failures: 0,
+          error_message: null
+        },
         settings: {
           sendingRate: account.hourly_limit || 5,
           timezone: 'UTC',
@@ -783,6 +879,110 @@ router.put('/:id/webhook-assignments', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to update webhook assignments'
+    });
+  }
+});
+
+// POST /api/email-accounts/:id/test-connection - Test account connection
+router.post('/:id/test-connection', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log(`🧪 Testing connection for account ${id}`);
+
+    // Try to fetch from email_accounts table first
+    let { data: account, error: fetchError } = await supabase
+      .from('email_accounts')
+      .select('*')
+      .eq('id', id)
+      .eq('organization_id', req.user.organizationId)
+      .single();
+
+    // If not found, try oauth2_tokens table
+    if (fetchError || !account) {
+      const { data: oauth2Account, error: oauth2Error } = await supabase
+        .from('oauth2_tokens')
+        .select('*')
+        .eq('id', id)
+        .eq('organization_id', req.user.organizationId)
+        .eq('status', 'linked_to_account')
+        .single();
+
+      if (oauth2Error || !oauth2Account) {
+        return res.status(404).json({
+          success: false,
+          error: 'Email account not found'
+        });
+      }
+
+      // Convert OAuth2 account to health checker format
+      account = {
+        id: oauth2Account.id,
+        organization_id: oauth2Account.organization_id,
+        email: oauth2Account.email,
+        provider: `${oauth2Account.provider}-oauth2`,
+        is_active: true,
+        connection_health: {
+          consecutive_failures: 0
+        }
+      };
+    }
+
+    // Import health checker and run single account check
+    const { default: EmailAccountHealthChecker } = await import('../services/EmailAccountHealthChecker.js');
+    const checker = new EmailAccountHealthChecker();
+    const result = await checker.checkAccountHealth(account);
+
+    console.log(`✅ Connection test completed for ${account.email}:`, result.status);
+
+    res.json({
+      success: true,
+      result: {
+        status: result.status,
+        email: account.email,
+        provider: account.provider,
+        issues: result.issues,
+        checks: result.checks,
+        checkedAt: result.checkedAt
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error testing connection:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to test connection'
+    });
+  }
+});
+
+// GET /api/email-accounts/health/run-checks - Manually trigger health checks
+router.get('/health/run-checks', authenticateToken, async (req, res) => {
+  try {
+    console.log('🏥 Manual health check triggered');
+
+    const { default: EmailAccountHealthChecker } = await import('../services/EmailAccountHealthChecker.js');
+    const checker = new EmailAccountHealthChecker();
+    const result = await checker.runHealthChecks();
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Health checks completed',
+        results: result.results
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Error running health checks:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to run health checks'
     });
   }
 });
