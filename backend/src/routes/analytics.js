@@ -26,36 +26,48 @@ const authenticateToken = (req, res, next) => {
 
 // Helper function to get date range based on period
 const getDateRange = (period, customStart, customEnd) => {
-  const now = new Date();
   let startDate, endDate;
-  
+
   switch(period) {
     case 'today':
-      startDate = new Date(now.setHours(0, 0, 0, 0));
-      endDate = new Date(now.setHours(23, 59, 59, 999));
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date();
+      endDate.setHours(23, 59, 59, 999);
       break;
     case 'week':
       // Get Monday of current week
+      const now = new Date();
       const day = now.getDay();
       const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-      startDate = new Date(now.setDate(diff));
+      startDate = new Date(now);
+      startDate.setDate(diff);
       startDate.setHours(0, 0, 0, 0);
       endDate = new Date();
       break;
     case 'month':
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      const monthNow = new Date();
+      startDate = new Date(monthNow.getFullYear(), monthNow.getMonth(), 1);
+      endDate = new Date(monthNow.getFullYear(), monthNow.getMonth() + 1, 0, 23, 59, 59, 999);
       break;
     case 'custom':
-      startDate = customStart ? new Date(customStart) : new Date(now.setMonth(now.getMonth() - 1));
-      endDate = customEnd ? new Date(customEnd) : new Date();
+      if (customStart && customEnd) {
+        startDate = new Date(customStart);
+        endDate = new Date(customEnd);
+      } else {
+        // Fallback to last 30 days
+        endDate = new Date();
+        startDate = new Date();
+        startDate.setDate(startDate.getDate() - 30);
+      }
       break;
     default:
       // Default to last 30 days
-      startDate = new Date(now.setDate(now.getDate() - 30));
       endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
   }
-  
+
   return { startDate, endDate };
 };
 
@@ -72,23 +84,90 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
     
     if (campaignsError) throw campaignsError;
 
-    // Get leads stats
-    const { data: leads, error: leadsError } = await supabase
-      .from('leads')
-      .select('id, status, created_at')
-      .eq('organization_id', organizationId);
-    
-    if (leadsError) throw leadsError;
+    // Get full campaign data including config to extract lead_list_id
+    const { data: fullCampaigns, error: fullCampaignsError } = await supabase
+      .from('campaigns')
+      .select('id, config')
+      .eq('organization_id', organizationId)
+      .eq('status', 'active');
+
+    if (fullCampaignsError) throw fullCampaignsError;
+
+    console.log('📊 Active campaigns for lead filtering:', {
+      campaignCount: fullCampaigns?.length || 0,
+      campaigns: fullCampaigns?.map(c => ({ id: c.id, config: c.config }))
+    });
+
+    // Extract lead_list_ids from active campaigns
+    const leadListIds = fullCampaigns
+      .map(c => c.config?.leadListId)
+      .filter(id => id);
+
+    console.log('📊 Lead list IDs from active campaigns:', leadListIds);
+
+    // Get leads count from those lists (use count query to avoid 1000 row limit)
+    let totalLeadsCount = 0;
+    let leads = [];
+    if (leadListIds.length > 0) {
+      // Use count query to get accurate total
+      const { count, error: countError } = await supabase
+        .from('leads')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .in('lead_list_id', leadListIds);
+
+      if (countError) throw countError;
+      totalLeadsCount = count || 0;
+
+      // Still fetch some lead data for status breakdown (limited to 1000 is fine for this)
+      const { data: leadsData, error: leadsError } = await supabase
+        .from('leads')
+        .select('id, status, created_at')
+        .eq('organization_id', organizationId)
+        .in('lead_list_id', leadListIds)
+        .limit(1000);
+
+      if (leadsError) throw leadsError;
+      leads = leadsData || [];
+      console.log('📊 Leads from active campaign lists:', totalLeadsCount, '(fetched', leads.length, 'for analysis)');
+    } else {
+      console.log('⚠️ No active campaigns with lead lists found - leads will be 0');
+    }
 
     // Get email stats from scheduled_emails with period filter
-    const { data: emails, error: emailsError } = await supabase
+    // Query for emails where sent_at falls in the period (for sent emails)
+    // OR send_at falls in the period (for scheduled emails)
+    const { data: sentEmails, error: sentEmailsError } = await supabase
       .from('scheduled_emails')
       .select('id, status, send_at, sent_at, to_email')
       .eq('organization_id', organizationId)
+      .not('sent_at', 'is', null)
+      .gte('sent_at', startDate.toISOString())
+      .lte('sent_at', endDate.toISOString());
+
+    const { data: scheduledEmails, error: scheduledEmailsError } = await supabase
+      .from('scheduled_emails')
+      .select('id, status, send_at, sent_at, to_email')
+      .eq('organization_id', organizationId)
+      .is('sent_at', null)
       .gte('send_at', startDate.toISOString())
       .lte('send_at', endDate.toISOString());
 
-    if (emailsError) throw emailsError;
+    if (sentEmailsError) throw sentEmailsError;
+    if (scheduledEmailsError) throw scheduledEmailsError;
+
+    // Combine both result sets
+    const emails = [...(sentEmails || []), ...(scheduledEmails || [])];
+
+    console.log('📧 Email query results:', {
+      period: { start: startDate.toISOString(), end: endDate.toISOString() },
+      sentEmails: sentEmails?.length || 0,
+      scheduledEmails: scheduledEmails?.length || 0,
+      totalEmails: emails.length,
+      sentWithStatusDelivered: emails.filter(e => e.status === 'sent' || e.status === 'delivered').length,
+      sampleSentEmail: sentEmails?.[0],
+      sampleScheduledEmail: scheduledEmails?.[0]
+    });
 
 
     // Get total sent emails count (for accurate reply rate calculation)
@@ -101,31 +180,23 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
     if (totalSentError) console.error('Error fetching total sent emails:', totalSentError);
 
     // Get total replies count (all time, for accurate reply rate)
-    // Only count replies from campaign conversations, not untracked emails
+    // Count all received messages (both campaign and organic)
     const { data: totalReplies, error: totalRepliesError } = await supabase
       .from('conversation_messages')
-      .select(`
-        id,
-        conversations!inner(conversation_type)
-      `)
+      .select('id')
       .eq('organization_id', organizationId)
       .eq('direction', 'received')
-      .eq('conversations.conversation_type', 'campaign')
       .not('received_at', 'is', null);
 
     if (totalRepliesError) console.error('Error fetching total replies:', totalRepliesError);
 
     // Get replies received in current period (for period-specific metrics)
-    // Only count replies from campaign conversations, not untracked emails
+    // Count all received messages in the period
     const { data: periodReplies, error: periodRepliesError } = await supabase
       .from('conversation_messages')
-      .select(`
-        id, direction, received_at, from_email, to_email,
-        conversations!inner(conversation_type)
-      `)
+      .select('id, direction, received_at, from_email, to_email')
       .eq('organization_id', organizationId)
       .eq('direction', 'received')
-      .eq('conversations.conversation_type', 'campaign')
       .gte('received_at', startDate.toISOString())
       .lte('received_at', endDate.toISOString())
       .not('received_at', 'is', null);
@@ -135,24 +206,26 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
     const replies = periodReplies || [];
 
 
-    // Get label statistics
+    // Get label statistics (fetch all label assignments - not limited)
     const { data: labelAssignments, error: labelError } = await supabase
       .from('conversation_label_assignments')
       .select(`
+        conversation_id,
         label_id,
         conversation_labels!inner(name, color)
       `)
       .eq('organization_id', organizationId);
-    
+
     if (labelError) console.error('Error fetching labels:', labelError);
 
-    // Get conversations without labels
-    const { data: allConversations, error: convError } = await supabase
+    // Get total conversations count (use count query to avoid 1000 limit)
+    const { count: totalConversationsCount, error: convCountError } = await supabase
       .from('conversations')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .eq('organization_id', organizationId);
-    
-    if (convError) console.error('Error fetching conversations:', convError);
+
+    if (convCountError) console.error('Error counting conversations:', convCountError);
+    console.log('📊 Conversations count result:', { totalConversationsCount, error: convCountError });
 
     // Get email accounts stats
     const { data: accounts, error: accountsError } = await supabase
@@ -203,7 +276,7 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
     }
     
     // Calculate unlabeled conversations
-    const totalConversations = allConversations ? allConversations.length : 0;
+    const totalConversations = totalConversationsCount || 0;
     const labeledConversations = labelAssignments ? new Set(labelAssignments.map(a => a.conversation_id)).size : 0;
     const unlabeledCount = Math.max(0, totalConversations - labeledConversations);
     
@@ -214,20 +287,26 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
     // Calculate stats
     const totalCampaigns = campaigns.length;
     const activeCampaigns = campaigns.filter(c => c.status === 'active').length;
-    const totalLeads = leads.length;
+    const totalLeads = totalLeadsCount; // Use the count query result, not the limited array length
     const activeLeads = leads.filter(l => l.status === 'active' || !l.status).length;
     
     // Email stats for period
-    const sentEmails = emails.filter(e => e.status === 'sent' || e.status === 'delivered').length;
+    const sentEmailCount = emails.filter(e => e.status === 'sent' || e.status === 'delivered').length;
     const bouncedEmails = emails.filter(e => e.status === 'bounced' || e.status === 'failed').length;
     const repliedEmails = replies ? replies.length : 0;
-    
-    // Calculate rates using total sent emails for accurate reply rate
-    const totalSentCount = totalSentEmails ? totalSentEmails.length : 0;
-    const totalReplyCount = totalReplies ? totalReplies.length : 0;
 
-    const replyRate = totalSentCount > 0 ? ((totalReplyCount / totalSentCount) * 100).toFixed(1) : '0.0';
-    const bounceRate = sentEmails > 0 ? ((bouncedEmails / sentEmails) * 100).toFixed(1) : '0.0';
+    // Calculate rates using PERIOD data (not all-time)
+    // Reply rate: replies in period / emails sent in period
+    const replyRate = sentEmailCount > 0 ? ((repliedEmails / sentEmailCount) * 100).toFixed(1) : '0.0';
+    const bounceRate = sentEmailCount > 0 ? ((bouncedEmails / sentEmailCount) * 100).toFixed(1) : '0.0';
+
+    console.log('📊 Metrics calculation:', {
+      sentEmailCount,
+      repliedEmails,
+      replyRate,
+      totalLeads: leads.length,
+      activeCampaigns: campaigns.filter(c => c.status === 'active').length
+    });
 
     
     // Account health
@@ -252,7 +331,7 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
         endDate: endDate.toISOString()
       },
       metrics: {
-        emailsSent: sentEmails,
+        emailsSent: sentEmailCount,
         replyRate: parseFloat(replyRate),
         activeCampaigns: activeCampaigns,
         totalLeads: totalLeads,
@@ -310,9 +389,24 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
   try {
     const organizationId = req.user.organizationId;
     const { period = 'month', startDate, endDate } = req.query;
-    
+
+    console.log('📊 Dashboard analytics request:', {
+      organizationId,
+      period,
+      startDate,
+      endDate,
+      user: req.user.email
+    });
+
     const analytics = await getDashboardAnalytics(organizationId, period, startDate, endDate);
-    
+
+    console.log('📊 Dashboard analytics response:', {
+      organizationId,
+      metrics: analytics.metrics,
+      leads: analytics.leads,
+      campaigns: analytics.campaigns
+    });
+
     // Return the data directly without wrapping in data property
     // The frontend expects res.data to be the analytics object
     res.json(analytics);

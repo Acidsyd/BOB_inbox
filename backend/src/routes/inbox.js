@@ -1383,9 +1383,12 @@ router.post('/sync/manual', authenticateToken, async (req, res) => {
       const syncResults = [];
       
       if (accounts && accounts.length > 0) {
+        console.log(`📧 Starting sync for ${accounts.length} accounts`);
         for (const account of accounts) {
           try {
+            console.log(`🔄 Syncing account: ${account.email} (ID: ${account.id})`);
             const result = await emailSyncService.syncAccount(account.id, organizationId);
+            console.log(`✅ Sync completed for ${account.email}:`, result);
             syncResults.push({
               accountId: account.id,
               email: account.email,
@@ -1403,6 +1406,7 @@ router.post('/sync/manual', authenticateToken, async (req, res) => {
             });
           }
         }
+        console.log(`📊 Sync complete. Results:`, syncResults);
       }
 
       // Record manual sync in sync_history table

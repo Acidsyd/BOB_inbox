@@ -858,15 +858,22 @@ class EmailSyncService {
   async updateAccountSyncTimestamp(accountId, accountType) {
     try {
       const table = accountType === 'oauth2' ? 'oauth2_tokens' : 'email_accounts';
-      
-      const { error } = await supabase
-        .from(table)
-        .update({ last_sync_at: this.getUTCTimestamp() })
-        .eq('id', accountId);
+      const timestamp = this.getUTCTimestamp();
 
-      if (error) throw error;
-      
-      console.log(`✅ Updated ${accountType} account sync timestamp`);
+      console.log(`🕐 Updating ${table} sync timestamp for account ${accountId} to ${timestamp}`);
+
+      const { data, error } = await supabase
+        .from(table)
+        .update({ last_sync_at: timestamp })
+        .eq('id', accountId)
+        .select();
+
+      if (error) {
+        console.error(`❌ Database error updating ${table}:`, error);
+        throw error;
+      }
+
+      console.log(`✅ Updated ${accountType} account sync timestamp:`, data);
     } catch (error) {
       console.error('❌ Failed to update account sync timestamp:', error);
     }
