@@ -64,7 +64,38 @@ jobs:
           
           # Pre-deployment checks
           echo "🔍 Running pre-deployment checks..."
-          
+
+          # Fix git ownership issue
+          echo "📝 Fixing git ownership..."
+          git config --global --add safe.directory /var/www/mailsender || true
+
+          # Clean up disk space before deployment
+          echo "🧹 Cleaning up disk space..."
+
+          # Remove old backups (keep only last 2)
+          if [ -d "/var/backups/mailsender" ]; then
+            cd /var/backups/mailsender
+            ls -t | tail -n +3 | xargs -r rm -rf || true
+            echo "✅ Old backups cleaned"
+          fi
+
+          # Clean old PM2 logs
+          pm2 flush || true
+          if [ -d "/var/log/mailsender" ]; then
+            find /var/log/mailsender -name "*.log" -mtime +7 -delete || true
+            echo "✅ Old PM2 logs cleaned"
+          fi
+
+          # Clean npm cache if disk usage > 90%
+          DISK_USAGE=\$(df / | tail -1 | awk '{print \$5}' | sed 's/%//')
+          if [ "\$DISK_USAGE" -gt 90 ]; then
+            echo "⚠️  High disk usage (\$DISK_USAGE%), cleaning npm cache..."
+            npm cache clean --force || true
+          fi
+
+          echo "💾 Current disk usage:"
+          df -h / || true
+
           # Create app directory if it doesn't exist
           mkdir -p \$APP_DIR
           
@@ -132,8 +163,11 @@ jobs:
           
           # Start services with PM2
           echo "🚀 Starting services..."
-          if [ -f "ecosystem.config.js" ]; then
-            pm2 restart ecosystem.config.js || pm2 start ecosystem.config.js
+          if [ -f "ecosystem.config.cjs" ]; then
+            pm2 restart ecosystem.config.cjs || pm2 start ecosystem.config.cjs
+          elif [ -f "ecosystem.config.js" ]; then
+            mv ecosystem.config.js ecosystem.config.cjs
+            pm2 restart ecosystem.config.cjs || pm2 start ecosystem.config.cjs
           else
             # Fallback service start
             pm2 start backend/src/server.js --name mailsender-backend || true
