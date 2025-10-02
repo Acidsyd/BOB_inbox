@@ -36,7 +36,11 @@ jobs:
         # Use our MCP-enhanced deployment script
         export DEPLOY_HOST="${{ secrets.DEPLOY_HOST }}"
         export DEPLOY_USER="${{ secrets.DEPLOY_USER }}"
-        
+
+        # Configure git for tagging
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+
         # Create deployment tag with Git MCP patterns
         DEPLOYMENT_TAG="deploy-$(date +%Y%m%d-%H%M%S)"
         git tag -a "$DEPLOYMENT_TAG" -m "GitHub Actions deployment $(date)"
