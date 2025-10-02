@@ -97,6 +97,10 @@ jobs:
           echo "💾 Current disk usage:"
           df -h / || true
 
+          echo ""
+          echo "📊 Top 10 largest directories:"
+          du -h /var/www /var/backups /var/log 2>/dev/null | sort -rh | head -10 || true
+
           # Create app directory if it doesn't exist
           mkdir -p \$APP_DIR
 
