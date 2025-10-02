@@ -64,6 +64,8 @@ export function LabelPicker({
     setSelectedLabelIds(prev => {
       const newSet = new Set(prev)
       if (checked) {
+        // Only allow 1 label - clear all others when selecting
+        newSet.clear()
         newSet.add(labelId)
       } else {
         newSet.delete(labelId)
@@ -178,16 +180,16 @@ export function LabelPicker({
             )}
           </div>
 
-          {/* Current labels preview */}
+          {/* Current label preview */}
           {selectedLabelIds.size > 0 && (
             <div className="border-t pt-4">
-              <p className="text-sm font-medium mb-2">Selected labels:</p>
+              <p className="text-sm font-medium mb-2">Selected label:</p>
               <div className="flex flex-wrap gap-1">
                 {Array.from(selectedLabelIds).map(labelId => {
                   const label = labels.find(l => l.id === labelId)
                   if (!label) return null
                   return (
-                    <Badge 
+                    <Badge
                       key={label.id}
                       style={{ backgroundColor: label.color, color: 'white' }}
                       className="px-2 py-1 text-xs"

@@ -158,7 +158,130 @@ router.get('/conversations/:id/messages', authenticateToken, async (req, res) =>
 
     console.log(`🔍 MESSAGES API: raw timezone = "${timezone}", cleaned timezone = "${cleanTimezone}"`);
     console.log(`📬 Fetching messages for conversation: ${conversationId}`);
+    console.log(`📬 Conversation ID type: ${typeof conversationId}`);
+    console.log(`📬 Conversation ID startsWith bounce_: ${conversationId.startsWith('bounce_')}`);
 
+    // Check if this is a bounce pseudo-conversation
+    if (conversationId.startsWith('bounce_')) {
+      const bounceId = conversationId.replace('bounce_', '');
+      console.log(`🚨 Bounce pseudo-conversation detected: ${bounceId}`);
+
+      // Fetch the bounce record (without joins - fetch related data separately)
+      const { data: bounce, error: bounceError } = await supabase
+        .from('email_bounces')
+        .select('*')
+        .eq('id', bounceId)
+        .eq('organization_id', organizationId)
+        .single();
+
+      if (bounceError || !bounce) {
+        console.log(`❌ Bounce record not found: ${bounceId}`, bounceError);
+        return res.status(404).json({ error: 'Bounce record not found' });
+      }
+
+      console.log(`✅ Bounce record found:`, { id: bounce.id, recipient_email: bounce.recipient_email, bounce_type: bounce.bounce_type });
+
+      // Fetch related data separately to avoid foreign key relationship errors
+      const relatedDataPromises = [];
+
+      if (bounce.scheduled_email_id) {
+        relatedDataPromises.push(
+          supabase
+            .from('scheduled_emails')
+            .select('subject, to_email, content_html, content_plain')
+            .eq('id', bounce.scheduled_email_id)
+            .single()
+        );
+      } else {
+        relatedDataPromises.push(Promise.resolve({ data: null }));
+      }
+
+      if (bounce.campaign_id) {
+        relatedDataPromises.push(
+          supabase
+            .from('campaigns')
+            .select('name')
+            .eq('id', bounce.campaign_id)
+            .single()
+        );
+      } else {
+        relatedDataPromises.push(Promise.resolve({ data: null }));
+      }
+
+      if (bounce.lead_id) {
+        relatedDataPromises.push(
+          supabase
+            .from('leads')
+            .select('first_name, last_name, email')
+            .eq('id', bounce.lead_id)
+            .single()
+        );
+      } else {
+        relatedDataPromises.push(Promise.resolve({ data: null }));
+      }
+
+      const [scheduledEmailResult, campaignResult, leadResult] = await Promise.all(relatedDataPromises);
+
+      // Attach related data to bounce object
+      bounce.scheduled_emails = scheduledEmailResult.data;
+      bounce.campaigns = campaignResult.data;
+      bounce.leads = leadResult.data;
+
+      // Create a synthetic message for the bounce
+      const bounceMessage = {
+        id: `bounce_msg_${bounceId}`,
+        conversation_id: conversationId,
+        direction: 'bounce',
+        from_email: 'system',
+        from_name: 'Bounce System',
+        to_email: bounce.recipient_email,
+        subject: bounce.scheduled_emails?.subject || '(No subject)',
+        content_html: `
+          <div style="padding: 20px; background: #fee; border: 1px solid #fcc; border-radius: 8px;">
+            <h3 style="color: #c33; margin-top: 0;">Email Bounce Notification</h3>
+            <p><strong>Bounce Type:</strong> ${bounce.bounce_type}</p>
+            <p><strong>Reason:</strong> ${bounce.bounce_reason}</p>
+            <p><strong>Recipient:</strong> ${bounce.recipient_email}</p>
+            <p><strong>Campaign:</strong> ${bounce.campaigns?.name || 'N/A'}</p>
+            <p><strong>Bounced At:</strong> ${TimezoneService.convertToUserTimezone(bounce.bounced_at, cleanTimezone)}</p>
+            ${bounce.scheduled_emails?.content_html ? `
+              <hr style="margin: 20px 0; border: none; border-top: 1px solid #ccc;" />
+              <h4>Original Email Content:</h4>
+              <div style="padding: 10px; background: #f9f9f9; border-radius: 4px;">
+                ${bounce.scheduled_emails.content_html}
+              </div>
+            ` : ''}
+          </div>
+        `,
+        content_plain: `
+Email Bounce Notification
+
+Bounce Type: ${bounce.bounce_type}
+Reason: ${bounce.bounce_reason}
+Recipient: ${bounce.recipient_email}
+Campaign: ${bounce.campaigns?.name || 'N/A'}
+Bounced At: ${TimezoneService.convertToUserTimezone(bounce.bounced_at, cleanTimezone)}
+
+${bounce.scheduled_emails?.content_plain ? `
+Original Email Content:
+${bounce.scheduled_emails.content_plain}
+` : ''}
+        `,
+        sent_at: bounce.bounced_at,
+        sent_at_display: TimezoneService.convertToUserTimezone(bounce.bounced_at, cleanTimezone),
+        is_read: false,
+        organization_id: organizationId
+      };
+
+      console.log(`✅ Returning bounce message for conversation: ${conversationId}`);
+
+      return res.json({
+        conversationId,
+        messages: [bounceMessage]
+      });
+    }
+
+    // Normal conversation - fetch messages from database
     const messages = await unifiedInboxService.getConversationMessages(conversationId, organizationId);
 
     // Convert UTC timestamps to user timezone using TimezoneService
@@ -212,6 +335,18 @@ router.put('/conversations/:id/read', authenticateToken, async (req, res) => {
 
     console.log(`📬 Marking conversation ${conversationId} as ${isRead ? 'read' : 'unread'}`);
 
+    // Check if this is a bounce pseudo-conversation
+    if (conversationId.startsWith('bounce_')) {
+      console.log(`🚨 Bounce pseudo-conversation read status - no database update needed`);
+
+      // Bounce pseudo-conversations don't have database records, just return success
+      return res.json({
+        success: true,
+        conversationId,
+        isRead
+      });
+    }
+
     await unifiedInboxService.markConversationRead(conversationId, organizationId, isRead);
 
     res.json({
@@ -222,9 +357,9 @@ router.put('/conversations/:id/read', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error updating conversation read status:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to update conversation read status',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -241,6 +376,18 @@ router.put('/conversations/:id/archive', authenticateToken, async (req, res) => 
 
     console.log(`📬 ${archived ? 'Archiving' : 'Unarchiving'} conversation ${conversationId}`);
 
+    // Check if this is a bounce pseudo-conversation
+    if (conversationId.startsWith('bounce_')) {
+      console.log(`🚨 Bounce pseudo-conversation archive status - no database update needed`);
+
+      // Bounce pseudo-conversations don't have database records, just return success
+      return res.json({
+        success: true,
+        conversationId,
+        archived
+      });
+    }
+
     await unifiedInboxService.archiveConversation(conversationId, organizationId, archived);
 
     res.json({
@@ -251,7 +398,7 @@ router.put('/conversations/:id/archive', authenticateToken, async (req, res) => 
 
   } catch (error) {
     console.error('❌ Error updating conversation archive status:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to update conversation archive status',
       details: error.message 
     });
@@ -1611,6 +1758,23 @@ router.post('/conversations/:conversationId/read', authenticateToken, async (req
     const { conversationId } = req.params;
 
     console.log(`📖 Marking conversation READ with provider sync: ${conversationId}`);
+
+    // Check if this is a bounce pseudo-conversation
+    if (conversationId.startsWith('bounce_')) {
+      console.log(`🚨 Bounce pseudo-conversation read status (POST) - no database update needed`);
+
+      // Bounce pseudo-conversations don't have database records, just return success
+      return res.json({
+        success: true,
+        conversationId,
+        results: {
+          success: 0,
+          failed: 0,
+          errors: [],
+          alreadyRead: 0
+        }
+      });
+    }
 
     // Get all messages in conversation
     const { data: messages, error } = await supabase

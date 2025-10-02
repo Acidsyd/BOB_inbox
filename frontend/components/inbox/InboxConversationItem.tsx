@@ -1,14 +1,17 @@
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Checkbox } from '../ui/checkbox'
-import { 
-  Circle, 
-  Star, 
-  Archive, 
-  Reply, 
-  User, 
+import {
+  Circle,
+  Star,
+  Archive,
+  Reply,
+  User,
   Building,
-  MoreVertical 
+  MoreVertical,
+  AlertCircle,
+  Eye,
+  MousePointerClick
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { ConversationLabelsCompact } from './ConversationLabels'
@@ -28,9 +31,12 @@ interface Conversation {
   lead_name?: string
   has_replies?: boolean
   last_message_preview?: string
-  conversation_type?: 'campaign' | 'organic'
+  conversation_type?: 'campaign' | 'organic' | 'bounce'
+  status?: 'sent' | 'bounced' | 'failed'
   archived?: boolean
   labels?: Label[]
+  was_opened?: boolean
+  was_clicked?: boolean
 }
 
 interface InboxConversationItemProps {
@@ -184,12 +190,27 @@ export function InboxConversationItem({ conversation, isSelected, isChecked, onC
             <div className="flex items-center gap-1 min-w-0 flex-1">
               <h3 className={cn(
                 "font-medium text-sm truncate transition-colors duration-200",
-                isSelected 
-                  ? "text-blue-900 font-semibold" 
+                isSelected
+                  ? "text-blue-900 font-semibold"
                   : !conversation.is_read ? "text-gray-900" : "text-gray-700"
               )}>
                 {getParticipantDisplay()}
               </h3>
+              {(conversation.status === 'bounced' || conversation.conversation_type === 'bounce') && (
+                <div className="flex items-center gap-1 shrink-0" title="Email bounced">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+                </div>
+              )}
+              {conversation.was_opened && (
+                <div className="flex items-center gap-1 shrink-0" title="Email opened">
+                  <Eye className="w-3.5 h-3.5 text-blue-500" />
+                </div>
+              )}
+              {conversation.was_clicked && (
+                <div className="flex items-center gap-1 shrink-0" title="Link clicked">
+                  <MousePointerClick className="w-3.5 h-3.5 text-green-500" />
+                </div>
+              )}
               {!conversation.is_read && (
                 <div className="w-1.5 h-1.5 bg-blue-500 rounded-full shrink-0" />
               )}
@@ -202,8 +223,8 @@ export function InboxConversationItem({ conversation, isSelected, isChecked, onC
           <div className="flex items-center justify-between mt-0.5">
             <p className={cn(
               "text-xs truncate flex-1 mr-2 transition-colors duration-200",
-              isSelected 
-                ? "text-blue-800" 
+              isSelected
+                ? "text-blue-800"
                 : !conversation.is_read ? "text-gray-800" : "text-gray-600"
             )}>
               <span className={cn(
@@ -221,8 +242,16 @@ export function InboxConversationItem({ conversation, isSelected, isChecked, onC
               )}
             </p>
 
-            {/* Compact Badges */}
+            {/* Compact Badges and Labels */}
             <div className="flex items-center gap-1 flex-shrink-0">
+              {/* Labels - inline with badges */}
+              {conversation.labels && conversation.labels.length > 0 && (
+                <ConversationLabelsCompact
+                  labels={conversation.labels}
+                  className="justify-start"
+                />
+              )}
+
               {conversation.campaign_name && (
                 <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4 max-w-[120px] bg-blue-100 text-blue-800 border-blue-200" title={conversation.campaign_name}>
                   <Building className="h-3 w-3 mr-0.5 flex-shrink-0" />
@@ -241,16 +270,6 @@ export function InboxConversationItem({ conversation, isSelected, isChecked, onC
               )}
             </div>
           </div>
-
-          {/* Labels row */}
-          {conversation.labels && conversation.labels.length > 0 && (
-            <div className="mt-1">
-              <ConversationLabelsCompact 
-                labels={conversation.labels} 
-                className="justify-start"
-              />
-            </div>
-          )}
         </div>
       </div>
     </div>

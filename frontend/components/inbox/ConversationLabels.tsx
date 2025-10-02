@@ -35,7 +35,7 @@ export function ConversationLabels({
         return 'px-2.5 py-1 text-sm'
       case 'sm':
       default:
-        return 'px-2 py-0.5 text-xs'
+        return 'px-1.5 py-0 text-xs h-4'
     }
   }
 
@@ -90,7 +90,7 @@ export function ConversationLabelsCompact({ labels, className = '' }: { labels: 
   return (
     <ConversationLabels
       labels={labels}
-      maxVisible={2}
+      maxVisible={1}
       size="sm"
       className={className}
     />

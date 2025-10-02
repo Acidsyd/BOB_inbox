@@ -346,9 +346,88 @@ class FolderService {
             .map(id => conversationMap.get(id))
             .filter(Boolean);
 
+          // Check if any of these conversations have bounced emails or tracking data
+          // Get all scheduled_email_ids for these conversations
+          const { data: sentMessages } = await supabase
+            .from('conversation_messages')
+            .select('conversation_id, scheduled_email_id')
+            .eq('organization_id', organizationId)
+            .eq('direction', 'sent')
+            .in('conversation_id', paginatedConversationIds)
+            .not('scheduled_email_id', 'is', null);
+
+          const sentScheduledEmailIds = [...new Set(sentMessages?.map(m => m.scheduled_email_id).filter(Boolean) || [])];
+
+          if (sentScheduledEmailIds.length > 0) {
+            // Check for bounces associated with these scheduled emails
+            const { data: bounces } = await supabase
+              .from('email_bounces')
+              .select('scheduled_email_id, recipient_email')
+              .eq('organization_id', organizationId)
+              .in('scheduled_email_id', sentScheduledEmailIds);
+
+            // Check for tracking data (opens and clicks)
+            const { data: trackingData } = await supabase
+              .from('email_tracking_events')
+              .select('scheduled_email_id, event_type')
+              .eq('organization_id', organizationId)
+              .in('scheduled_email_id', sentScheduledEmailIds);
+
+            // Create maps for bounce, open, and click tracking
+            const bounceMap = new Map();
+            const openMap = new Map();
+            const clickMap = new Map();
+
+            if (bounces && bounces.length > 0) {
+              bounces.forEach(b => bounceMap.set(b.scheduled_email_id, b));
+            }
+
+            if (trackingData && trackingData.length > 0) {
+              trackingData.forEach(t => {
+                if (t.event_type === 'open') {
+                  openMap.set(t.scheduled_email_id, true);
+                } else if (t.event_type === 'click') {
+                  clickMap.set(t.scheduled_email_id, true);
+                }
+              });
+            }
+
+            // Create conversation-level maps
+            const conversationBounceMap = new Map();
+            const conversationOpenMap = new Map();
+            const conversationClickMap = new Map();
+
+            sentMessages.forEach(msg => {
+              if (bounceMap.has(msg.scheduled_email_id)) {
+                conversationBounceMap.set(msg.conversation_id, true);
+              }
+              if (openMap.has(msg.scheduled_email_id)) {
+                conversationOpenMap.set(msg.conversation_id, true);
+              }
+              if (clickMap.has(msg.scheduled_email_id)) {
+                conversationClickMap.set(msg.conversation_id, true);
+              }
+            });
+
+            // Mark conversations with bounces, opens, and clicks
+            orderedConversations.forEach(conv => {
+              if (conversationBounceMap.has(conv.id)) {
+                conv.status = 'bounced';
+              }
+              if (conversationOpenMap.has(conv.id)) {
+                conv.was_opened = true;
+              }
+              if (conversationClickMap.has(conv.id)) {
+                conv.was_clicked = true;
+              }
+            });
+
+            console.log('🔍 DEBUG: Marked', conversationBounceMap.size, 'conversations as bounced,', conversationOpenMap.size, 'as opened,', conversationClickMap.size, 'as clicked');
+          }
+
           // Override the query result with our sorted data
           query = { data: orderedConversations, error: null };
-          
+
           console.log('🔍 DEBUG: Fetched and sorted', orderedConversations.length, 'conversations by latest sent');
           break;
 
@@ -360,23 +439,110 @@ class FolderService {
           break;
 
         case 'bounces':
-          // Bounce conversations - filter by conversations with bounce messages
-          // Get conversation IDs that have bounce messages
-          const { data: bounceConvIds } = await supabase
-            .from('conversation_messages')
-            .select('conversation_id')
-            .eq('organization_id', organizationId)
-            .eq('direction', 'received')
-            .or('from_email.ilike.%daemon%,from_email.ilike.%delivery%,subject.ilike.%bounce%,subject.ilike.%delivery%,subject.ilike.%undelivered%');
+          // Bounce folder - show bounced emails as pseudo-conversations
+          // Get bounced emails from email_bounces table
+          const { data: bouncedEmailsData, error: bounceError } = await this.retryDatabaseOperation(
+            () => supabase
+              .from('email_bounces')
+              .select('*')
+              .eq('organization_id', organizationId)
+              .order('bounced_at', { ascending: false })
+              .range(offset, offset + limit - 1)
+          );
 
-          if (bounceConvIds && bounceConvIds.length > 0) {
-            const uniqueIds = [...new Set(bounceConvIds.map(c => c.conversation_id))];
-            query = query.in('id', uniqueIds).eq('status', 'active');
-          } else {
-            // No bounce messages found - return empty result
+          if (bounceError) {
+            console.error('❌ Error fetching bounces:', bounceError);
+            throw bounceError;
+          }
+
+          if (!bouncedEmailsData || bouncedEmailsData.length === 0) {
             return [];
           }
-          break;
+
+          // Get additional details for each bounce
+          const scheduledEmailIds = bouncedEmailsData.map(b => b.scheduled_email_id).filter(Boolean);
+          const campaignIds = [...new Set(bouncedEmailsData.map(b => b.campaign_id).filter(Boolean))];
+          const leadIds = [...new Set(bouncedEmailsData.map(b => b.lead_id).filter(Boolean))];
+
+          // Fetch scheduled emails
+          let scheduledEmailsMap = {};
+          if (scheduledEmailIds.length > 0) {
+            const { data: scheduledEmails } = await supabase
+              .from('scheduled_emails')
+              .select('id, subject, to_email')
+              .in('id', scheduledEmailIds);
+
+            scheduledEmailsMap = Object.fromEntries(
+              (scheduledEmails || []).map(se => [se.id, se])
+            );
+          }
+
+          // Fetch campaigns
+          let campaignsMap = {};
+          if (campaignIds.length > 0) {
+            const { data: campaigns } = await supabase
+              .from('campaigns')
+              .select('id, name')
+              .in('id', campaignIds);
+
+            campaignsMap = Object.fromEntries(
+              (campaigns || []).map(c => [c.id, c])
+            );
+          }
+
+          // Fetch leads
+          let leadsMap = {};
+          if (leadIds.length > 0) {
+            const { data: leads } = await supabase
+              .from('leads')
+              .select('id, first_name, last_name, email')
+              .in('id', leadIds);
+
+            leadsMap = Object.fromEntries(
+              (leads || []).map(l => [l.id, l])
+            );
+          }
+
+          // Transform bounced emails into conversation-like objects for display
+          const bounceConversations = bouncedEmailsData.map(bounce => {
+            const scheduledEmail = scheduledEmailsMap[bounce.scheduled_email_id];
+            const campaign = campaignsMap[bounce.campaign_id];
+            const lead = leadsMap[bounce.lead_id];
+
+            const leadName = lead
+              ? `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || lead.email
+              : bounce.recipient_email;
+
+            return {
+              id: `bounce_${bounce.id}`, // Pseudo conversation ID
+              subject: scheduledEmail?.subject || '(No subject)',
+              participants: [bounce.recipient_email || scheduledEmail?.to_email || 'Unknown'],
+              conversation_type: 'bounce',
+              status: 'bounced',
+              message_count: 1,
+              unread_count: 1, // Mark as unread by default
+              last_activity_at: bounce.bounced_at,
+              last_message_preview: `${bounce.bounce_type} bounce: ${bounce.bounce_reason}`,
+              created_at: bounce.bounced_at,
+              campaign_id: bounce.campaign_id,
+              lead_id: bounce.lead_id,
+              campaign_name: campaign?.name || null,
+              lead_name: leadName,
+              labels: [],
+              is_read: false,
+              // Bounce-specific fields
+              bounce_type: bounce.bounce_type,
+              bounce_reason: bounce.bounce_reason,
+              scheduled_email_id: bounce.scheduled_email_id,
+              // Timezone conversion
+              last_activity_at_display: timezone
+                ? TimezoneService.convertToUserTimezone(bounce.bounced_at, timezone)
+                : null
+            };
+          });
+
+          console.log(`✅ Retrieved ${bounceConversations.length} bounced emails as pseudo-conversations`);
+          return bounceConversations;
 
         default:
           throw new Error(`Invalid folder type: ${folderType}`);
@@ -655,35 +821,16 @@ class FolderService {
           break;
 
         case 'bounces':
-          // Bounce conversations - count UNREAD conversations with bounce messages
-          const { data: bounceConversations } = await this.retryDatabaseOperation(
+          // Bounce folder count - count all bounced emails directly from email_bounces table
+          const { count: bounceCount, error: bounceCountError } = await this.retryDatabaseOperation(
             () => supabase
-              .from('conversation_messages')
-              .select('conversation_id')
+              .from('email_bounces')
+              .select('id', { count: 'exact', head: true })
               .eq('organization_id', organizationId)
-              .eq('direction', 'received')
-              .or('from_email.ilike.%daemon%,from_email.ilike.%delivery%,subject.ilike.%bounce%,subject.ilike.%delivery%,subject.ilike.%undelivered%')
           );
 
-          if (bounceConversations) {
-            const uniqueBounceIds = [...new Set(bounceConversations.map(c => c.conversation_id))];
-            
-            // Count UNREAD active conversations from the bounce IDs
-            const { count: bounceCount, error: bounceError } = await this.retryDatabaseOperation(
-              () => supabase
-                .from('conversations')
-                .select('id', { count: 'exact', head: true })
-                .eq('organization_id', organizationId)
-                .eq('status', 'active')
-                .gt('unread_count', 0) // Only count conversations with unread messages
-                .in('id', uniqueBounceIds)
-            );
-
-            if (bounceError) throw bounceError;
-            count = bounceCount || 0;
-          } else {
-            count = 0;
-          }
+          if (bounceCountError) throw bounceCountError;
+          count = bounceCount || 0;
           break;
 
         default:
