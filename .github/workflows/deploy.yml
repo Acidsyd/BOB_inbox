@@ -22,9 +22,14 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
 
+    - name: Debug SSH
+      run: |
+        echo "SSH_AUTH_SOCK: $SSH_AUTH_SOCK"
+        ssh-add -L || echo "No keys in agent"
+
     - name: Test SSH connection
       run: |
-        ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'"
+        ssh -v -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "echo 'SSH connection successful'" 2>&1 | tail -20
         
     - name: Deploy using MCP-enhanced script
       run: |
