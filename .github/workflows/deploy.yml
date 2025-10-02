@@ -149,12 +149,20 @@ jobs:
           
           # Application setup
           echo "🔨 Building application..."
-          
-          # Setup environment if it doesn't exist
-          if [ ! -f ".env.production" ]; then
-            cp .env.production.example .env.production || true
+
+          # CRITICAL: Remove .env.local if it exists (development only file)
+          echo "🧹 Removing development .env.local files..."
+          rm -f frontend/.env.local || true
+          rm -f .env.local || true
+
+          # Verify .env.production exists for frontend
+          if [ ! -f "frontend/.env.production" ]; then
+            echo "⚠️  Warning: frontend/.env.production missing!"
+          else
+            echo "✅ Using frontend/.env.production"
+            cat frontend/.env.production
           fi
-          
+
           # Install dependencies and build
           npm run setup || npm install
           npm run build || true
