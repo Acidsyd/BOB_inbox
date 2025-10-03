@@ -69,6 +69,8 @@ interface Conversation {
   is_read?: boolean
   archived?: boolean
   labels?: Label[]
+  isLiveSearchResult?: boolean
+  searchedAccount?: string
 }
 
 interface InboxMessageViewProps {
@@ -112,15 +114,20 @@ export function InboxMessageView({
   }
   const [attachments, setAttachments] = useState<Array<{url: string, name: string, size: number, type: string}>>([])
   
-  const { 
-    messages, 
-    isLoading, 
-    error, 
+  const {
+    messages,
+    isLoading,
+    error,
     refreshMessages,
     markMessageAsRead,
     markMessageAsUnread,
     markConversationAsRead
-  } = useInboxMessages(conversation.id, timezone)
+  } = useInboxMessages(
+    conversation.id,
+    timezone,
+    conversation.isLiveSearchResult,
+    conversation.searchedAccount
+  )
 
   // Keyboard shortcuts for reply box
   useEffect(() => {
@@ -408,8 +415,8 @@ export function InboxMessageView({
     const timestamp = message.sent_at || message.received_at
     if (!timestamp) return 'Unknown'
 
-    // Use frontend timezone formatting for consistency
-    return formatDateInTimezone(timestamp, 'MMM d, yyyy h:mm a')
+    // Use timezone context hook for proper timezone formatting
+    return formatMessageDateContext(timestamp)
   }
 
   const renderMessageContent = (message: Message) => {

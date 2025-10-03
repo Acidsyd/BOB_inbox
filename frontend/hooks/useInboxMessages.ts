@@ -38,7 +38,12 @@ interface ReadSyncResult {
   error?: string
 }
 
-export function useInboxMessages(conversationId: string | null, timezone?: string) {
+export function useInboxMessages(
+  conversationId: string | null,
+  timezone?: string,
+  isLiveSearchResult?: boolean,
+  searchedAccount?: string
+) {
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,22 +56,36 @@ export function useInboxMessages(conversationId: string | null, timezone?: strin
 
     setIsLoading(true)
     setError(null)
-    
+
     try {
       // Use provided timezone or fallback to getUserTimezone for backend conversion
       const userTimezone = timezone || getUserTimezone()
-      const response = await api.get(`/inbox/conversations/${conversationId}/messages`, {
-        params: { timezone: userTimezone }
-      })
-      
-      if (response.data && response.data.messages) {
-        // Sort messages by sent_at date
-        const sortedMessages = response.data.messages.sort((a: Message, b: Message) => 
-          new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()
-        )
-        setMessages(sortedMessages)
+
+      // If this is a live search result, fetch from Gmail directly
+      if (isLiveSearchResult && searchedAccount) {
+        console.log(`🔍 Fetching live Gmail message: ${conversationId} from ${searchedAccount}`)
+        const response = await api.get(`/inbox/gmail/message/${conversationId}/${encodeURIComponent(searchedAccount)}`)
+
+        if (response.data && response.data.messages) {
+          setMessages(response.data.messages)
+        } else {
+          setMessages([])
+        }
       } else {
-        setMessages([])
+        // Normal database conversation fetch
+        const response = await api.get(`/inbox/conversations/${conversationId}/messages`, {
+          params: { timezone: userTimezone }
+        })
+
+        if (response.data && response.data.messages) {
+          // Sort messages by sent_at date
+          const sortedMessages = response.data.messages.sort((a: Message, b: Message) =>
+            new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()
+          )
+          setMessages(sortedMessages)
+        } else {
+          setMessages([])
+        }
       }
     } catch (err: any) {
       console.error('Error fetching messages:', err)
@@ -75,7 +94,7 @@ export function useInboxMessages(conversationId: string | null, timezone?: strin
     } finally {
       setIsLoading(false)
     }
-  }, [conversationId, timezone])
+  }, [conversationId, timezone, isLiveSearchResult, searchedAccount])
 
   const sendReply = useCallback(async (content: string, fromAccountId: string) => {
     if (!conversationId) {

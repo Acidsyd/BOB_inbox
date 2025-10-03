@@ -122,6 +122,15 @@ class FolderService {
           type: 'bounces',
           sort_order: 4,
           is_system: true
+        },
+        {
+          id: `search_${organizationId}`,
+          organization_id: organizationId,
+          name: 'Search',
+          icon: 'Search',
+          type: 'search',
+          sort_order: 5,
+          is_system: true
         }
       ];
 
@@ -204,53 +213,47 @@ class FolderService {
       switch (folderType) {
         case 'inbox':
           console.log('🔍 DEBUG: ENTERED INBOX CASE');
-          // Campaign conversations - show only campaign conversations that have received replies
-          // First get conversation IDs that have received messages
-          const { data: repliedCampaignIds, error: replyError } = await this.retryDatabaseOperation(
-            () => supabase
-              .from('conversation_messages')
-              .select('conversation_id')
-              .eq('organization_id', organizationId)
-              .eq('direction', 'received')
-          );
 
-          if (replyError) throw replyError;
+          // SOLUTION: Don't use .in() at all - fetch conversations directly with proper joins
+          // This completely avoids the 414 URI Too Large error
 
-          console.log('🔍 DEBUG INBOX: Found conversations with received messages:', repliedCampaignIds?.length || 0);
+          // Fetch inbox conversations directly using inner join with conversation_messages
+          const { data: inboxConversations, error: inboxError } = await supabase
+            .from('conversations')
+            .select(`
+              *,
+              conversation_messages!inner(
+                id,
+                direction,
+                received_at
+              )
+            `)
+            .eq('organization_id', organizationId)
+            .eq('conversation_type', 'campaign')
+            .neq('status', 'archived')
+            .eq('conversation_messages.direction', 'received')
+            .order('last_message_at', { ascending: false })
+            .range(offset, offset + limit - 1);
 
-          if (!repliedCampaignIds || repliedCampaignIds.length === 0) {
-            // No conversations with replies found - return empty result
-            console.log('🔍 DEBUG INBOX: No replies found - returning empty result');
-            return [];
+          if (inboxError) {
+            console.error('❌ Error getting inbox conversations:', inboxError);
+            throw inboxError;
           }
 
-          const uniqueIds = [...new Set(repliedCampaignIds.map(msg => msg.conversation_id))];
-          console.log('🔍 DEBUG INBOX: Unique conversation IDs with replies:', uniqueIds.length);
-
-          // Get campaign conversations from those IDs
-          const { data: campaignConversationsWithReplies, error: campaignError } = await this.retryDatabaseOperation(
-            () => supabase
-              .from('conversations')
-              .select('id')
-              .eq('organization_id', organizationId)
-              .eq('conversation_type', 'campaign')
-              .neq('status', 'archived')
-              .in('id', uniqueIds)
-          );
-
-          if (campaignError) throw campaignError;
-
-          console.log('🔍 DEBUG INBOX: Campaign conversations with replies:', campaignConversationsWithReplies?.length || 0);
-
-          if (!campaignConversationsWithReplies || campaignConversationsWithReplies.length === 0) {
-            // No campaign conversations with replies found - return empty result
-            console.log('🔍 DEBUG INBOX: No campaign conversations with replies - returning empty result');
-            return [];
+          // Remove duplicate conversations (in case multiple messages match)
+          const uniqueInboxConvs = [];
+          const seenIds = new Set();
+          for (const conv of inboxConversations || []) {
+            if (!seenIds.has(conv.id)) {
+              seenIds.add(conv.id);
+              uniqueInboxConvs.push(conv);
+            }
           }
 
-          const finalIds = campaignConversationsWithReplies.map(c => c.id);
-          query = query.in('id', finalIds);
-          break;
+          console.log(`🔍 DEBUG INBOX: Found ${uniqueInboxConvs.length} unique inbox conversations`);
+
+          // Return directly without using query builder
+          return uniqueInboxConvs;
 
         case 'sent':
           console.log('🔍 DEBUG: Getting sent conversations - ORDERED BY LATEST SENT MESSAGE');
@@ -437,6 +440,11 @@ class FolderService {
             .eq('conversation_type', 'organic')
             .eq('status', 'active');
           break;
+
+        case 'search':
+          // Search folder doesn't store conversations
+          // Return empty array - actual search results handled by frontend
+          return [];
 
         case 'bounces':
           // Bounce folder - show bounced emails as pseudo-conversations
@@ -831,6 +839,11 @@ class FolderService {
 
           if (bounceCountError) throw bounceCountError;
           count = bounceCount || 0;
+          break;
+
+        case 'search':
+          // Search folder has no persistent count
+          count = 0;
           break;
 
         default:

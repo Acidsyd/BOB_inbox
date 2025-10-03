@@ -8,10 +8,10 @@ import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Badge } from '../../components/ui/badge'
 import { Checkbox } from '../../components/ui/checkbox'
-import { 
-  Search, 
-  Archive, 
-  Mail, 
+import {
+  Search,
+  Archive,
+  Mail,
   Star,
   RefreshCw,
   Circle,
@@ -26,6 +26,7 @@ import useFolders from '../../hooks/useFolders'
 import { useEmailSync } from '../../hooks/useEmailSync'
 import { useLabels } from '../../hooks/useLabels'
 import { useTimezone } from '../../contexts/TimezoneContext'
+import { useToast } from '../../components/ui/toast'
 import { 
   Select, 
   SelectContent, 
@@ -53,7 +54,15 @@ function InboxContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showUnreadOnly, setShowUnreadOnly] = useState(false)
   const [selectedLabelId, setSelectedLabelId] = useState<string>('')
-  
+  const [isLiveSearching, setIsLiveSearching] = useState(false)
+  const [searchPageToken, setSearchPageToken] = useState<string | null>(null)
+  const [searchHistory, setSearchHistory] = useState<string[]>([])
+  const [showSearchHistory, setShowSearchHistory] = useState(false)
+  const [searchStartTime, setSearchStartTime] = useState<number | null>(null)
+  const [searchScope, setSearchScope] = useState<'all' | 'inbox' | 'sent'>('all')
+  const [searchDateRange, setSearchDateRange] = useState<'all' | '24h' | 'week' | 'month' | 'custom'>('all')
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+
   // Compose modal state
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [isComposeMinimized, setIsComposeMinimized] = useState(false)
@@ -63,6 +72,7 @@ function InboxContent() {
   const { onSyncCompleted, triggerManualSync } = useEmailSync()
   const { labels } = useLabels()
   const { timezone } = useTimezone()
+  const { addToast } = useToast()
   
   // Local folder state for real-time count updates
   const [localFolders, setLocalFolders] = useState([])
@@ -168,11 +178,50 @@ function InboxContent() {
     setSelectedConversation(null) // Clear selection
     setSelectedConversationIds([])
     setSelectedLabelId('') // Clear label filter when changing folders
+    setSearchPageToken(null) // Clear search pagination token when switching folders
     // Reset pagination state
     setCurrentOffset(0)
     setHasMore(true)
     loadFolderConversations(folderType)
   }
+
+  // Load search history from localStorage
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('gmail_search_history')
+    if (savedHistory) {
+      try {
+        setSearchHistory(JSON.parse(savedHistory))
+      } catch (error) {
+        console.error('Failed to parse search history:', error)
+      }
+    }
+  }, [])
+
+  // Keyboard shortcuts for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+K or Ctrl+K to focus search folder
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        handleFolderSelect('search')
+        // Focus the search input after folder selection
+        setTimeout(() => {
+          const searchInput = document.querySelector('input[placeholder*="Search emails"]') as HTMLInputElement
+          searchInput?.focus()
+        }, 100)
+      }
+
+      // Escape to clear search and return to inbox
+      if (e.key === 'Escape' && selectedFolder === 'search') {
+        e.preventDefault()
+        handleSearchChange('')
+        handleFolderSelect('inbox')
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedFolder])
 
   // Initialize with inbox and refresh folder counts
   useEffect(() => {
@@ -193,15 +242,16 @@ function InboxContent() {
   useEffect(() => {
     const unsubscribe = onSyncCompleted((result) => {
       console.log('📨 Sync completed, auto-refreshing current folder:', selectedFolder, result)
-      
+
       // Auto-refresh the current folder to show new emails
-      if (selectedFolder) {
+      // Skip if in search mode - search results are handled separately
+      if (selectedFolder && selectedFolder !== 'search' && !isLiveSearching) {
         loadFolderConversations(selectedFolder)
       }
     })
 
     return unsubscribe
-  }, [selectedFolder, onSyncCompleted])
+  }, [selectedFolder, onSyncCompleted, isLiveSearching])
 
   // Handle conversation selection
   const handleConversationSelect = async (conversationId: string) => {
@@ -300,13 +350,139 @@ function InboxContent() {
     }
   }
 
+
   const handleBulkClear = () => {
     setSelectedConversationIds([])
   }
 
-  // Handle search 
+  // Handle search
   const handleSearchChange = (query: string) => {
     setSearchQuery(query)
+  }
+
+  // Save search to history
+  const saveSearchToHistory = (query: string) => {
+    const trimmedQuery = query.trim()
+    if (!trimmedQuery) return
+
+    // Add to history (max 10 items, remove duplicates)
+    const newHistory = [trimmedQuery, ...searchHistory.filter(q => q !== trimmedQuery)].slice(0, 10)
+    setSearchHistory(newHistory)
+    localStorage.setItem('gmail_search_history', JSON.stringify(newHistory))
+  }
+
+  // Handle live search - directly search Gmail without local database
+  const handleLiveSearch = async (loadMore: boolean = false) => {
+    if (!searchQuery || searchQuery.trim().length === 0) {
+      return
+    }
+
+    try {
+      setIsLiveSearching(true)
+
+      // Build enhanced query with filters
+      let enhancedQuery = searchQuery.trim()
+
+      // Add scope filter
+      if (searchScope === 'inbox') {
+        enhancedQuery += ' in:inbox'
+      } else if (searchScope === 'sent') {
+        enhancedQuery += ' in:sent'
+      }
+
+      // Add date range filter
+      if (searchDateRange === '24h') {
+        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+        const dateStr = yesterday.toISOString().split('T')[0].replace(/-/g, '/')
+        enhancedQuery += ` after:${dateStr}`
+      } else if (searchDateRange === 'week') {
+        const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        const dateStr = lastWeek.toISOString().split('T')[0].replace(/-/g, '/')
+        enhancedQuery += ` after:${dateStr}`
+      } else if (searchDateRange === 'month') {
+        const lastMonth = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+        const dateStr = lastMonth.toISOString().split('T')[0].replace(/-/g, '/')
+        enhancedQuery += ` after:${dateStr}`
+      }
+
+      console.log(`🔍 Executing live Gmail search for: "${enhancedQuery}"${loadMore ? ' (loading more)' : ''}`)
+
+      // Reset pagination token when starting a new search (not loading more)
+      if (!loadMore) {
+        setSearchPageToken(null)
+        setSearchStartTime(Date.now()) // Track search start time
+        saveSearchToHistory(searchQuery) // Save to history
+      }
+
+      // Build API URL with optional pageToken for pagination
+      let apiUrl = `/inbox/search/live?q=${encodeURIComponent(enhancedQuery)}&limit=50`
+      if (loadMore && searchPageToken) {
+        apiUrl += `&pageToken=${encodeURIComponent(searchPageToken)}`
+      }
+
+      const response = await api.get(apiUrl)
+
+      console.log(`✅ Live search complete: ${response.data.results?.length || 0} results`)
+
+      // Display the live search results as individual messages (not conversations)
+      if (response.data.results && response.data.results.length > 0) {
+        // Keep messages as-is without converting to conversation format
+        const liveMessages = response.data.results.map((msg: any) => ({
+          id: msg.provider_message_id,
+          subject: msg.subject,
+          from_email: msg.from_email,
+          to_email: msg.to_email,
+          is_read: msg.is_read,
+          direction: msg.direction,
+          sent_at: msg.sent_at,
+          received_at: msg.received_at,
+          preview: msg.content_plain?.substring(0, 100) || '',
+          message_count: 1, // Single message, not a conversation
+          unread_count: msg.is_read ? 0 : 1,
+          participants: [msg.from_email, msg.to_email].filter(Boolean),
+          latest_message_at: msg.sent_at || msg.received_at,
+          searchedAccount: msg.searchedAccount,
+          isLiveSearchResult: true // Mark as live search result
+        }))
+
+        // If loading more, append to existing results; otherwise replace
+        if (loadMore) {
+          setFolderConversations(prev => [...prev, ...liveMessages])
+        } else {
+          setFolderConversations(liveMessages)
+        }
+
+        // Store nextPageToken for pagination
+        setSearchPageToken(response.data.nextPageToken || null)
+
+        if (!loadMore) {
+          const searchDuration = searchStartTime ? ((Date.now() - searchStartTime) / 1000).toFixed(2) : null
+          addToast({
+            title: 'Search completed',
+            description: `Found ${response.data.results.length} results directly from Gmail${response.data.totalMatches > response.data.results.length ? ` (${response.data.totalMatches} total matches)` : ''}${searchDuration ? ` in ${searchDuration}s` : ''}`,
+            type: 'success'
+          })
+        }
+      } else {
+        if (!loadMore) {
+          addToast({
+            title: 'No results found',
+            description: 'No results found in Gmail for this search',
+            type: 'info'
+          })
+        }
+      }
+
+    } catch (error: any) {
+      console.error('❌ Live search failed:', error)
+      addToast({
+        title: 'Search failed',
+        description: error.response?.data?.error || error.message,
+        type: 'error'
+      })
+    } finally {
+      setIsLiveSearching(false)
+    }
   }
 
   // Toggle unread filter
@@ -480,19 +656,208 @@ function InboxContent() {
               </Select>
             </div>
 
-            {/* Folder-level Search */}
-            <div className="relative mb-2">
-              <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
-                <Search className="h-3 w-3 text-gray-400" />
+            {/* Folder-level Search - Only show in non-search folders */}
+            {selectedFolder !== 'search' && (
+              <div className="mb-2 space-y-1">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                    <Search className="h-3 w-3 text-gray-400" />
+                  </div>
+                  <Input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    placeholder={`Search in ${selectedFolder.replace('_', ' ').toLowerCase()}...`}
+                    className="pl-7 pr-3 py-1 h-6 text-xs border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
               </div>
-              <Input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder={`Search in ${selectedFolder.replace('_', ' ').toLowerCase()}...`}
-                className="pl-7 pr-3 py-1 h-6 text-xs border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
-              />
-            </div>
+            )}
+
+            {/* Dedicated Gmail Search UI - Only show in search folder */}
+            {selectedFolder === 'search' && (
+              <div className="mb-2 space-y-2 p-3 border border-gray-200 rounded-lg bg-gray-50">
+                <h3 className="text-xs font-semibold text-gray-900 mb-1">Gmail Live Search</h3>
+                <p className="text-xs text-gray-600 mb-2">
+                  Search directly in Gmail across all your accounts
+                </p>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                    <Search className="h-3 w-3 text-gray-400" />
+                  </div>
+                  <Input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onFocus={() => setShowSearchHistory(true)}
+                    onBlur={() => setTimeout(() => setShowSearchHistory(false), 200)}
+                    placeholder="Search emails (e.g., from:user@example.com)"
+                    className="pl-7 pr-3 py-1 h-7 text-xs border-gray-300 rounded focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleLiveSearch()
+                      }
+                    }}
+                  />
+                  {/* Search History Dropdown */}
+                  {showSearchHistory && searchHistory.length > 0 && !searchQuery && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                      <div className="px-2 py-1 text-xs font-medium text-gray-700 bg-gray-50 border-b border-gray-200">
+                        Recent searches
+                      </div>
+                      {searchHistory.map((query, index) => (
+                        <button
+                          key={index}
+                          onClick={() => {
+                            handleSearchChange(query)
+                            setShowSearchHistory(false)
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-100 hover:text-gray-900 flex items-center space-x-2"
+                        >
+                          <Search className="h-3 w-3 text-gray-400" />
+                          <span>{query}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleLiveSearch}
+                  disabled={!searchQuery || searchQuery.trim().length === 0 || isLiveSearching}
+                  className="w-full h-7 text-xs bg-gray-700 hover:bg-gray-800"
+                >
+                  {isLiveSearching ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                      Searching Gmail...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-3 h-3 mr-1" />
+                      Search Gmail (Enter)
+                    </>
+                  )}
+                </Button>
+
+                {/* Folder Scope Filter */}
+                <div className="mt-2">
+                  <label className="text-xs font-medium text-gray-700 mb-1 block">Search in:</label>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setSearchScope('all')}
+                      className={`px-2 py-1 text-xs rounded ${
+                        searchScope === 'all'
+                          ? 'bg-gray-700 text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      All Mail
+                    </button>
+                    <button
+                      onClick={() => setSearchScope('inbox')}
+                      className={`px-2 py-1 text-xs rounded ${
+                        searchScope === 'inbox'
+                          ? 'bg-gray-700 text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      Inbox
+                    </button>
+                    <button
+                      onClick={() => setSearchScope('sent')}
+                      className={`px-2 py-1 text-xs rounded ${
+                        searchScope === 'sent'
+                          ? 'bg-gray-700 text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      Sent
+                    </button>
+                  </div>
+                </div>
+
+                {/* Date Range Filter */}
+                <div className="mt-2">
+                  <label className="text-xs font-medium text-gray-700 mb-1 block">Time range:</label>
+                  <div className="flex flex-wrap gap-1">
+                    <button
+                      onClick={() => setSearchDateRange('all')}
+                      className={`px-2 py-1 text-xs rounded ${
+                        searchDateRange === 'all'
+                          ? 'bg-gray-700 text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      All Time
+                    </button>
+                    <button
+                      onClick={() => setSearchDateRange('24h')}
+                      className={`px-2 py-1 text-xs rounded ${
+                        searchDateRange === '24h'
+                          ? 'bg-gray-700 text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      Last 24h
+                    </button>
+                    <button
+                      onClick={() => setSearchDateRange('week')}
+                      className={`px-2 py-1 text-xs rounded ${
+                        searchDateRange === 'week'
+                          ? 'bg-gray-700 text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      Last Week
+                    </button>
+                    <button
+                      onClick={() => setSearchDateRange('month')}
+                      className={`px-2 py-1 text-xs rounded ${
+                        searchDateRange === 'month'
+                          ? 'bg-gray-700 text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      Last Month
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Filter Buttons */}
+                <div className="flex flex-wrap gap-1 mt-2">
+                  <button
+                    onClick={() => handleSearchChange(searchQuery + (searchQuery ? ' ' : '') + 'has:attachment')}
+                    className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-100 text-gray-700"
+                  >
+                    Has attachment
+                  </button>
+                  <button
+                    onClick={() => handleSearchChange(searchQuery + (searchQuery ? ' ' : '') + 'is:unread')}
+                    className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-100 text-gray-700"
+                  >
+                    Unread
+                  </button>
+                  <button
+                    onClick={() => handleSearchChange(searchQuery + (searchQuery ? ' ' : '') + 'is:important')}
+                    className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-100 text-gray-700"
+                  >
+                    Important
+                  </button>
+                </div>
+                <div className="text-xs text-gray-600 mt-2">
+                  <p className="font-medium mb-0.5">Search operators:</p>
+                  <ul className="space-y-0.5 text-gray-600">
+                    <li>• from:sender@example.com</li>
+                    <li>• to:recipient@example.com</li>
+                    <li>• subject:"exact phrase"</li>
+                    <li>• has:attachment</li>
+                  </ul>
+                </div>
+              </div>
+            )}
 
           </div>
 
@@ -615,8 +980,22 @@ function InboxContent() {
                     <p className="text-gray-500 mt-1 text-xs">Loading more conversations...</p>
                   </div>
                 )}
-                
-                {!hasMore && filteredConversations.length > 0 && (
+
+                {/* Search folder pagination - Show Load More if there's a nextPageToken */}
+                {selectedFolder === 'search' && searchPageToken && !isLiveSearching && filteredConversations.length > 0 && (
+                  <div className="p-2 text-center border-t border-gray-100">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => handleLiveSearch(true)}
+                      className="text-xs bg-blue-600 hover:bg-blue-700"
+                    >
+                      Load More Results
+                    </Button>
+                  </div>
+                )}
+
+                {!hasMore && filteredConversations.length > 0 && selectedFolder !== 'search' && (
                   <div className="p-4 text-center border-t border-gray-100">
                     <p className="text-gray-500 text-xs">
                       You've reached the end • {folderConversations.length} conversations total
@@ -624,8 +1003,8 @@ function InboxContent() {
                     </p>
                   </div>
                 )}
-                
-                {hasMore && !loadingMore && filteredConversations.length > 0 && (
+
+                {hasMore && !loadingMore && filteredConversations.length > 0 && selectedFolder !== 'search' && (
                   <div className="p-2 text-center border-t border-gray-100">
                     <Button
                       variant="ghost"

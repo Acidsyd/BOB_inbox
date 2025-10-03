@@ -299,6 +299,75 @@ class GmailSyncProvider extends BaseSyncProvider {
   }
 
   /**
+   * Search Gmail directly for emails (bypasses local database)
+   * @param {Object} gmail - Gmail client instance
+   * @param {string} searchQuery - Search term (email, subject, content)
+   * @param {Object} options - Search options
+   * @returns {Array} Array of matching messages
+   */
+  async searchGmailDirect(gmail, searchQuery, options = {}) {
+    try {
+      const maxResults = options.maxResults || 50;
+      const pageToken = options.pageToken;
+
+      this.log('searchGmailDirect', { searchQuery, maxResults, pageToken: pageToken ? pageToken.substring(0, 20) + '...' : null });
+
+      // Use Gmail search operators for comprehensive search
+      // Search in from, to, subject, and body
+      const requestParams = {
+        userId: 'me',
+        q: searchQuery, // Gmail search query (e.g., "from:email@example.com" or just "email@example.com")
+        maxResults: maxResults
+      };
+
+      // Add pageToken if provided for pagination
+      if (pageToken) {
+        requestParams.pageToken = pageToken;
+      }
+
+      const response = await gmail.users.messages.list(requestParams);
+
+      if (!response.data.messages || response.data.messages.length === 0) {
+        this.log('searchGmailDirect', { result: 'no_matches' });
+        return {
+          messages: [],
+          nextPageToken: null
+        };
+      }
+
+      this.log('searchGmailDirect', {
+        matchCount: response.data.messages.length,
+        hasMore: response.data.nextPageToken ? true : false,
+        nextPageToken: response.data.nextPageToken ? response.data.nextPageToken.substring(0, 20) + '...' : null
+      });
+
+      // Get detailed message information for each result
+      const messages = [];
+      for (const msg of response.data.messages) {
+        try {
+          const messageDetail = await this.getMessageDetails(gmail, msg.id);
+          if (messageDetail) {
+            messages.push(messageDetail);
+          }
+        } catch (error) {
+          this.logError('searchGmailDirect - getMessageDetails', error, { messageId: msg.id });
+          // Continue with other messages even if one fails
+        }
+      }
+
+      // Return messages and nextPageToken for pagination
+      return {
+        messages,
+        nextPageToken: response.data.nextPageToken || null
+      };
+
+    } catch (error) {
+      this.logError('searchGmailDirect', error, { searchQuery });
+      throw error;
+    }
+  }
+
+  /**
    * Get Gmail message by Message-ID header (for reverse lookup)
    * @param {Object} gmail - Gmail client instance
    * @param {string} messageIdHeader - RFC Message-ID header

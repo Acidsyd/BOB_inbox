@@ -148,21 +148,23 @@ router.get('/conversations', authenticateToken, async (req, res) => {
 /**
  * GET /api/inbox/conversations/:id/messages
  * Get all messages in a specific conversation
+ * Handles both conversation UUIDs and provider message IDs (from live search)
  */
 router.get('/conversations/:id/messages', authenticateToken, async (req, res) => {
   try {
     const { organizationId } = req.user;
-    const { id: conversationId } = req.params;
+    let { id: idParam } = req.params;
     const { timezone } = req.query; // Allow timezone parameter from frontend
     const cleanTimezone = (timezone && timezone !== 'null' && timezone !== 'undefined' && timezone !== null && timezone !== undefined) ? timezone : 'Europe/Rome';
 
     console.log(`🔍 MESSAGES API: raw timezone = "${timezone}", cleaned timezone = "${cleanTimezone}"`);
-    console.log(`📬 Fetching messages for conversation: ${conversationId}`);
-    console.log(`📬 Conversation ID type: ${typeof conversationId}`);
-    console.log(`📬 Conversation ID startsWith bounce_: ${conversationId.startsWith('bounce_')}`);
+    console.log(`📬 Fetching messages - received ID: ${idParam}`);
+    console.log(`📬 ID type: ${typeof idParam}`);
+    console.log(`📬 ID startsWith bounce_: ${idParam.startsWith('bounce_')}`);
 
     // Check if this is a bounce pseudo-conversation
-    if (conversationId.startsWith('bounce_')) {
+    if (idParam.startsWith('bounce_')) {
+      const conversationId = idParam;
       const bounceId = conversationId.replace('bounce_', '');
       console.log(`🚨 Bounce pseudo-conversation detected: ${bounceId}`);
 
@@ -281,6 +283,33 @@ ${bounce.scheduled_emails.content_plain}
       });
     }
 
+    // Detect if this is a provider message ID (Gmail hex format, not UUID)
+    // UUIDs are 36 chars with dashes, Gmail IDs are shorter hex strings
+    const isProviderMessageId = idParam.length < 36 && !idParam.includes('-');
+    let conversationId = idParam;
+
+    if (isProviderMessageId) {
+      console.log(`🔍 Detected provider message ID, looking up conversation in database...`);
+
+      // Look up the conversation by provider_message_id
+      const { data: message, error: lookupError } = await supabase
+        .from('conversation_messages')
+        .select('conversation_id')
+        .eq('provider_message_id', idParam)
+        .eq('organization_id', organizationId)
+        .single();
+
+      if (lookupError || !message) {
+        console.error('❌ Could not find conversation for provider message ID:', idParam, lookupError);
+        return res.status(404).json({
+          error: 'Message not found in database. Please sync this email to the database first using the "Sync to DB" button.'
+        });
+      }
+
+      conversationId = message.conversation_id;
+      console.log(`✅ Found conversation ID: ${conversationId} for provider message ID: ${idParam}`);
+    }
+
     // Normal conversation - fetch messages from database
     const messages = await unifiedInboxService.getConversationMessages(conversationId, organizationId);
 
@@ -326,25 +355,53 @@ ${bounce.scheduled_emails.content_plain}
 /**
  * PUT /api/inbox/conversations/:id/read
  * Mark conversation as read/unread
+ * Handles both conversation UUIDs and provider message IDs (from live search)
  */
 router.put('/conversations/:id/read', authenticateToken, async (req, res) => {
   try {
     const { organizationId } = req.user;
-    const { id: conversationId } = req.params;
+    let { id: idParam } = req.params;
     const { isRead = true } = req.body;
 
-    console.log(`📬 Marking conversation ${conversationId} as ${isRead ? 'read' : 'unread'}`);
+    console.log(`📬 Marking conversation ${idParam} as ${isRead ? 'read' : 'unread'}`);
 
     // Check if this is a bounce pseudo-conversation
-    if (conversationId.startsWith('bounce_')) {
+    if (idParam.startsWith('bounce_')) {
       console.log(`🚨 Bounce pseudo-conversation read status - no database update needed`);
 
       // Bounce pseudo-conversations don't have database records, just return success
       return res.json({
         success: true,
-        conversationId,
+        conversationId: idParam,
         isRead
       });
+    }
+
+    // Detect if this is a provider message ID (Gmail hex format, not UUID)
+    // UUIDs are 36 chars with dashes, Gmail IDs are shorter hex strings
+    const isProviderMessageId = idParam.length < 36 && !idParam.includes('-');
+    let conversationId = idParam;
+
+    if (isProviderMessageId) {
+      console.log(`🔍 Detected provider message ID, looking up conversation in database...`);
+
+      // Look up the conversation by provider_message_id
+      const { data: message, error: lookupError } = await supabase
+        .from('conversation_messages')
+        .select('conversation_id')
+        .eq('provider_message_id', idParam)
+        .eq('organization_id', organizationId)
+        .single();
+
+      if (lookupError || !message) {
+        console.error('❌ Could not find conversation for provider message ID:', idParam, lookupError);
+        return res.status(404).json({
+          error: 'Message not found in database. Please sync this email to the database first using the "Sync to DB" button.'
+        });
+      }
+
+      conversationId = message.conversation_id;
+      console.log(`✅ Found conversation ID: ${conversationId} for provider message ID: ${idParam}`);
     }
 
     await unifiedInboxService.markConversationRead(conversationId, organizationId, isRead);
@@ -582,12 +639,13 @@ router.post('/send', authenticateToken, async (req, res) => {
 
 /**
  * POST /api/inbox/conversations/:id/reply
- * Send a reply to a conversation (future implementation)
+ * Send a reply to a conversation
+ * Handles both conversation UUIDs and provider message IDs (from live search)
  */
 router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
   try {
     const { organizationId, userId } = req.user;
-    const { id: conversationId } = req.params;
+    let { id: idParam } = req.params;
     const { content, html, fromAccountId, attachments = [] } = req.body;
 
     if (!content || !fromAccountId) {
@@ -596,16 +654,67 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
       });
     }
 
+    console.log(`📬 Sending reply - received ID: ${idParam}`);
+
+    // Detect if this is a provider message ID (Gmail hex format, not UUID)
+    // UUIDs are 36 chars with dashes, Gmail IDs are shorter hex strings
+    const isProviderMessageId = idParam.length < 36 && !idParam.includes('-');
+    let conversationId = idParam;
+
+    if (isProviderMessageId) {
+      console.log(`🔍 Detected provider message ID, looking up conversation in database...`);
+
+      // Look up the conversation by provider_message_id
+      const { data: message, error: lookupError } = await supabase
+        .from('conversation_messages')
+        .select('conversation_id')
+        .eq('provider_message_id', idParam)
+        .eq('organization_id', organizationId)
+        .single();
+
+      if (lookupError || !message) {
+        console.error('❌ Could not find conversation for provider message ID:', idParam, lookupError);
+        return res.status(404).json({
+          error: 'Message not found in database. Please sync this email to the database first using the "Sync to DB" button.'
+        });
+      }
+
+      conversationId = message.conversation_id;
+      console.log(`✅ Found conversation ID: ${conversationId} for provider message ID: ${idParam}`);
+    }
+
     console.log(`📬 Sending reply to conversation ${conversationId}`);
 
     // Get conversation details to find the recipient
-    const conversation = await unifiedInboxService.getConversationDetails(conversationId, organizationId);
-    if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found' });
-    }
+    // Note: For emails from Gmail Live Search that aren't synced yet, conversation might not exist
+    let conversation = await unifiedInboxService.getConversationDetails(conversationId, organizationId);
 
     // Get conversation messages to find reply target
     const messages = await unifiedInboxService.getConversationMessages(conversationId, organizationId);
+
+    // If conversation doesn't exist in database (e.g., from Gmail Live Search)
+    // We can still get the recipient from the messages
+    if (!conversation && messages.length > 0) {
+      console.log(`⚠️ Conversation ${conversationId} not found in database - creating minimal object from messages`);
+
+      // Create a minimal conversation object from the messages
+      const firstMessage = messages[0];
+      conversation = {
+        id: conversationId,
+        organization_id: organizationId,
+        participants: [firstMessage.from_email, firstMessage.to_email].filter(Boolean),
+        subject: firstMessage.subject
+      };
+
+      console.log(`✅ Created minimal conversation object from messages for reply`);
+    }
+
+    if (!conversation) {
+      console.error('❌ Could not find conversation or messages for:', conversationId);
+      return res.status(404).json({
+        error: 'Conversation not found. Please sync this email to the database first using the "Sync to DB" button.'
+      });
+    }
     console.log(`📬 Found ${messages.length} messages in conversation`);
     
     // Try to find the last received message to reply to, or fall back to any message for threading
@@ -720,34 +829,25 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
       text: finalText,
       inReplyTo: threadingReference?.message_id_header,
       references: threadingReference?.message_references || threadingReference?.message_id_header,
-      threadId: threadingReference?.provider_thread_id, // Add Gmail thread ID for proper threading
+      // NOTE: Do NOT pass threadId - provider_thread_id from Gmail Live Search is a message ID, not a thread ID
+      // Gmail API will return "Requested entity was not found" if we pass an invalid thread ID
+      // The In-Reply-To and References headers will handle threading correctly
+      threadId: null,
       attachments // Pass attachments to EmailService
     };
 
     const result = await emailService.sendReply(emailData);
 
     if (result.success) {
-      // Ingest the sent reply directly into the original conversation
-      console.log(`📬 Ingesting reply directly into conversation: ${conversationId}`);
-      
-      await unifiedInboxService.ingestEmailIntoConversation({
-        message_id_header: result.messageId,
-        from_email: result.fromEmail || emailAccount.email, // Use actual sender email from account
-        from_name: emailAccount.display_name || createProperName(emailAccount.email),
-        to_email: replyToEmail,
-        subject: emailData.subject,
-        content_html: emailData.html, // Store the rich HTML content
-        content_plain: emailData.text, // Store the derived plain text content
-        sent_at: new Date().toISOString(), // Store UTC timestamp with milliseconds
-        in_reply_to: threadingReference?.message_id_header, // Critical for threading
-        message_references: threadingReference?.message_references || threadingReference?.message_id_header,
-        organization_id: organizationId
-      }, conversationId, 'sent');
+      console.log(`✅ Reply sent successfully via ${result.provider || 'email'}`);
 
+      // Just return success - the sent email will appear in Gmail's sent folder
+      // and will be properly synced into the database when the user manually syncs their inbox
       res.json({
         success: true,
         messageId: result.messageId,
-        conversationId
+        conversationId,
+        message: 'Reply sent successfully. Sync your inbox to see it in the conversation.'
       });
     } else {
       throw new Error(result.error || 'Failed to send email');
@@ -793,9 +893,207 @@ router.get('/search', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error searching conversations:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to search conversations',
-      details: error.message 
+      details: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/inbox/search/live
+ * Search directly in Gmail/email providers (bypasses local database)
+ * Use this when local search returns no results to find unsynced emails
+ */
+router.get('/search/live', authenticateToken, async (req, res) => {
+  try {
+    const { organizationId } = req.user;
+    const { q: query, limit = 20, pageToken } = req.query;
+
+    if (!query || query.trim().length === 0) {
+      return res.status(400).json({
+        error: 'Search query is required'
+      });
+    }
+
+    console.log(`🔍 Live search in Gmail for: "${query}"${pageToken ? ` (page token: ${pageToken.substring(0, 20)}...)` : ''}`);
+
+    // Get all OAuth2 Gmail accounts for the organization
+    const { data: accounts, error: accountsError } = await supabase
+      .from('oauth2_tokens')
+      .select('id, email, provider')
+      .eq('organization_id', organizationId)
+      .eq('status', 'linked_to_account')
+      .eq('provider', 'gmail');
+
+    if (accountsError) throw accountsError;
+
+    if (!accounts || accounts.length === 0) {
+      return res.json({
+        query,
+        results: [],
+        count: 0,
+        message: 'No Gmail accounts connected for live search'
+      });
+    }
+
+    console.log(`📧 Searching ${accounts.length} Gmail accounts...`);
+
+    const ProviderFactory = require('../services/providers/ProviderFactory');
+    const gmailProvider = ProviderFactory.createProvider('gmail');
+
+    const allResults = [];
+    const searchErrors = [];
+    let nextPageToken = null;
+
+    // Search each Gmail account
+    for (const account of accounts) {
+      try {
+        console.log(`🔍 Searching account: ${account.email}`);
+
+        // Initialize Gmail client
+        const gmail = await gmailProvider.initializeClient(account, organizationId);
+
+        // Search Gmail directly with pagination support
+        const searchResult = await gmailProvider.searchGmailDirect(gmail, query, {
+          maxResults: parseInt(limit),
+          pageToken: pageToken || undefined
+        });
+
+        console.log(`✅ Found ${searchResult.messages.length} messages in ${account.email}`);
+
+        // Add account email to each result for identification
+        searchResult.messages.forEach(msg => {
+          msg.searchedAccount = account.email;
+        });
+
+        allResults.push(...searchResult.messages);
+
+        // Store nextPageToken from first account that has one
+        if (!nextPageToken && searchResult.nextPageToken) {
+          nextPageToken = searchResult.nextPageToken;
+        }
+
+      } catch (error) {
+        console.error(`⚠️ Search failed for account ${account.email}:`, error.message);
+        searchErrors.push({
+          account: account.email,
+          error: error.message
+        });
+      }
+    }
+
+    // Sort by date (most recent first)
+    allResults.sort((a, b) => {
+      const dateA = new Date(a.sent_at || a.received_at);
+      const dateB = new Date(b.sent_at || b.received_at);
+      return dateB - dateA;
+    });
+
+    // Limit total results
+    const limitedResults = allResults.slice(0, parseInt(limit));
+
+    console.log(`✅ Live search complete: ${limitedResults.length} results from ${accounts.length} accounts`);
+
+    res.json({
+      query,
+      results: limitedResults,
+      count: limitedResults.length,
+      totalMatches: allResults.length,
+      accountsSearched: accounts.length,
+      errors: searchErrors.length > 0 ? searchErrors : undefined,
+      nextPageToken: nextPageToken || undefined,
+      isLiveSearch: true,
+      message: 'Results from live Gmail search (not synced to database)'
+    });
+
+  } catch (error) {
+    console.error('❌ Live search failed:', error);
+    res.status(500).json({
+      error: 'Live search failed',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/inbox/gmail/message/:provider_message_id
+ * Fetch a single Gmail message by its provider_message_id
+ * Used for live search results that aren't in the database
+ */
+router.get('/gmail/message/:provider_message_id/:account_email', authenticateToken, async (req, res) => {
+  try {
+    const { organizationId } = req.user;
+    const { provider_message_id, account_email } = req.params;
+
+    console.log(`📧 Fetching Gmail message: ${provider_message_id} from account: ${account_email}`);
+
+    // Get the OAuth2 account
+    const { data: account, error: accountError } = await supabase
+      .from('oauth2_tokens')
+      .select('id, email, provider')
+      .eq('organization_id', organizationId)
+      .eq('email', decodeURIComponent(account_email))
+      .eq('status', 'linked_to_account')
+      .eq('provider', 'gmail')
+      .single();
+
+    if (accountError || !account) {
+      return res.status(404).json({
+        error: 'Gmail account not found or not accessible'
+      });
+    }
+
+    // Initialize Gmail provider
+    const ProviderFactory = require('../services/providers/ProviderFactory');
+    const gmailProvider = ProviderFactory.createProvider('gmail');
+    const gmail = await gmailProvider.initializeClient(account, organizationId);
+
+    // Fetch the full message from Gmail using getMessageDetails
+    const message = await gmailProvider.getMessageDetails(gmail, provider_message_id);
+
+    if (!message) {
+      return res.status(404).json({
+        error: 'Message not found in Gmail'
+      });
+    }
+
+    console.log(`✅ Successfully fetched Gmail message: ${provider_message_id}`);
+
+    // Return in a format compatible with the frontend message viewer
+    res.json({
+      messages: [{
+        id: message.provider_message_id,
+        conversation_id: null, // Not in database
+        provider_message_id: message.provider_message_id,
+        message_id_header: message.message_id_header,
+        subject: message.subject,
+        from_email: message.from_email,
+        from_name: message.from_name,
+        to_email: message.to_email,
+        to_name: message.to_name,
+        cc_email: message.cc_email,
+        bcc_email: message.bcc_email,
+        content_html: message.content_html,
+        content_plain: message.content_plain,
+        sent_at: message.sent_at,
+        received_at: message.received_at,
+        direction: message.direction,
+        is_read: message.is_read,
+        has_attachments: message.has_attachments,
+        attachments: message.attachments,
+        headers: message.headers,
+        in_reply_to: message.in_reply_to,
+        references: message.references,
+        isLiveSearchResult: true
+      }]
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching Gmail message:', error);
+    res.status(500).json({
+      error: 'Failed to fetch Gmail message',
+      details: error.message
     });
   }
 });
@@ -2168,6 +2466,153 @@ router.post('/sync/test/:accountId', authenticateToken, async (req, res) => {
   }
 });
 
+
+/**
+ * POST /api/inbox/sync/specific-messages
+ * Sync specific Gmail messages to database (for live search results)
+ */
+router.post('/sync/specific-messages', authenticateToken, async (req, res) => {
+  try {
+    const { organizationId } = req.user;
+    const { messages } = req.body;
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({
+        error: 'messages array is required with format: [{ accountEmail, providerMessageId }]'
+      });
+    }
+
+    console.log(`🔄 Syncing ${messages.length} specific Gmail messages to database`);
+
+    const ProviderFactory = require('../services/providers/ProviderFactory');
+    const gmailProvider = ProviderFactory.createProvider('gmail');
+
+    const results = {
+      success: [],
+      failed: [],
+      alreadyExists: []
+    };
+
+    for (const msg of messages) {
+      try {
+        const { accountEmail, providerMessageId } = msg;
+
+        if (!accountEmail || !providerMessageId) {
+          results.failed.push({
+            providerMessageId,
+            error: 'Missing accountEmail or providerMessageId'
+          });
+          continue;
+        }
+
+        // Get the OAuth2 account
+        const { data: account, error: accountError } = await supabase
+          .from('oauth2_tokens')
+          .select('id, email, provider')
+          .eq('organization_id', organizationId)
+          .eq('email', accountEmail)
+          .eq('status', 'linked_to_account')
+          .eq('provider', 'gmail')
+          .single();
+
+        if (accountError || !account) {
+          results.failed.push({
+            providerMessageId,
+            accountEmail,
+            error: 'Gmail account not found or not accessible'
+          });
+          continue;
+        }
+
+        // Check if message already exists in database
+        const { data: existingMsg } = await supabase
+          .from('conversation_messages')
+          .select('id')
+          .eq('provider_message_id', providerMessageId)
+          .eq('organization_id', organizationId)
+          .single();
+
+        if (existingMsg) {
+          results.alreadyExists.push({
+            providerMessageId,
+            accountEmail,
+            messageId: existingMsg.id
+          });
+          continue;
+        }
+
+        // Initialize Gmail client
+        const gmail = await gmailProvider.initializeClient(account, organizationId);
+
+        // Fetch full message details from Gmail
+        const messageData = await gmailProvider.getMessageDetails(gmail, providerMessageId);
+
+        if (!messageData) {
+          results.failed.push({
+            providerMessageId,
+            accountEmail,
+            error: 'Message not found in Gmail'
+          });
+          continue;
+        }
+
+        // Store message in database using UnifiedInboxService
+        await unifiedInboxService.ingestEmailIntoConversation({
+          message_id_header: messageData.message_id_header,
+          from_email: messageData.from_email,
+          from_name: messageData.from_name || createProperName(messageData.from_email),
+          to_email: messageData.to_email,
+          to_name: messageData.to_name,
+          subject: messageData.subject,
+          content_html: messageData.content_html,
+          content_plain: messageData.content_plain,
+          sent_at: messageData.sent_at,
+          received_at: messageData.received_at,
+          in_reply_to: messageData.in_reply_to,
+          message_references: messageData.message_references,
+          provider_message_id: messageData.provider_message_id,
+          provider_thread_id: messageData.provider_thread_id,
+          organization_id: organizationId,
+          provider: 'gmail'
+        }, null, messageData.direction);
+
+        results.success.push({
+          providerMessageId,
+          accountEmail,
+          messageIdHeader: messageData.message_id_header
+        });
+
+      } catch (error) {
+        console.error(`❌ Failed to sync message ${msg.providerMessageId}:`, error);
+        results.failed.push({
+          providerMessageId: msg.providerMessageId,
+          accountEmail: msg.accountEmail,
+          error: error.message
+        });
+      }
+    }
+
+    console.log(`✅ Sync complete: ${results.success.length} success, ${results.failed.length} failed, ${results.alreadyExists.length} already exist`);
+
+    res.json({
+      success: true,
+      results: {
+        synced: results.success.length,
+        failed: results.failed.length,
+        alreadyExists: results.alreadyExists.length,
+        details: results
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Specific message sync failed:', error);
+    res.status(500).json({
+      error: 'Failed to sync specific messages',
+      details: error.message
+    });
+  }
+});
 
 /**
  * GET /api/inbox/sync/autosync-status

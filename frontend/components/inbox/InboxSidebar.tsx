@@ -15,7 +15,9 @@ import {
   Loader2,
   Menu,
   Plus,
-  Edit
+  Edit,
+  Search,
+  AlertTriangle
 } from 'lucide-react'
 
 interface InboxSidebarProps {
@@ -31,7 +33,9 @@ interface InboxSidebarProps {
 const folderIcons = {
   inbox: Inbox,
   sent: Send,
-  untracked_replies: MessageCircle
+  untracked_replies: MessageCircle,
+  search: Search,
+  bounces: AlertTriangle
 }
 
 export function InboxSidebar({
