@@ -117,6 +117,14 @@ jobs:
             mkdir -p /var/backups/mailsender
             rsync -a --exclude='node_modules' --exclude='.next' --exclude='frontend/node_modules' --exclude='frontend/.next' . "/var/backups/mailsender/backup-\$DEPLOYMENT_ID" || true
 
+            # Handle any uncommitted changes on server
+            echo "💾 Checking for local changes..."
+            if ! git diff-index --quiet HEAD --; then
+              echo "⚠️  Local changes detected - stashing them..."
+              git stash push -m "Auto-stash before deployment \$DEPLOYMENT_ID"
+              echo "✅ Changes stashed"
+            fi
+
             # Fetch and checkout the deployment tag
             echo "📥 Pulling latest code..."
             git fetch --all --tags
