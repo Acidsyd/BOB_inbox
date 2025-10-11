@@ -2,11 +2,17 @@ import axios from 'axios'
 
 // Ensure HTTPS in production, fallback for local development
 const getApiUrl = () => {
-  // If we're on the production domain, always use HTTPS
-  if (typeof window !== 'undefined' && window.location.hostname === 'qquadro.com') {
-    return 'https://qquadro.com'
+  if (typeof window !== 'undefined') {
+    // If on production domain, use HTTPS
+    if (window.location.hostname === 'qquadro.com') {
+      return 'https://qquadro.com'
+    }
+    // If on IP address, use IP backend
+    if (window.location.hostname === '104.131.93.55') {
+      return 'http://104.131.93.55:4000'
+    }
   }
-  // Otherwise use environment variable or localhost
+  // Fallback to environment variable or localhost
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
 }
 
