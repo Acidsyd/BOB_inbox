@@ -700,7 +700,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     console.log('✅ Campaign found:', campaign.name);
     console.log('📋 Campaign config:', campaign.config);
-    
+    console.log('📋 Config type:', typeof campaign.config);
+    console.log('📋 Config keys:', campaign.config ? Object.keys(campaign.config) : 'null/undefined');
+
     // Get actual lead count for this campaign
     const actualLeadCount = await getLeadCount(campaign.config?.leadListId, req.user.organizationId);
     
@@ -746,6 +748,10 @@ router.get('/:id', authenticateToken, async (req, res) => {
       opened: expandedCampaign.opened,
       openRate: expandedCampaign.openRate
     });
+    console.log('📋 Sending _config:', expandedCampaign._config);
+    console.log('📋 Sending emailSubject:', expandedCampaign.emailSubject);
+    console.log('📋 Sending emailAccounts:', expandedCampaign.emailAccounts);
+    console.log('📋 Sending leadListId:', expandedCampaign.leadListId);
 
     res.json({
       success: true,
@@ -1909,29 +1915,48 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
       }
     }
     
-    // Step 2.1: Cancel ALL pending emails (scheduled + sending) to prevent duplicates
-    console.log(`🗑️ Cancelling ALL pending emails (scheduled + sending)...`);
-    const { data: cancelledEmails, error: cancelError } = await supabase
-      .from('scheduled_emails')
-      .update({ 
-        status: 'skipped', 
-        updated_at: new Date().toISOString(),
-        error_message: 'Campaign restarted - rescheduling'
-      })
-      .eq('campaign_id', campaignId)
-      .eq('organization_id', organizationId)
-      .in('status', ['scheduled', 'sending']) // Cancel both scheduled AND sending emails
-      .select('id, to_email, status');
+    // Step 2.1: Get existing scheduled_emails - separate 'sent' from others
+    // CRITICAL: Never update 'sent' emails - they represent actual sent messages
+    console.log(`🔄 Analyzing existing scheduled_emails...`);
 
-    if (cancelError) {
-      console.error('❌ Error cancelling existing emails:', cancelError);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to cancel existing scheduled emails'
-      });
+    // Get all existing scheduled_emails for this campaign with pagination
+    let allExistingEmails = [];
+    let page = 0;
+    const restartPageSize = 1000;
+
+    while (true) {
+      const { data: emailsPage } = await supabase
+        .from('scheduled_emails')
+        .select('id, lead_id, status')
+        .eq('campaign_id', campaignId)
+        .eq('organization_id', organizationId)
+        .range(page * restartPageSize, (page + 1) * restartPageSize - 1);
+
+      if (!emailsPage || emailsPage.length === 0) break;
+      allExistingEmails = allExistingEmails.concat(emailsPage);
+      if (emailsPage.length < restartPageSize) break;
+      page++;
     }
 
-    console.log(`✅ Cancelled ${cancelledEmails?.length || 0} existing scheduled emails`);
+    console.log(`📧 Found ${allExistingEmails.length} total existing scheduled_emails`);
+
+    // Separate 'sent' emails (NEVER touch these) from updateable emails
+    const sentEmails = new Set();
+    const updateableEmailMap = new Map();
+
+    allExistingEmails.forEach(email => {
+      if (email.status === 'sent') {
+        // CRITICAL: Preserve sent emails - they're conversation history!
+        sentEmails.add(email.lead_id);
+      } else if (email.status === 'scheduled' || email.status === 'failed' || email.status === 'skipped') {
+        // These can be updated/rescheduled
+        updateableEmailMap.set(email.lead_id, email);
+      }
+      // Note: 'sending' status emails are in-flight, skip them
+    });
+
+    console.log(`✅ Sent emails (preserved): ${sentEmails.size}`);
+    console.log(`🔄 Updateable emails: ${updateableEmailMap.size}`);
 
     // Step 2.2: Get leads for rescheduling
     const leadListId = campaign.config?.leadListId;
@@ -1946,7 +1971,6 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
     let allLeadsForRestart = [];
     let hasMore = true;
     let offset = 0;
-    const pageSize = 1000;
 
     console.log('📊 Fetching all leads for restart with pagination...');
     while (hasMore) {
@@ -1956,7 +1980,7 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
         .eq('lead_list_id', leadListId)
         .eq('organization_id', organizationId)
         .eq('status', 'active')
-        .range(offset, offset + pageSize - 1);
+        .range(offset, offset + restartPageSize - 1);
 
       if (leadsError) {
         console.error('❌ Error fetching leads for restart:', leadsError);
@@ -1968,8 +1992,8 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
 
       if (leadsPage && leadsPage.length > 0) {
         allLeadsForRestart = allLeadsForRestart.concat(leadsPage);
-        hasMore = leadsPage.length === pageSize;
-        offset += pageSize;
+        hasMore = leadsPage.length === restartPageSize;
+        offset += restartPageSize;
         console.log(`📊 Fetched ${allLeadsForRestart.length} leads for restart so far...`);
       } else {
         hasMore = false;
@@ -2006,32 +2030,80 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
     });
 
     console.log(`📅 Creating fresh schedule starting from NOW...`);
-    console.log(`🚨 DEBUG: About to call CampaignScheduler.scheduleEmails() with ${allLeadsForRestart.length} leads`);
-    console.log(`🚨 DEBUG: Scheduler config:`, {
-      timezone: campaign.config?.timezone,
-      emailsPerDay: campaign.config?.emailsPerDay,
-      emailsPerHour: campaign.config?.emailsPerHour,
-      sendingInterval: campaign.config?.sendingInterval,
-      sendingHours: campaign.config?.sendingHours
-    });
     const leadSchedules = scheduler.scheduleEmails(allLeadsForRestart, emailAccounts);
-    console.log(`🚨 DEBUG: CampaignScheduler returned ${leadSchedules.length} schedules`);
+    console.log(`✅ Generated ${leadSchedules.length} schedules`);
+
     if (leadSchedules.length > 0) {
       const first = leadSchedules[0];
       const last = leadSchedules[leadSchedules.length - 1];
-      console.log(`🚨 DEBUG: First email sendAt: ${first.sendAt?.toISOString()}`);
-      console.log(`🚨 DEBUG: Last email sendAt: ${last.sendAt?.toISOString()}`);
-      const timeDiff = last.sendAt - first.sendAt;
-      console.log(`🚨 DEBUG: Total time span: ${Math.round(timeDiff / (1000 * 60))} minutes for ${leadSchedules.length} emails`);
+      console.log(`⏰ First email: ${first.sendAt?.toISOString()}`);
+      console.log(`⏰ Last email: ${last.sendAt?.toISOString()}`);
     }
-    
-    // Step 2.4: Process in batches to handle large campaigns
-    const BATCH_SIZE = 100;
-    let totalScheduled = 0;
-    
-    for (let i = 0; i < leadSchedules.length; i += BATCH_SIZE) {
-      const batch = leadSchedules.slice(i, i + BATCH_SIZE);
-      
+
+    // Step 2.4: Separate leads into categories
+    const leadsAlreadySent = [];      // Already sent - SKIP (preserve conversation)
+    const leadsToUpdate = [];         // Have updateable scheduled_emails - UPDATE
+    const leadsToInsert = [];         // No scheduled_emails - INSERT
+
+    leadSchedules.forEach(schedule => {
+      const leadId = schedule.lead.id;
+
+      if (sentEmails.has(leadId)) {
+        // CRITICAL: Already sent to this lead - preserve conversation history
+        leadsAlreadySent.push(schedule);
+      } else if (updateableEmailMap.has(leadId)) {
+        // Has a scheduled/failed/skipped email - update it
+        leadsToUpdate.push(schedule);
+      } else {
+        // No scheduled_email at all - create new one
+        leadsToInsert.push(schedule);
+      }
+    });
+
+    console.log(`✅ Already sent (SKIP): ${leadsAlreadySent.length}`);
+    console.log(`🔄 To update: ${leadsToUpdate.length}`);
+    console.log(`➕ To insert: ${leadsToInsert.length}`);
+
+    // Step 2.5: UPDATE existing scheduled_emails (scheduled/failed/skipped only)
+    let totalUpdated = 0;
+    const UPDATE_BATCH_SIZE = 50;
+
+    for (let i = 0; i < leadsToUpdate.length; i += UPDATE_BATCH_SIZE) {
+      const batch = leadsToUpdate.slice(i, i + UPDATE_BATCH_SIZE);
+
+      for (const schedule of batch) {
+        const existingEmail = updateableEmailMap.get(schedule.lead.id);
+
+        const { error: updateError } = await supabase
+          .from('scheduled_emails')
+          .update({
+            send_at: schedule.sendAt.toISOString(),
+            status: 'scheduled', // Reset to scheduled if was 'skipped' or 'failed'
+            email_account_id: schedule.emailAccountId,
+            updated_at: new Date().toISOString(),
+            error_message: null // Clear any previous errors
+          })
+          .eq('id', existingEmail.id);
+
+        if (updateError) {
+          console.error(`❌ Error updating scheduled_email ${existingEmail.id}:`, updateError);
+        } else {
+          totalUpdated++;
+        }
+      }
+
+      console.log(`🔄 Updated ${totalUpdated}/${leadsToUpdate.length} existing emails...`);
+    }
+
+    console.log(`✅ Updated ${totalUpdated} existing scheduled_emails`);
+
+    // Step 2.6: INSERT new scheduled_emails for leads WITHOUT existing records
+    const INSERT_BATCH_SIZE = 100;
+    let totalInserted = 0;
+
+    for (let i = 0; i < leadsToInsert.length; i += INSERT_BATCH_SIZE) {
+      const batch = leadsToInsert.slice(i, i + INSERT_BATCH_SIZE);
+
       const scheduledEmails = [];
       batch.forEach(schedule => {
         const lead = schedule.lead;
@@ -2040,12 +2112,12 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
 
         // Create main email
         const mainEmail = createScheduledEmailRecord(
-          campaignId, 
-          lead, 
-          emailAccountId, 
-          campaign, 
-          sendAt, 
-          organizationId, 
+          campaignId,
+          lead,
+          emailAccountId,
+          campaign,
+          sendAt,
+          organizationId,
           0 // sequence_step = 0 for main email
         );
         scheduledEmails.push(mainEmail);
@@ -2055,7 +2127,7 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
         emailSequence.forEach((email, emailIndex) => {
           const followUpDelay = email.delay * 24 * 60 * 60 * 1000; // Convert days to milliseconds
           const followUpSendAt = new Date(sendAt.getTime() + followUpDelay);
-          
+
           const followUpEmail = createScheduledEmailRecord(
             campaignId,
             lead,
@@ -2076,19 +2148,23 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
         .insert(scheduledEmails);
 
       if (insertError) {
-        console.error(`❌ Error inserting batch ${i / BATCH_SIZE + 1}:`, insertError);
+        console.error(`❌ Error inserting batch ${i / INSERT_BATCH_SIZE + 1}:`, insertError);
         return res.status(500).json({
           success: false,
           error: 'Failed to schedule emails during restart'
         });
       }
 
-      totalScheduled += scheduledEmails.length;
-      console.log(`📧 Scheduled batch ${Math.floor(i / BATCH_SIZE) + 1}: ${scheduledEmails.length} emails (${totalScheduled} total)`);
+      totalInserted += scheduledEmails.length;
+      console.log(`➕ Inserted batch ${Math.floor(i / INSERT_BATCH_SIZE) + 1}: ${scheduledEmails.length} emails (${totalInserted} total)`);
     }
 
+    console.log(`✅ Inserted ${totalInserted} new scheduled_emails`);
+
     console.log(`🎉 Campaign restart completed successfully!`);
-    console.log(`📧 Rescheduled ${totalScheduled} emails`);
+    console.log(`🔄 Updated: ${totalUpdated} emails`);
+    console.log(`➕ Inserted: ${totalInserted} emails`);
+    console.log(`📧 Total processed: ${totalUpdated + totalInserted} emails`);
     console.log(`⏰ First email will send at: ${leadSchedules[0]?.sendAt}`);
     console.log(`⏰ Last email will send at: ${leadSchedules[leadSchedules.length - 1]?.sendAt}`);
 
@@ -2097,10 +2173,11 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
       success: true,
       campaignId: campaignId,
       status: 'active',
-      message: 'Campaign restarted successfully - existing emails rescheduled',
+      message: 'Campaign restarted successfully - existing emails updated, no duplicates created',
       type: 'restart',
-      emailsScheduled: totalScheduled,
-      emailsCancelled: cancelledEmails?.length || 0,
+      emailsUpdated: totalUpdated,
+      emailsInserted: totalInserted,
+      totalProcessed: totalUpdated + totalInserted,
       firstEmailAt: leadSchedules[0]?.sendAt,
       lastEmailAt: leadSchedules[leadSchedules.length - 1]?.sendAt,
       restartedAt: new Date().toISOString()
@@ -2249,10 +2326,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     console.log('✏️ PUT /api/campaigns/:id called for campaign:', campaignId);
 
-    // Validate campaign ownership and status
+    // Validate campaign ownership and status - FETCH FULL CAMPAIGN INCLUDING CONFIG
     const { data: existingCampaign, error: fetchError } = await supabase
       .from('campaigns')
-      .select('id, status, organization_id')
+      .select('*')
       .eq('id', campaignId)
       .eq('organization_id', organizationId)
       .single();
@@ -2273,17 +2350,28 @@ router.put('/:id', authenticateToken, async (req, res) => {
       });
     }
 
+    // DEBUG: Log the entire request body to see what frontend is sending
+    console.log('\n\n' + '='.repeat(80));
+    console.log('🚨🚨🚨 CAMPAIGN UPDATE REQUEST RECEIVED 🚨🚨🚨');
+    console.log('='.repeat(80));
+    console.log('Campaign ID:', req.params.id);
+    console.log('Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('='.repeat(80) + '\n\n');
+
+    // CRITICAL FIX: Frontend sends data nested in config object
+    // Extract name from root level, everything else from config
+    const { name, config: frontendConfig = {} } = req.body;
+
     const {
-      name,
       description,
       emailSubject,
       emailContent,
       followUpEnabled,
       emailSequence,
       selectedLeads,
-      selectedLeadListId,
-      selectedLeadListName,
-      selectedLeadListCount,
+      leadListId: selectedLeadListId,
+      leadListName: selectedLeadListName,
+      leadListCount: selectedLeadListCount,
       emailAccounts,
       selectedAccountIds,
       emailsPerDay,
@@ -2294,45 +2382,63 @@ router.put('/:id', authenticateToken, async (req, res) => {
       activeDays,
       sendingHours,
       enableJitter,
-      jitterMinutes
-    } = req.body;
+      jitterMinutes,
+      timezone
+    } = frontendConfig;
 
-    // Build campaign config
-    const campaignConfig = {
-      emailSubject,
-      emailContent,
-      followUpEnabled,
-      emailSequence: emailSequence || [],
-      leadListId: selectedLeadListId,
-      leadListName: selectedLeadListName,
-      leadCount: selectedLeadListCount,
-      emailAccounts: selectedAccountIds || emailAccounts || [],
-      emailsPerDay: emailsPerDay || 50,
-      sendingInterval: Math.max(5, sendingInterval || 15), // Minimum 5 minutes
-      trackOpens: trackOpens || false,
-      trackClicks: trackClicks || false,
-      stopOnReply: stopOnReply || false,
-      activeDays: activeDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
-      sendingHours: sendingHours || { start: 9, end: 17 },
-      enableJitter: enableJitter || false,
-      jitterMinutes: jitterMinutes || 2
+    // CRITICAL FIX: Merge with existing config to prevent data loss
+    const existingConfig = existingCampaign.config || {};
+
+    // Helper function to check if a value should be considered "empty" and not overwrite existing config
+    const isEmptyValue = (value) => {
+      if (value === undefined || value === null) return true;
+      if (value === '') return true;
+      if (Array.isArray(value) && value.length === 0) return true;
+      return false;
     };
 
-    console.log('🔧 Updating campaign with config:', {
-      campaignId,
-      name,
-      leadCount: selectedLeadListCount,
-      emailAccountsCount: campaignConfig.emailAccounts.length,
-      sendingInterval: campaignConfig.sendingInterval,
-      emailsPerDay: campaignConfig.emailsPerDay
-    });
+    // Helper function to get value or fallback to existing
+    const getValueOrExisting = (newValue, existingValue, defaultValue = undefined) => {
+      if (!isEmptyValue(newValue)) return newValue;
+      if (!isEmptyValue(existingValue)) return existingValue;
+      return defaultValue;
+    };
 
-    // Update campaign
+    // Build campaign config - preserve existing values if new values are empty
+    const campaignConfig = {
+      description: getValueOrExisting(description, existingConfig.description, ''),
+      emailSubject: getValueOrExisting(emailSubject, existingConfig.emailSubject),
+      emailContent: getValueOrExisting(emailContent, existingConfig.emailContent),
+      followUpEnabled: followUpEnabled !== undefined ? followUpEnabled : existingConfig.followUpEnabled,
+      emailSequence: getValueOrExisting(emailSequence, existingConfig.emailSequence, []),
+      leadListId: getValueOrExisting(selectedLeadListId, existingConfig.leadListId),
+      leadListName: getValueOrExisting(selectedLeadListName, existingConfig.leadListName),
+      leadCount: selectedLeadListCount !== undefined ? selectedLeadListCount : existingConfig.leadCount,
+      emailAccounts: getValueOrExisting(selectedAccountIds || emailAccounts, existingConfig.emailAccounts, []),
+      emailsPerDay: emailsPerDay !== undefined ? emailsPerDay : (existingConfig.emailsPerDay || 50),
+      sendingInterval: sendingInterval !== undefined ? Math.max(5, sendingInterval) : (existingConfig.sendingInterval || 15),
+      trackOpens: trackOpens !== undefined ? trackOpens : (existingConfig.trackOpens !== undefined ? existingConfig.trackOpens : false),
+      trackClicks: trackClicks !== undefined ? trackClicks : (existingConfig.trackClicks !== undefined ? existingConfig.trackClicks : false),
+      stopOnReply: stopOnReply !== undefined ? stopOnReply : (existingConfig.stopOnReply !== undefined ? existingConfig.stopOnReply : false),
+      activeDays: getValueOrExisting(activeDays, existingConfig.activeDays, ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']),
+      sendingHours: sendingHours !== undefined ? sendingHours : (existingConfig.sendingHours || { start: 9, end: 17 }),
+      enableJitter: enableJitter !== undefined ? enableJitter : (existingConfig.enableJitter !== undefined ? existingConfig.enableJitter : false),
+      jitterMinutes: jitterMinutes !== undefined ? jitterMinutes : (existingConfig.jitterMinutes || 2),
+      timezone: getValueOrExisting(timezone, existingConfig.timezone, 'UTC')
+    };
+
+    console.log('\n' + '='.repeat(80));
+    console.log('💾💾💾 BUILT CONFIG TO SAVE 💾💾💾');
+    console.log('='.repeat(80));
+    console.log('Existing Config:', JSON.stringify(existingConfig, null, 2));
+    console.log('New Config:', JSON.stringify(campaignConfig, null, 2));
+    console.log('='.repeat(80) + '\n');
+
+    // Update campaign (description is in config, not a separate column)
     const { data: updatedCampaign, error: updateError } = await supabase
       .from('campaigns')
       .update({
         name: name,
-        description: description,
         config: campaignConfig,
         updated_at: new Date().toISOString()
       })
@@ -2349,18 +2455,20 @@ router.put('/:id', authenticateToken, async (req, res) => {
       });
     }
 
-    // Clear any existing scheduled emails for this campaign since settings changed
-    console.log('🧹 Clearing existing scheduled emails due to campaign update');
+    // CRITICAL FIX: Only clear PENDING/SCHEDULED emails, preserve sent/failed/skipped history
+    // This prevents data loss when updating campaign settings
+    console.log('🧹 Clearing pending scheduled emails (preserving sent/failed history)');
     const { error: deleteError } = await supabase
       .from('scheduled_emails')
       .delete()
       .eq('campaign_id', campaignId)
-      .eq('organization_id', organizationId);
+      .eq('organization_id', organizationId)
+      .in('status', ['scheduled', 'pending']);
 
     if (deleteError) {
       console.warn('⚠️ Error clearing scheduled emails:', deleteError);
     } else {
-      console.log('✅ Cleared existing scheduled emails');
+      console.log('✅ Cleared pending scheduled emails (sent/failed/skipped history preserved)');
     }
 
     // Return updated campaign with expanded config
@@ -2395,6 +2503,107 @@ router.put('/:id', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Internal server error'
+    });
+  }
+});
+
+
+// POST /api/campaigns/:id/duplicate - Duplicate a campaign
+router.post('/:id/duplicate', authenticateToken, async (req, res) => {
+  try {
+    console.log('📋 POST /api/campaigns/:id/duplicate called');
+    console.log('👤 User:', req.user);
+    console.log('📋 Campaign ID:', req.params.id);
+
+    const campaignId = req.params.id;
+    const organizationId = req.user.organizationId;
+
+    // Find campaign in database
+    const { data: originalCampaign, error } = await supabase
+      .from('campaigns')
+      .select('*')
+      .eq('id', campaignId)
+      .eq('organization_id', organizationId)
+      .single();
+
+    if (error || !originalCampaign) {
+      console.error('❌ Campaign not found or database error:', error);
+      return res.status(404).json({
+        success: false,
+        error: 'Campaign not found'
+      });
+    }
+
+    console.log('✅ Original campaign found:', originalCampaign.name);
+
+    // Create new campaign config without lead list
+    const newConfig = {
+      ...originalCampaign.config,
+      leadListId: null,
+      leadListName: null,
+      leadCount: 0
+    };
+
+    // Create new campaign with " (copy)" suffix
+    const newCampaignName = `${originalCampaign.name} (copy)`;
+
+    const { data: newCampaign, error: createError } = await supabase
+      .from('campaigns')
+      .insert({
+        name: newCampaignName,
+        status: 'stopped',
+        organization_id: organizationId,
+        created_by: req.user.id,
+        config: newConfig,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select('*')
+      .single();
+
+    if (createError || !newCampaign) {
+      console.error('❌ Error creating duplicate campaign:', createError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create duplicate campaign'
+      });
+    }
+
+    console.log('✅ Campaign duplicated successfully:', newCampaign.id);
+
+    // Return the new campaign with expanded config
+    const responseData = {
+      id: newCampaign.id,
+      name: newCampaign.name,
+      status: newCampaign.status,
+      organizationId: newCampaign.organization_id,
+      createdBy: newCampaign.created_by,
+      createdAt: newCampaign.created_at,
+      updatedAt: newCampaign.updated_at,
+      ...newConfig,
+      leads: 0,
+      sent: 0,
+      opened: 0,
+      clicked: 0,
+      replied: 0,
+      bounced: 0,
+      openRate: 0,
+      clickRate: 0,
+      replyRate: 0,
+      bounceRate: 0
+    };
+
+    res.json({
+      success: true,
+      campaign: responseData
+    });
+
+  } catch (error) {
+    console.error('❌ Error in POST /campaigns/:id/duplicate:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

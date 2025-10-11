@@ -10,13 +10,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Badge } from '../../components/ui/badge'
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  MoreHorizontal, 
-  Play, 
-  Pause, 
+import {
+  Plus,
+  Search,
+  Filter,
+  MoreHorizontal,
+  Play,
+  Pause,
   BarChart3,
   Users,
   Mail,
@@ -27,7 +27,8 @@ import {
   Reply,
   Activity,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  Copy
 } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
@@ -59,8 +60,9 @@ function CampaignsContent() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState('all')
   const [isCreatingCampaign, setIsCreatingCampaign] = useState(false)
+  const [duplicatingCampaignId, setDuplicatingCampaignId] = useState<string | null>(null)
 
-  const { data: campaignsResponse, isLoading } = useQuery({
+  const { data: campaignsResponse, isLoading, refetch } = useQuery({
     queryKey: ['campaigns'],
     queryFn: () => api.get('/campaigns').then(res => res.data),
     refetchInterval: 30000,
@@ -89,10 +91,10 @@ function CampaignsContent() {
 
   const handleCreateNewCampaign = () => {
     if (isCreatingCampaign) return // Prevent double clicks
-    
+
     console.log('🔍 Create campaign button clicked')
     setIsCreatingCampaign(true) // ⚡ INSTANT UI blocking
-    
+
     try {
       console.log('🔍 Navigating to /campaigns/new')
       router.push('/campaigns/new')
@@ -100,11 +102,34 @@ function CampaignsContent() {
       console.error('❌ Navigation error:', error)
       setIsCreatingCampaign(false)
     }
-    
+
     // Reset loading state after 3 seconds as fallback
     setTimeout(() => {
       setIsCreatingCampaign(false)
     }, 3000)
+  }
+
+  const handleDuplicateCampaign = async (campaignId: string) => {
+    if (duplicatingCampaignId) return // Prevent double clicks
+
+    console.log('📋 Duplicate campaign button clicked for:', campaignId)
+    setDuplicatingCampaignId(campaignId) // ⚡ INSTANT UI blocking
+
+    try {
+      const response = await api.post(`/campaigns/${campaignId}/duplicate`)
+
+      if (response.data.success) {
+        console.log('✅ Campaign duplicated successfully:', response.data.campaign)
+        // Refetch campaigns to show the new duplicated campaign
+        await refetch()
+      } else {
+        console.error('❌ Failed to duplicate campaign:', response.data.error)
+      }
+    } catch (error) {
+      console.error('❌ Error duplicating campaign:', error)
+    } finally {
+      setDuplicatingCampaignId(null)
+    }
   }
 
   // Tracking functions removed for simplification
@@ -302,6 +327,19 @@ function CampaignsContent() {
                         )}
                         <Button size="sm" variant="outline" title="Analytics">
                           <BarChart3 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          title="Duplicate campaign"
+                          onClick={() => handleDuplicateCampaign(campaign.id)}
+                          disabled={duplicatingCampaignId === campaign.id}
+                        >
+                          {duplicatingCampaignId === campaign.id ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                       {campaign.id ? (
