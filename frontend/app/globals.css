@@ -229,20 +229,76 @@ button, a, [role="button"] {
   max-width: 100% !important;
 }
 
+/* Gmail-like paragraph and text spacing */
+.email-content p {
+  margin: 0 0 1em 0 !important;
+  line-height: 1.5 !important;
+}
+
+.email-content p:last-child {
+  margin-bottom: 0 !important;
+}
+
+.email-content br {
+  line-height: 1.5 !important;
+}
+
+/* Gmail-like divs spacing */
+.email-content div {
+  margin: 0 !important;
+}
+
+.email-content div + div {
+  margin-top: 0.5em !important;
+}
+
+/* Better list formatting */
+.email-content ul,
+.email-content ol {
+  margin: 0 0 1em 0 !important;
+  padding-left: 2em !important;
+}
+
+.email-content li {
+  margin: 0.25em 0 !important;
+  line-height: 1.5 !important;
+}
+
+/* Gmail-like table styling */
 .email-content table {
   border-collapse: collapse !important;
   width: auto !important;
+  margin: 0.5em 0 !important;
 }
 
+.email-content td,
+.email-content th {
+  padding: 4px 8px !important;
+}
+
+/* Gmail-like image handling */
 .email-content img {
   max-width: 100% !important;
   height: auto !important;
-  display: inline-block !important;
+  display: block !important;
+  margin: 0.5em 0 !important;
 }
 
+/* Gmail-like link styling */
 .email-content a {
-  text-decoration: underline !important;
+  color: #1a73e8 !important;
+  text-decoration: none !important;
   cursor: pointer !important;
+}
+
+.email-content a:hover {
+  text-decoration: underline !important;
+}
+
+/* Remove excessive spacing from email signatures */
+.email-content .gmail_signature,
+.email-content .gmail_quote {
+  margin: 0.5em 0 !important;
 }
 
 /* Prevent email content from modifying scrollbars */

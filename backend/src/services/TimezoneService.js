@@ -171,6 +171,75 @@ class TimezoneService {
   }
 
   /**
+   * Convert from user timezone to UTC
+   * @param {string} timezoneDate - Date string in user timezone (e.g., "2025-10-13T09:00:00")
+   * @param {string} userTimezone - IANA timezone identifier
+   * @returns {Date} - UTC Date object
+   */
+  static convertFromUserTimezone(timezoneDate, userTimezone) {
+    if (!this.isValidTimezone(userTimezone)) {
+      console.warn(`Invalid timezone '${userTimezone}', using UTC`);
+      userTimezone = 'UTC';
+    }
+
+    try {
+      // Parse the timezone date string
+      // Format: "2025-10-13T09:00:00"
+      const dateStr = timezoneDate.toString();
+
+      // Create a formatter for the user timezone
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: userTimezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+
+      // Parse the input date components
+      const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+      if (!match) {
+        throw new Error(`Invalid date format: ${dateStr}`);
+      }
+
+      const [, year, month, day, hour, minute, second] = match;
+
+      // Create a date object assuming the timezone
+      // We'll use a trick: create a UTC date with the local values, then adjust for timezone offset
+      const testDate = new Date(Date.UTC(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+        parseInt(hour),
+        parseInt(minute),
+        parseInt(second)
+      ));
+
+      // Get what hour this would be in the target timezone
+      const actualHourInTz = parseInt(testDate.toLocaleString('en-US', {
+        timeZone: userTimezone,
+        hour: 'numeric',
+        hour12: false
+      }));
+
+      // Calculate the hour difference
+      const hourDiff = parseInt(hour) - actualHourInTz;
+
+      // Adjust by the hour difference to get the correct UTC time
+      const result = new Date(testDate.getTime() + (hourDiff * 60 * 60 * 1000));
+
+      return result;
+    } catch (error) {
+      console.error('Error converting from user timezone:', error);
+      // Fallback: treat as UTC
+      return new Date(timezoneDate);
+    }
+  }
+
+  /**
    * Gets timezone offset in minutes from UTC
    * @param {string} timezone - IANA timezone identifier
    * @param {Date} date - Date to calculate offset for (defaults to now)

@@ -214,46 +214,15 @@ class FolderService {
         case 'inbox':
           console.log('🔍 DEBUG: ENTERED INBOX CASE');
 
-          // SOLUTION: Don't use .in() at all - fetch conversations directly with proper joins
-          // This completely avoids the 414 URI Too Large error
-
-          // Fetch inbox conversations directly using inner join with conversation_messages
-          const { data: inboxConversations, error: inboxError } = await supabase
-            .from('conversations')
-            .select(`
-              *,
-              conversation_messages!inner(
-                id,
-                direction,
-                received_at
-              )
-            `)
-            .eq('organization_id', organizationId)
+          // Inbox shows campaign conversations that have received replies (message_count > 1)
+          // Keeps them visible even after being read
+          query = query
             .eq('conversation_type', 'campaign')
             .neq('status', 'archived')
-            .eq('conversation_messages.direction', 'received')
-            .order('last_message_at', { ascending: false })
-            .range(offset, offset + limit - 1);
+            .gt('message_count', 1); // Only show campaigns with replies (>1 message)
 
-          if (inboxError) {
-            console.error('❌ Error getting inbox conversations:', inboxError);
-            throw inboxError;
-          }
-
-          // Remove duplicate conversations (in case multiple messages match)
-          const uniqueInboxConvs = [];
-          const seenIds = new Set();
-          for (const conv of inboxConversations || []) {
-            if (!seenIds.has(conv.id)) {
-              seenIds.add(conv.id);
-              uniqueInboxConvs.push(conv);
-            }
-          }
-
-          console.log(`🔍 DEBUG INBOX: Found ${uniqueInboxConvs.length} unique inbox conversations`);
-
-          // Return directly without using query builder
-          return uniqueInboxConvs;
+          console.log(`🔍 DEBUG INBOX: Querying campaign conversations with replies`);
+          break;
 
         case 'sent':
           console.log('🔍 DEBUG: Getting sent conversations - ORDERED BY LATEST SENT MESSAGE');
@@ -757,36 +726,19 @@ class FolderService {
 
       switch (folderType) {
         case 'inbox':
-          // Campaign conversations - count only campaign conversations that have received replies
-          const { data: repliedCampaignIdsCount, error: replyCountError } = await this.retryDatabaseOperation(
+          // Campaign conversations with unread replies
+          const { count: inboxCount, error: inboxError } = await this.retryDatabaseOperation(
             () => supabase
-              .from('conversation_messages')
-              .select('conversation_id')
+              .from('conversations')
+              .select('id', { count: 'exact', head: true })
               .eq('organization_id', organizationId)
-              .eq('direction', 'received')
+              .eq('conversation_type', 'campaign')
+              .neq('status', 'archived')
+              .gt('unread_count', 0) // Only count conversations with unread messages
           );
 
-          if (replyCountError) throw replyCountError;
-
-          if (repliedCampaignIdsCount && repliedCampaignIdsCount.length > 0) {
-            const uniqueIdsCount = [...new Set(repliedCampaignIdsCount.map(msg => msg.conversation_id))];
-
-            const { count: inboxCount, error: inboxError } = await this.retryDatabaseOperation(
-              () => supabase
-                .from('conversations')
-                .select('id', { count: 'exact', head: true })
-                .eq('organization_id', organizationId)
-                .eq('conversation_type', 'campaign')
-                .neq('status', 'archived')
-                .gt('unread_count', 0) // Only count conversations with unread messages
-                .in('id', uniqueIdsCount) // Only conversations that have received replies
-            );
-
-            if (inboxError) throw inboxError;
-            count = inboxCount || 0;
-          } else {
-            count = 0; // No conversations with replies
-          }
+          if (inboxError) throw inboxError;
+          count = inboxCount || 0;
           break;
 
         case 'sent':

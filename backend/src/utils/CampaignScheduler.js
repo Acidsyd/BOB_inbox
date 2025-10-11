@@ -348,30 +348,20 @@ class CampaignScheduler {
     second = Math.max(0, Math.min(59, parseInt(second) || 0));
 
     try {
-      // CORRECT APPROACH: Use the proper timezone-aware calculation
+      // FIXED: Use TimezoneService for proper timezone conversion
       // Get the date components in the target timezone
       const year = parseInt(date.toLocaleDateString('en-CA', { timeZone: this.timezone, year: 'numeric' }));
       const month = parseInt(date.toLocaleDateString('en-CA', { timeZone: this.timezone, month: '2-digit' }));
       const day = parseInt(date.toLocaleDateString('en-CA', { timeZone: this.timezone, day: '2-digit' }));
 
-      // Create two dates: one that WOULD be the target time in UTC, and one that IS in the timezone
-      const potentialUTC = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+      // Create a date string in the target timezone
+      const timezoneDateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
 
-      // Check what hour this UTC time would be in the target timezone
-      const actualHourInTz = parseInt(potentialUTC.toLocaleString('en-US', {
-        timeZone: this.timezone,
-        hour: 'numeric',
-        hour12: false
-      }));
-
-      // Calculate how many hours off we are
-      const hourDifference = hour - actualHourInTz;
-
-      // Adjust by the difference to get the correct UTC time
-      const result = new Date(potentialUTC.getTime() + (hourDifference * 60 * 60 * 1000));
+      // Use TimezoneService to convert from timezone to UTC
+      const result = TimezoneService.convertFromUserTimezone(timezoneDateStr, this.timezone);
 
       // Validate final result
-      if (isNaN(result.getTime())) {
+      if (!result || isNaN(result.getTime())) {
         console.error('🚨 Invalid result date in setHourInTimezone:', result);
         return new Date(); // Return current time as fallback
       }

@@ -305,8 +305,15 @@ function EditCampaignPageContent({
   }
 
   const handleSaveCampaign = async () => {
+    console.log('🚨🚨🚨 SAVE BUTTON CLICKED 🚨🚨🚨')
+    console.log('campaignData:', campaignData)
+    console.log('Campaign name:', campaignData.name)
+    console.log('Is saving?', isSaving)
+    console.log('Is restarting?', isRestarting)
+
     try {
       setIsSaving(true)
+      console.log('✅ Setting isSaving to true')
 
       const updateData = {
         name: campaignData.name,
@@ -350,7 +357,12 @@ function EditCampaignPageContent({
         }
       }
 
+      console.log('📤 Sending PUT request to /campaigns/' + id)
+      console.log('📤 Update data:', JSON.stringify(updateData, null, 2))
+
       const response = await api.put(`/campaigns/${id}`, updateData)
+
+      console.log('📥 Received response:', response.data)
 
       if (response.data.success) {
         // Campaign restart functionality - restart if campaign was running

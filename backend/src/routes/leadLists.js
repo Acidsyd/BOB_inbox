@@ -867,9 +867,11 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
   try {
     console.log('🚀 Upload endpoint called');
     console.log('📁 Request body:', req.body);
+    console.log('📁 Request body keys:', Object.keys(req.body));
+    console.log('📁 Request body values:', Object.values(req.body));
     console.log('📎 File:', req.file ? req.file.filename : 'No file');
     console.log('👤 User:', req.user);
-    
+
     const { listName, fieldMapping } = req.body;
     const csvFile = req.file;
 
@@ -877,13 +879,29 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
       return res.status(400).json({ error: 'CSV file is required' });
     }
 
+    console.log('📋 Extracted listName:', listName);
+    console.log('📋 listName type:', typeof listName);
+    console.log('📋 listName exists?', !!listName);
+
     if (!listName) {
+      console.error('❌ List name validation failed - listName is missing');
       return res.status(400).json({ error: 'List name is required' });
+    }
+
+    // Parse field mapping if provided
+    let parsedFieldMapping = null;
+    if (fieldMapping) {
+      try {
+        parsedFieldMapping = typeof fieldMapping === 'string' ? JSON.parse(fieldMapping) : fieldMapping;
+        console.log('📊 Parsed field mapping:', parsedFieldMapping);
+      } catch (e) {
+        console.error('❌ Failed to parse field mapping:', e);
+      }
     }
 
     // Create new lead list
     console.log('📋 Creating new lead list:', { name: listName, organization_id: req.user.organizationId, created_by: req.user.userId });
-    
+
     const { data: newList, error: listError } = await supabase
       .from('lead_lists')
       .insert({
@@ -893,7 +911,7 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
       })
       .select()
       .single();
-      
+
     console.log('📋 Lead list creation result:', { newList, listError });
 
     if (listError) {
@@ -913,9 +931,24 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
 
       stream.on('data', (row) => {
         processedCount++;
-        
+
+        // Use field mapping if provided, otherwise fall back to default field names
+        let email, firstName, lastName, company;
+
+        if (parsedFieldMapping) {
+          email = row[parsedFieldMapping.email];
+          firstName = row[parsedFieldMapping.firstName] || '';
+          lastName = row[parsedFieldMapping.lastName] || '';
+          company = row[parsedFieldMapping.company] || '';
+        } else {
+          // Default field name detection
+          email = row.email || row.Email || row.EMAIL;
+          firstName = row.first_name || row.First_Name || row.firstName || row['First Name'] || '';
+          lastName = row.last_name || row.Last_Name || row.lastName || row['Last Name'] || '';
+          company = row.company || row.Company || row.COMPANY || '';
+        }
+
         // Basic email validation
-        const email = row.email || row.Email || row.EMAIL;
         if (!email || !email.includes('@')) {
           errors.push(`Row ${processedCount}: Invalid or missing email`);
           return;
@@ -923,9 +956,9 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
 
         results.push({
           email: email.toLowerCase().trim(),
-          first_name: row.first_name || row.First_Name || row.firstName || row['First Name'] || '',
-          last_name: row.last_name || row.Last_Name || row.lastName || row['Last Name'] || '',
-          company: row.company || row.Company || row.COMPANY || ''
+          first_name: firstName,
+          last_name: lastName,
+          company: company
         });
       });
 

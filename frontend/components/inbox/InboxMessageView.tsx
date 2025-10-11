@@ -141,11 +141,26 @@ export function InboxMessageView({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isReplying])
 
-  // Auto-expand the latest message
+  // Auto-expand the most recent received message and scroll to it
   useEffect(() => {
     if (messages && messages.length > 0) {
-      const latestMessage = messages[messages.length - 1]
-      setExpandedMessages(new Set([latestMessage.id]))
+      // Find the most recent received message (not sent)
+      const receivedMessages = messages.filter(m => m.direction === 'received')
+      const mostRecentMessage = receivedMessages.length > 0
+        ? receivedMessages[receivedMessages.length - 1]  // Last received message
+        : messages[messages.length - 1]  // Fallback to last message if no received messages
+
+      setExpandedMessages(new Set([mostRecentMessage.id]))
+
+      // Scroll to the most recent message after a short delay to ensure it's rendered
+      setTimeout(() => {
+        if (latestMessageRef.current) {
+          latestMessageRef.current.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          })
+        }
+      }, 100)
     }
   }, [messages])
 
@@ -162,6 +177,9 @@ export function InboxMessageView({
   const autoReadTimerRef = useRef<NodeJS.Timeout | null>(null)
   const currentConversationId = useRef<string | null>(null)
   const hasBeenProcessed = useRef<boolean>(false)
+
+  // Ref to the latest message element for scrolling
+  const latestMessageRef = useRef<HTMLDivElement | null>(null)
   
   useEffect(() => {
     // If this is a new conversation or the conversation changed
@@ -431,22 +449,31 @@ export function InboxMessageView({
 
       return (
         <div
-          className="email-content text-sm leading-relaxed text-gray-900"
+          className="email-content"
           style={{
-            color: '#111827',
-            lineHeight: '1.6',
-            isolation: 'isolate',
-            contain: 'layout style paint',
-            position: 'relative',
-            zIndex: 1,
-            backgroundColor: '#ffffff'
+            fontFamily: 'Arial, sans-serif',
+            fontSize: '14px',
+            lineHeight: '1.5',
+            color: '#202124',
+            wordWrap: 'break-word',
+            overflowWrap: 'break-word'
           }}
           dangerouslySetInnerHTML={{ __html: cleanedHtml }}
         />
       )
     }
     return (
-      <div className="whitespace-pre-wrap text-sm text-gray-900 leading-relaxed">
+      <div
+        className="whitespace-pre-wrap"
+        style={{
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '14px',
+          lineHeight: '1.5',
+          color: '#202124',
+          wordWrap: 'break-word',
+          overflowWrap: 'break-word'
+        }}
+      >
         {message.content_plain || 'No content'}
       </div>
     )
@@ -621,10 +648,19 @@ export function InboxMessageView({
           </div>
         ) : (
           <div className="space-y-3 pb-4">
-            {messages?.map((message) => (
-              <div
-                key={message.id}
-                className={cn(
+            {messages?.map((message, index) => {
+              // Determine if this is the most recent received message
+              const receivedMessages = messages.filter(m => m.direction === 'received')
+              const mostRecentReceivedMessage = receivedMessages.length > 0
+                ? receivedMessages[receivedMessages.length - 1]
+                : messages[messages.length - 1]
+              const isTargetMessage = message.id === mostRecentReceivedMessage.id
+
+              return (
+                <div
+                  key={message.id}
+                  ref={isTargetMessage ? latestMessageRef : null}
+                  className={cn(
                   "border rounded-lg shadow-sm transition-all duration-200",
                   expandedMessages.has(message.id) && "ring-2 ring-blue-500 shadow-md",
                   message.direction === 'sent'
@@ -750,8 +786,9 @@ export function InboxMessageView({
                   </>
                 )}
               </div>
-            ))}
-            
+            )
+            })}
+
             {/* Rich Text Reply Box */}
             {isReplying && (
               <div 
