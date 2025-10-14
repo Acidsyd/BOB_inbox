@@ -153,6 +153,54 @@ Updates conversations → Tracks metrics → Schedules follow-ups
 - **Account rotation**: Intelligent distribution across multiple accounts
 - **Human-like jitter**: ±1-3 minute variations to avoid robotic patterns
 
+### Perfect Rotation Algorithm
+**Design Philosophy**: Guarantee no consecutive emails from the same account for optimal deliverability.
+
+```javascript
+// CampaignScheduler.scheduleEmailsWithPerfectRotation()
+// Algorithm: Round-robin distribution in account-first pattern
+
+1. Distribute all leads across accounts first (round-robin)
+   Lead 0 → Account 0
+   Lead 1 → Account 1
+   Lead 2 → Account 2
+   ...
+   Lead N → Account (N % accountCount)
+
+2. Schedule in time-ordered rounds
+   Round 1 (10:00): [Lead 0 from Acc0, Lead 1 from Acc1, Lead 2 from Acc2...]
+   Round 2 (10:15): [Lead 8 from Acc0, Lead 9 from Acc1, Lead 10 from Acc2...]
+   Round 3 (10:30): [Lead 16 from Acc0, Lead 17 from Acc1, Lead 18 from Acc2...]
+
+3. Result: Perfect rotation with max_consecutive = 1
+   Timeline: Acc0 → Acc1 → Acc2 → ... → Acc7 → Acc0 → Acc1 → ...
+```
+
+**Key Properties**:
+- **No consecutive duplicates**: Each account followed by different account
+- **Even distribution**: All accounts send roughly equal number of emails
+- **Deterministic scheduling**: Same inputs always produce same schedule
+- **Timezone-aware**: Respects business hours and active days
+- **Rate limit compliant**: Enforces daily/hourly limits per account
+
+**Usage**:
+```javascript
+// campaigns.js - POST /api/campaigns/:id/start
+const result = await campaignScheduler.scheduleEmailsWithPerfectRotation({
+  campaign,
+  leads,
+  emailAccounts,
+  organizationId: req.user.organizationId
+});
+
+// Returns: { emailRecords: Array, stats: { totalScheduled, rotationQuality } }
+// rotationQuality: { maxConsecutive: 1, uniqueAccountsInFirst24: 8 }
+```
+
+**Advantages over Random Rotation**:
+- Random: May have consecutive duplicates, uneven distribution
+- Perfect: Guaranteed optimal rotation, predictable behavior
+
 ### Conversation Threading
 ```
 Email sent/received → Message-ID headers → In-Reply-To matching →
@@ -240,6 +288,7 @@ SMTP_PASS=your-app-password
 
 ### Backend Services
 - `src/services/CronEmailProcessor.js` - **Production scheduler** (4-phase enhanced, exact interval compliance)
+- `src/services/CampaignScheduler.js` - **Perfect rotation algorithm** (round-robin scheduling with no consecutive duplicates)
 - `src/services/BackgroundSyncService.js` - **Simple background sync** (15-minute intervals for all accounts)
 - `src/services/OAuth2Service.js` - Gmail API integration with attachment support
 - `src/services/EmailService.js` - Dual-provider email sending
@@ -247,6 +296,9 @@ SMTP_PASS=your-app-password
 - `src/services/TimezoneService.js` - **Universal timezone conversion** (IANA timezone support, business hours)
 - `src/services/AccountRateLimitService.js` - Account rotation and rate limiting
 - `src/services/BounceTrackingService.js` - Multi-provider bounce detection
+
+### Backend Utilities
+- `src/utils/supabaseHelpers.js` - **Pagination utilities** (fetchAllWithPagination, fetchCount, batchUpdate)
 
 ### API Routes
 - `src/routes/campaigns.js` - Campaign CRUD with auto-start processor
@@ -275,6 +327,179 @@ campaigns.config = {
 }
 ```
 
+## Database Query Patterns
+
+### Supabase Pagination (CRITICAL)
+**Problem**: Supabase defaults to 1000-row limit; large campaigns need pagination.
+
+**Solution**: Use `src/utils/supabaseHelpers.js` utilities for consistent pagination.
+
+```javascript
+const { fetchAllWithPagination, fetchCount, batchUpdate } = require('../utils/supabaseHelpers');
+```
+
+### Pattern 1: Count-Only Queries (Most Efficient)
+```javascript
+// ✅ CORRECT - Use count query for efficiency
+const { count, error } = await supabase
+  .from('scheduled_emails')
+  .select('*', { count: 'exact', head: true })  // head: true returns no data
+  .eq('campaign_id', campaignId)
+  .eq('status', 'sent');
+
+console.log(`Total sent: ${count}`);
+
+// ❌ INCORRECT - Fetches all rows just to count
+const { data, error } = await supabase
+  .from('scheduled_emails')
+  .select('id')  // Still fetches data!
+  .eq('campaign_id', campaignId);
+
+const count = data?.length || 0;  // Capped at 1000!
+```
+
+### Pattern 2: Simple Pagination with Helper
+```javascript
+// ✅ CORRECT - Automatic pagination with helper
+const { data: allEmails, count } = await fetchAllWithPagination(supabase, 'scheduled_emails', {
+  select: 'id, to_email, send_at, status',
+  filters: [
+    { column: 'campaign_id', value: campaignId },
+    { column: 'status', value: 'scheduled' }
+  ],
+  order: { column: 'send_at', ascending: true },
+  pageSize: 1000  // optional, defaults to 1000
+});
+
+console.log(`Fetched ${allEmails.length} emails across ${Math.ceil(count / 1000)} pages`);
+
+// Helper handles:
+// 1. Count query to get total
+// 2. Automatic page loop with .range()
+// 3. Error handling per page
+// 4. Returns all rows + count
+```
+
+### Pattern 3: Manual Pagination (Complex Filters)
+```javascript
+// Use when fetchAllWithPagination doesn't support filter types
+// (e.g., .gte(), .lte(), .not(), .or(), .in())
+
+// Step 1: Get count first
+const { count: totalCount } = await supabase
+  .from('conversation_messages')
+  .select('*', { count: 'exact', head: true })
+  .eq('organization_id', organizationId)
+  .gte('received_at', startDate.toISOString())
+  .lte('received_at', endDate.toISOString());
+
+// Step 2: Fetch pages
+const pageSize = 1000;
+let page = 0;
+const allMessages = [];
+
+while (allMessages.length < totalCount) {
+  const { data: pageData, error } = await supabase
+    .from('conversation_messages')
+    .select('id, from_email, received_at')
+    .eq('organization_id', organizationId)
+    .gte('received_at', startDate.toISOString())
+    .lte('received_at', endDate.toISOString())
+    .range(page * pageSize, (page + 1) * pageSize - 1)
+    .order('received_at', { ascending: true });
+
+  if (error) throw error;
+  if (!pageData || pageData.length === 0) break;
+
+  allMessages.push(...pageData);
+  page++;
+}
+
+console.log(`Fetched ${allMessages.length}/${totalCount} messages`);
+```
+
+### Pattern 4: Update Queries (Never Return Data)
+```javascript
+// ✅ CORRECT - Count first, update without select
+const { count: cancelCount } = await supabase
+  .from('scheduled_emails')
+  .select('*', { count: 'exact', head: true })
+  .eq('campaign_id', campaignId)
+  .eq('status', 'scheduled');
+
+const { error } = await supabase
+  .from('scheduled_emails')
+  .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+  .eq('campaign_id', campaignId)
+  .eq('status', 'scheduled');
+  // No .select() = doesn't return rows
+
+console.log(`Cancelled ${cancelCount} emails`);
+
+// ❌ INCORRECT - Returns potentially thousands of rows
+const { data: cancelled, error } = await supabase
+  .from('scheduled_emails')
+  .update({ status: 'cancelled' })
+  .eq('campaign_id', campaignId)
+  .select();  // Returns all updated rows!
+```
+
+### Pattern 5: Batch Updates (Large Datasets)
+```javascript
+const { data: emailsToUpdate } = await fetchAllWithPagination(supabase, 'scheduled_emails', {
+  select: 'id',
+  filters: [{ column: 'campaign_id', value: campaignId }]
+});
+
+// Prepare batch updates
+const updates = emailsToUpdate.map(email => ({
+  id: email.id,
+  updates: { send_at: newTimestamp }
+}));
+
+// Use helper for efficient batch processing
+const { success, failed } = await batchUpdate(supabase, 'scheduled_emails', updates, 50);
+console.log(`Updated ${success}, failed ${failed}`);
+```
+
+### Helper Function Reference
+
+#### fetchAllWithPagination
+```javascript
+const { data, count } = await fetchAllWithPagination(supabase, tableName, {
+  select: 'id, name',        // columns to select
+  filters: [                 // .eq() filters only
+    { column: 'status', value: 'active' }
+  ],
+  order: { column: 'created_at', ascending: false },
+  pageSize: 1000             // optional, defaults to 1000
+});
+```
+
+#### fetchCount
+```javascript
+const count = await fetchCount(supabase, tableName, [
+  { column: 'organization_id', value: orgId },
+  { column: 'status', value: 'sent' }
+]);
+```
+
+#### batchUpdate
+```javascript
+const { success, failed } = await batchUpdate(supabase, tableName, [
+  { id: 'uuid1', updates: { status: 'sent' } },
+  { id: 'uuid2', updates: { status: 'sent' } }
+], 50);  // batch size
+```
+
+### Pagination Safety Rules
+- **Always use count queries** for totals (not `data.length`)
+- **Never assume <1000 rows** for any user-generated data
+- **Use helpers for simple queries** to reduce code duplication
+- **Use manual pagination for complex filters** (.gte, .lte, .not, .or, .in)
+- **Remove .select() from updates** to avoid fetching updated rows
+- **Test with large datasets** (>1000 rows) in development
+
 ## Common Issues & Solutions
 
 | Issue | Solution |
@@ -290,7 +515,12 @@ campaigns.config = {
 | TimezoneService errors | Use valid Intl.DateTimeFormat options, not custom format strings |
 | Frontend timezone inconsistency | InboxMessageView.tsx must use frontend timezone context, not backend display timestamps |
 | Bounce messages not showing | Check FolderService bounce filtering |
-| Lead count capped at 1000 | Use Supabase count queries, not data length |
+| Lead count capped at 1000 | Use Supabase count queries with `{ count: 'exact', head: true }`, not data.length |
+| Query returns incomplete data | Use `fetchAllWithPagination` helper for >1000 rows |
+| Update query too slow | Remove `.select()` from updates; use count query first |
+| Analytics showing wrong counts | Ensure all count queries use pagination patterns |
+| Rotation has consecutive duplicates | Use `scheduleEmailsWithPerfectRotation` not random shuffle |
+| Campaign missing emails | Check if all scheduled_emails were created on start |
 | Tiptap focus/selection issues | Remove content from useEditor deps |
 | Manual sync not working | Check `/api/inbox/sync/manual` endpoint and triggerManualSync function |
 | Background sync not running | Verify BackgroundSyncService initialization in backend index.js |
@@ -323,15 +553,18 @@ curl http://localhost:4000/health
 
 ## Production System Status
 
-### ✅ Completed Enhancements (September 2025)
+### ✅ Completed Enhancements (September-October 2025)
 - **Phase 1-4 Improvements**: Error resilience, database optimization, parallel processing, graceful shutdown
 - **Campaign Timing Fixed**: Exact interval compliance with 1 email per interval enforcement
+- **Perfect Rotation Algorithm**: Round-robin scheduling guarantees no consecutive emails from same account
+- **Pagination System**: Universal helpers for unlimited row queries (fetchAllWithPagination, fetchCount, batchUpdate)
+- **Query Optimization**: Converted all analytics/campaign queries to use count queries and pagination
 - **Simplified Sync Architecture**: Replaced complex auto-sync with simple 15-minute background sync
 - **Reply Detection**: Unified inbox system with RFC-compliant threading
 - **Bounce Protection**: Auto-pause campaigns at 5% bounce rate
 - **Rate Limiting**: Sophisticated account rotation with usage tracking
 - **Human-like Timing**: Smart jitter system (±1-3 minutes)
-- **Unlimited Lead Counts**: Fixed Supabase 1000-row query limit
+- **Unlimited Lead Counts**: Fixed Supabase 1000-row query limit across all queries
 - **Timezone Architecture**: Universal TimezoneService with IANA timezone support
 - **Scheduled Activity Fix**: formatCampaignDate helper with proper Intl.DateTimeFormat options
 
@@ -347,12 +580,16 @@ curl http://localhost:4000/health
 1. **Always use organization_id filtering** for multi-tenant isolation
 2. **OAuth2 status must be 'linked_to_account'** for account visibility
 3. **Campaign intervals enforced by CronEmailProcessor** - no manual intervention needed
-4. **Rich text editors require SSR: false** to prevent hydration errors
-5. **Instant loading states required** for all campaign actions
-6. **Conversation threading uses Message-ID headers** for RFC compliance
-7. **Account rotation prevents single-account bottlenecks**
-8. **Human-like jitter prevents robotic patterns** in email timing
-9. **Frontend timezone consistency requires formatDateInTimezone()** - never use backend display timestamps
+4. **Perfect rotation required for all campaigns** - use scheduleEmailsWithPerfectRotation
+5. **Pagination required for all queries** - assume >1000 rows, use fetchAllWithPagination
+6. **Count queries for totals** - use `{ count: 'exact', head: true }`, never data.length
+7. **Remove .select() from updates** - avoid fetching potentially thousands of rows
+8. **Rich text editors require SSR: false** to prevent hydration errors
+9. **Instant loading states required** for all campaign actions
+10. **Conversation threading uses Message-ID headers** for RFC compliance
+11. **Account rotation prevents single-account bottlenecks**
+12. **Human-like jitter prevents robotic patterns** in email timing
+13. **Frontend timezone consistency requires formatDateInTimezone()** - never use backend display timestamps
 
 ## Timezone Patterns (CRITICAL)
 

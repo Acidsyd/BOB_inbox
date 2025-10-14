@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
+const { fetchAllWithPagination, fetchCount } = require('../utils/supabaseHelpers');
 const EmailService = require('../services/EmailService');
 const EmailTrackingService = require('../services/EmailTrackingService');
 const HealthCheckService = require('../services/HealthCheckService');
@@ -997,7 +998,7 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
     console.log(`📧 Email sequence: ${allEmails.length} emails (1 initial + ${emailSequence.length} follow-ups)`);
 
     // Generate schedule respecting ALL campaign rules
-    console.log(`🚨 DEBUG: About to call CampaignScheduler.scheduleEmails() with ${allLeads.length} leads (NEW CAMPAIGN PATH)`);
+    console.log(`🚨 DEBUG: About to call CampaignScheduler.scheduleEmailsWithPerfectRotation() with ${allLeads.length} leads (NEW CAMPAIGN PATH)`);
     console.log(`🚨 DEBUG: Scheduler config:`, {
       timezone: campaign.config?.timezone,
       emailsPerDay: campaign.config?.emailsPerDay,
@@ -1005,7 +1006,7 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
       sendingInterval: campaign.config?.sendingInterval,
       sendingHours: campaign.config?.sendingHours
     });
-    const schedules = scheduler.scheduleEmails(allLeads, emailAccounts);
+    const schedules = scheduler.scheduleEmailsWithPerfectRotation(allLeads, emailAccounts);
     console.log(`🚨 DEBUG: CampaignScheduler returned ${schedules.length} schedules (NEW CAMPAIGN PATH)`);
     if (schedules.length > 0) {
       const first = schedules[0];
@@ -1404,23 +1405,31 @@ router.post('/:id/stop', authenticateToken, async (req, res) => {
       });
     }
 
-    // Cancel pending scheduled emails
-    const { data: cancelledEmails, error: cancelError } = await supabase
+    // Cancel pending scheduled emails - use count query to handle large datasets
+    // First, count how many emails will be cancelled
+    const { count: cancelCount } = await supabase
       .from('scheduled_emails')
-      .update({ 
+      .select('*', { count: 'exact', head: true })
+      .eq('campaign_id', campaignId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'scheduled');
+
+    // Then update them without returning rows (more efficient)
+    const { error: cancelError } = await supabase
+      .from('scheduled_emails')
+      .update({
         status: 'skipped',
         updated_at: new Date().toISOString()
       })
       .eq('campaign_id', campaignId)
       .eq('organization_id', organizationId)
-      .eq('status', 'scheduled')
-      .select();
+      .eq('status', 'scheduled');
 
     if (cancelError) {
       console.error('⚠️ Error cancelling scheduled emails:', cancelError);
       // Don't fail the request, just log the error
     } else {
-      console.log(`📧 Cancelled ${cancelledEmails?.length || 0} scheduled emails`);
+      console.log(`📧 Cancelled ${cancelCount || 0} scheduled emails`);
     }
 
     console.log('✅ Campaign stopped successfully:', campaignId);
@@ -1574,20 +1583,48 @@ router.get('/:id/daily-stats', authenticateToken, async (req, res) => {
       console.log('⚠️ NO emails found in scheduled_emails for this campaign!');
     }
 
-    // Get daily email sending stats for the last 30 days (sent emails)
-    const { data: emailStats, error: emailError } = await supabase
-      .from('scheduled_emails')
-      .select(`
-        sent_at,
-        status
-      `)
-      .eq('campaign_id', campaignId)
-      .eq('organization_id', organizationId)
-      .eq('status', 'sent')
-      .gte('sent_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-      .order('sent_at', { ascending: true });
+    // Get daily email sending stats for the last 30 days (sent emails) with pagination
+    let emailStats = [];
+    let emailError = null;
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    if (emailError) {
+      // Count first
+      const { count: emailCount } = await supabase
+        .from('scheduled_emails')
+        .select('*', { count: 'exact', head: true })
+        .eq('campaign_id', campaignId)
+        .eq('organization_id', organizationId)
+        .eq('status', 'sent')
+        .gte('sent_at', thirtyDaysAgo);
+
+      if (emailCount && emailCount > 0) {
+        const pageSize = 1000;
+        let page = 0;
+        const allEmails = [];
+
+        while (allEmails.length < emailCount) {
+          const { data: pageData, error: pageError } = await supabase
+            .from('scheduled_emails')
+            .select('sent_at, status')
+            .eq('campaign_id', campaignId)
+            .eq('organization_id', organizationId)
+            .eq('status', 'sent')
+            .gte('sent_at', thirtyDaysAgo)
+            .order('sent_at', { ascending: true })
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+
+          if (pageError) throw pageError;
+          if (!pageData || pageData.length === 0) break;
+
+          allEmails.push(...pageData);
+          page++;
+        }
+
+        emailStats = allEmails;
+      }
+    } catch (error) {
+      emailError = error;
       console.error('❌ Error fetching email stats:', emailError);
       return res.status(500).json({
         success: false,
@@ -1601,42 +1638,104 @@ router.get('/:id/daily-stats', authenticateToken, async (req, res) => {
       console.log(`📧 Last sent email: ${emailStats[emailStats.length - 1].sent_at}`);
     }
 
-    // Get daily bounce stats for the last 30 days
-    const { data: bounceStats, error: bounceError } = await supabase
-      .from('scheduled_emails')
-      .select(`
-        sent_at,
-        status,
-        error_message
-      `)
-      .eq('campaign_id', campaignId)
-      .eq('organization_id', organizationId)
-      .or('status.eq.bounced,and(status.eq.failed,error_message.ilike.%bounce%),and(status.eq.failed,error_message.ilike.%domain%),and(status.eq.failed,error_message.ilike.%nxdomain%)')
-      .gte('sent_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-      .order('sent_at', { ascending: true });
+    // Get daily bounce stats for the last 30 days with pagination
+    let bounceStats = [];
+    let bounceError = null;
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    if (bounceError) {
+      // Count first
+      const { count: bounceCount } = await supabase
+        .from('scheduled_emails')
+        .select('*', { count: 'exact', head: true })
+        .eq('campaign_id', campaignId)
+        .eq('organization_id', organizationId)
+        .or('status.eq.bounced,and(status.eq.failed,error_message.ilike.%bounce%),and(status.eq.failed,error_message.ilike.%domain%),and(status.eq.failed,error_message.ilike.%nxdomain%)')
+        .gte('sent_at', thirtyDaysAgo);
+
+      if (bounceCount && bounceCount > 0) {
+        const pageSize = 1000;
+        let page = 0;
+        const allBounces = [];
+
+        while (allBounces.length < bounceCount) {
+          const { data: pageData, error: pageError } = await supabase
+            .from('scheduled_emails')
+            .select('sent_at, status, error_message')
+            .eq('campaign_id', campaignId)
+            .eq('organization_id', organizationId)
+            .or('status.eq.bounced,and(status.eq.failed,error_message.ilike.%bounce%),and(status.eq.failed,error_message.ilike.%domain%),and(status.eq.failed,error_message.ilike.%nxdomain%)')
+            .gte('sent_at', thirtyDaysAgo)
+            .order('sent_at', { ascending: true })
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+
+          if (pageError) throw pageError;
+          if (!pageData || pageData.length === 0) break;
+
+          allBounces.push(...pageData);
+          page++;
+        }
+
+        bounceStats = allBounces;
+      }
+    } catch (error) {
+      bounceError = error;
       console.error('❌ Error fetching bounce stats:', bounceError);
-    } else {
+    }
+
+    if (!bounceError) {
       console.log(`📊 Found ${bounceStats?.length || 0} bounces for campaign ${campaignId}`);
     }
 
-    // Get daily reply stats from unified inbox conversations
-    const { data: replyStats, error: replyError } = await supabase
-      .from('conversation_messages')
-      .select(`
-        created_at,
-        conversations!inner(campaign_id, organization_id)
-      `)
-      .eq('conversations.campaign_id', campaignId)
-      .eq('conversations.organization_id', organizationId)
-      .eq('direction', 'received') // Only count incoming messages (replies)
-      .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-      .order('created_at', { ascending: true });
+    // Get daily reply stats from unified inbox conversations with pagination
+    let replyStats = [];
+    let replyError = null;
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    if (replyError) {
+      // Count first
+      const { count: replyCount } = await supabase
+        .from('conversation_messages')
+        .select('*, conversations!inner(campaign_id, organization_id)', { count: 'exact', head: true })
+        .eq('conversations.campaign_id', campaignId)
+        .eq('conversations.organization_id', organizationId)
+        .eq('direction', 'received')
+        .gte('created_at', thirtyDaysAgo);
+
+      if (replyCount && replyCount > 0) {
+        const pageSize = 1000;
+        let page = 0;
+        const allReplies = [];
+
+        while (allReplies.length < replyCount) {
+          const { data: pageData, error: pageError } = await supabase
+            .from('conversation_messages')
+            .select(`
+              created_at,
+              conversations!inner(campaign_id, organization_id)
+            `)
+            .eq('conversations.campaign_id', campaignId)
+            .eq('conversations.organization_id', organizationId)
+            .eq('direction', 'received')
+            .gte('created_at', thirtyDaysAgo)
+            .order('created_at', { ascending: true })
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+
+          if (pageError) throw pageError;
+          if (!pageData || pageData.length === 0) break;
+
+          allReplies.push(...pageData);
+          page++;
+        }
+
+        replyStats = allReplies;
+      }
+    } catch (error) {
+      replyError = error;
       console.error('❌ Error fetching reply stats:', replyError);
-    } else {
+    }
+
+    if (!replyError) {
       console.log(`📊 Found ${replyStats?.length || 0} replies for campaign ${campaignId}`);
     }
 
@@ -2029,9 +2128,9 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
       activeDays: campaign.config?.activeDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']
     });
 
-    console.log(`📅 Creating fresh schedule starting from NOW...`);
-    const leadSchedules = scheduler.scheduleEmails(allLeadsForRestart, emailAccounts);
-    console.log(`✅ Generated ${leadSchedules.length} schedules`);
+    console.log(`📅 Creating fresh schedule with PERFECT ROTATION starting from NOW...`);
+    const leadSchedules = scheduler.scheduleEmailsWithPerfectRotation(allLeadsForRestart, emailAccounts);
+    console.log(`✅ Generated ${leadSchedules.length} schedules with perfect rotation`);
 
     if (leadSchedules.length > 0) {
       const first = leadSchedules[0];

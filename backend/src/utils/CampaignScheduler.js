@@ -109,16 +109,16 @@ class CampaignScheduler {
       // Use current UTC time - timezone conversion will be handled properly in helper methods
       currentTime = new Date();
     }
-    
+
     // Move to next valid sending window if needed
     currentTime = this.moveToNextValidSendingWindow(currentTime);
-    
+
     // Track counts for limits
     let emailsSentToday = 0;
     let emailsSentThisHour = 0;
     let currentDay = this.getDateInTimezone(currentTime);
     let currentHour = this.getHourInTimezone(currentTime);
-    
+
     // Calculate minimum interval based on emailsPerHour constraint
     const minIntervalMinutes = Math.ceil(60 / this.emailsPerHour); // 60 minutes / emails per hour
     const actualIntervalMinutes = Math.max(this.sendingInterval, minIntervalMinutes);
@@ -130,7 +130,7 @@ class CampaignScheduler {
     console.log(`   Minimum required interval: ${minIntervalMinutes} minutes (based on ${this.emailsPerHour} emails/hour)`);
     console.log(`   Actual interval used: ${actualIntervalMinutes} minutes`);
     console.log(`   Jitter: ${this.enableJitter ? `±${this.jitterMinutes} minutes` : 'disabled'}`);
-    
+
     leads.forEach((lead, leadIndex) => {
       // Select email account (round-robin)
       const emailAccountId = emailAccounts[leadIndex % emailAccounts.length];
@@ -187,8 +187,163 @@ class CampaignScheduler {
         }
       }
     });
-    
+
     return schedules;
+  }
+
+  /**
+   * Schedule emails with PERFECT ROTATION - guarantees no consecutive emails from same account
+   * This method distributes leads evenly across accounts first, then schedules in rounds
+   *
+   * Example with 3 accounts and 10 leads:
+   * Round 1: Acc0→Acc1→Acc2→Acc0 (4 leads)
+   * Round 2: Acc1→Acc2→Acc0→Acc1 (4 leads)
+   * Round 3: Acc2→Acc0 (2 leads)
+   *
+   * This ensures perfect rotation regardless of business hours gaps
+   */
+  scheduleEmailsWithPerfectRotation(leads, emailAccounts, startTime = null) {
+    console.log(`\n✨ PERFECT ROTATION SCHEDULING`);
+    console.log(`   Total leads: ${leads.length}`);
+    console.log(`   Email accounts: ${emailAccounts.length}`);
+
+    // Step 1: Distribute leads evenly across accounts
+    const leadsByAccount = {};
+    emailAccounts.forEach(accountId => {
+      leadsByAccount[accountId] = [];
+    });
+
+    // Distribute leads in round-robin to ensure even distribution
+    leads.forEach((lead, index) => {
+      const accountId = emailAccounts[index % emailAccounts.length];
+      leadsByAccount[accountId].push(lead);
+    });
+
+    console.log(`\n📊 Lead distribution:`);
+    Object.entries(leadsByAccount).forEach(([accountId, accountLeads]) => {
+      console.log(`   ...${accountId.substring(0, 8)}: ${accountLeads.length} leads`);
+    });
+
+    // Step 2: Setup scheduling time
+    let currentTime;
+    if (startTime) {
+      currentTime = new Date(startTime);
+      if (isNaN(currentTime.getTime())) {
+        console.error('🚨 Invalid startTime provided to scheduleEmailsWithPerfectRotation:', startTime);
+        currentTime = new Date();
+      }
+    } else {
+      currentTime = new Date();
+    }
+
+    currentTime = this.moveToNextValidSendingWindow(currentTime);
+
+    // Calculate interval
+    const minIntervalMinutes = Math.ceil(60 / this.emailsPerHour);
+    const actualIntervalMinutes = Math.max(this.sendingInterval, minIntervalMinutes);
+
+    console.log(`\n⏰ Scheduling parameters:`);
+    console.log(`   Start time: ${currentTime.toISOString()}`);
+    console.log(`   Timezone: ${this.timezone}`);
+    console.log(`   Interval: ${actualIntervalMinutes} minutes`);
+    console.log(`   Jitter: ${this.enableJitter ? `±${this.jitterMinutes} min` : 'disabled'}\n`);
+
+    // Step 3: Schedule in perfect rounds
+    const schedules = [];
+    const maxLeadsPerAccount = Math.max(...Object.values(leadsByAccount).map(arr => arr.length));
+
+    let emailCount = 0;
+
+    // Schedule round by round
+    for (let round = 0; round < maxLeadsPerAccount; round++) {
+      // In each round, cycle through all accounts
+      for (let accIdx = 0; accIdx < emailAccounts.length; accIdx++) {
+        const accountId = emailAccounts[accIdx];
+        const accountLeads = leadsByAccount[accountId];
+
+        // Check if this account has a lead for this round
+        if (round < accountLeads.length) {
+          const lead = accountLeads[round];
+
+          // Advance time if not the first email
+          if (emailCount > 0) {
+            currentTime = new Date(currentTime.getTime() + (actualIntervalMinutes * 60 * 1000));
+            currentTime = this.moveToNextValidSendingWindow(currentTime);
+          }
+
+          // Apply jitter
+          let jitteredTime = this.applyJitter(currentTime, lead.email);
+          jitteredTime = this.moveToNextValidSendingWindow(jitteredTime);
+
+          // Ensure not in the past
+          const now = new Date();
+          if (jitteredTime < now) {
+            jitteredTime = this.moveToNextValidSendingWindow(now);
+          }
+
+          // Schedule the email
+          schedules.push({
+            lead,
+            emailAccountId: accountId,
+            sendAt: jitteredTime
+          });
+
+          emailCount++;
+
+          // Log first 20 for verification
+          if (emailCount <= 20) {
+            console.log(`[${emailCount}] ${jitteredTime.toISOString()} → ...${accountId.substring(0, 8)} | ${lead.email}`);
+          }
+        }
+      }
+    }
+
+    if (emailCount > 20) {
+      console.log(`... (${emailCount - 20} more emails) ...\n`);
+    }
+
+    console.log(`✅ Perfect rotation complete: ${schedules.length} emails scheduled`);
+
+    // Verify rotation quality
+    this.verifyRotationQuality(schedules, emailAccounts);
+
+    return schedules;
+  }
+
+  /**
+   * Verify rotation quality by checking for consecutive duplicates
+   */
+  verifyRotationQuality(schedules, emailAccounts) {
+    if (schedules.length < 2) return;
+
+    console.log(`\n🔍 Rotation Quality Check (first 50 emails):`);
+
+    const first50 = schedules.slice(0, 50);
+    const accountSequence = first50.map(s => s.emailAccountId.substring(0, 8));
+
+    // Check unique accounts in sequence
+    const uniqueAccounts = new Set(accountSequence.slice(0, Math.min(emailAccounts.length * 2, accountSequence.length))).size;
+    console.log(`   Unique accounts in first ${Math.min(emailAccounts.length * 2, accountSequence.length)} emails: ${uniqueAccounts}/${emailAccounts.length}`);
+
+    // Check for consecutive duplicates
+    let maxConsecutive = 1;
+    let consecutiveCount = 1;
+    for (let i = 1; i < accountSequence.length; i++) {
+      if (accountSequence[i] === accountSequence[i - 1]) {
+        consecutiveCount++;
+        maxConsecutive = Math.max(maxConsecutive, consecutiveCount);
+      } else {
+        consecutiveCount = 1;
+      }
+    }
+
+    console.log(`   Max consecutive from same account: ${maxConsecutive}`);
+
+    if (maxConsecutive === 1) {
+      console.log(`   ✅ PERFECT ROTATION ACHIEVED!\n`);
+    } else {
+      console.log(`   ⚠️  Found ${maxConsecutive} consecutive emails from same account\n`);
+    }
   }
   
   /**

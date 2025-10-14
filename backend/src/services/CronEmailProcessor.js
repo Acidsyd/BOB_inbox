@@ -692,24 +692,14 @@ class CronEmailProcessor {
     const lastEmailSentTime = await this.getLastEmailSentTime(campaignId, organizationId);
     const baseTime = lastEmailSentTime || new Date(); // Use last send time or current time if no emails sent
 
-    // Reschedule emails from OTHER accounts for the next campaign interval
-    // 🚨 CRITICAL FIX: Use rescheduleEmailsWithInterval to properly stagger emails
-    let emailsToReschedule = [];
-    for (let i = 0; i < accountEntries.length; i++) {
-      if (i === currentAccountIndex) continue; // Skip current account, already processed
-
-      const [otherAccountId, otherAccountEmails] = accountEntries[i];
-      if (otherAccountEmails.length > 0) {
-        emailsToReschedule.push(...otherAccountEmails);
-      }
-    }
-
-    // Reschedule all OTHER account emails with proper interval staggering
-    if (emailsToReschedule.length > 0) {
-      const nextIntervalTime = new Date(baseTime.getTime() + (actualIntervalMinutes * 60 * 1000));
-      console.log(`🚨 FIXED RESCHEDULE: Rescheduling ${emailsToReschedule.length} emails from other accounts starting at ${nextIntervalTime.toISOString()} with ${actualIntervalMinutes}min intervals`);
-      await this.rescheduleEmailsWithInterval(emailsToReschedule, nextIntervalTime, actualIntervalMinutes);
-    }
+    // 🔄 PERFECT ROTATION: Reschedule emails in round-robin order across all accounts
+    // This ensures perfect account rotation: Acc1, Acc2, Acc3, ..., Acc8, Acc1, Acc2, ...
+    await this.rescheduleEmailsWithPerfectRotation(
+      accountEntries,
+      currentAccountIndex,
+      baseTime,
+      actualIntervalMinutes
+    );
   }
 
   /**
@@ -1379,6 +1369,117 @@ class CronEmailProcessor {
     
     // Use the existing rescheduleEmailsWithInterval method with the staggered time
     await this.rescheduleEmailsWithInterval(emails, accountStaggerTime, intervalMinutes);
+  }
+
+  /**
+   * Reschedule emails with perfect round-robin account rotation
+   * This ensures Account 1 -> Account 2 -> Account 3 -> ... -> Account N -> Account 1 pattern
+   */
+  async rescheduleEmailsWithPerfectRotation(accountEntries, currentAccountIndex, baseTime, intervalMinutes) {
+    const totalAccounts = accountEntries.length;
+
+    if (totalAccounts === 0) {
+      console.log('⚠️ No accounts found for rescheduling');
+      return;
+    }
+
+    // Collect all emails that need rescheduling (from all accounts)
+    let allEmailsToSchedule = [];
+
+    // Start from the next account after current
+    for (let offset = 1; offset <= totalAccounts; offset++) {
+      const accountIndex = (currentAccountIndex + offset) % totalAccounts;
+      const [accountId, accountEmails] = accountEntries[accountIndex];
+
+      if (accountEmails && accountEmails.length > 0) {
+        // Add each email with its account index for rotation tracking
+        accountEmails.forEach(email => {
+          allEmailsToSchedule.push({
+            email: email,
+            accountId: accountId,
+            accountIndex: accountIndex
+          });
+        });
+      }
+    }
+
+    if (allEmailsToSchedule.length === 0) {
+      console.log('✅ No emails to reschedule - all accounts processed');
+      return;
+    }
+
+    console.log(`🔄 PERFECT ROTATION: Rescheduling ${allEmailsToSchedule.length} emails across ${totalAccounts} accounts`);
+    console.log(`⏱️  Starting at ${baseTime.toISOString()} with ${intervalMinutes}min intervals`);
+
+    // Sort emails by account index to ensure perfect rotation order
+    // Then by their original send_at time to preserve relative ordering within accounts
+    allEmailsToSchedule.sort((a, b) => {
+      // First sort by rotating account index (starting from currentAccountIndex + 1)
+      const aRotationOrder = (a.accountIndex - currentAccountIndex - 1 + totalAccounts) % totalAccounts;
+      const bRotationOrder = (b.accountIndex - currentAccountIndex - 1 + totalAccounts) % totalAccounts;
+
+      if (aRotationOrder !== bRotationOrder) {
+        return aRotationOrder - bRotationOrder;
+      }
+
+      // Within same account, maintain original order
+      return new Date(a.email.send_at) - new Date(b.email.send_at);
+    });
+
+    // Reschedule emails with perfect intervals
+    const batchSize = 50;
+    let processedCount = 0;
+
+    for (let batchStart = 0; batchStart < allEmailsToSchedule.length; batchStart += batchSize) {
+      const batch = allEmailsToSchedule.slice(batchStart, Math.min(batchStart + batchSize, allEmailsToSchedule.length));
+
+      try {
+        for (let i = 0; i < batch.length; i++) {
+          const globalIndex = batchStart + i;
+          const item = batch[i];
+          const rescheduleTime = new Date(baseTime.getTime() + ((globalIndex + 1) * intervalMinutes * 60 * 1000));
+
+          const { error } = await supabase
+            .from('scheduled_emails')
+            .update({
+              send_at: rescheduleTime.toISOString(),
+              status: 'scheduled',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', item.email.id);
+
+          if (error) {
+            console.error(`❌ Failed to reschedule email ${item.email.id}:`, error.message);
+          } else {
+            processedCount++;
+
+            // Log first 10 and every 50th to show rotation pattern
+            if (globalIndex < 10 || globalIndex % 50 === 0) {
+              const accountShort = item.accountId.substring(0, 8);
+              console.log(`✅ [${globalIndex + 1}/${allEmailsToSchedule.length}] Email scheduled at ${rescheduleTime.toISOString()} -> Account ...${accountShort}`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`❌ Error processing batch at index ${batchStart}:`, error);
+      }
+    }
+
+    console.log(`✅ PERFECT ROTATION COMPLETE: ${processedCount}/${allEmailsToSchedule.length} emails rescheduled`);
+
+    // Log rotation summary
+    const accountDistribution = {};
+    allEmailsToSchedule.forEach(item => {
+      const accountShort = item.accountId.substring(0, 8);
+      accountDistribution[accountShort] = (accountDistribution[accountShort] || 0) + 1;
+    });
+
+    console.log('📊 Distribution across accounts:');
+    Object.entries(accountDistribution)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .forEach(([accountShort, count]) => {
+        console.log(`   ...${accountShort}: ${count} emails`);
+      });
   }
 
   /**

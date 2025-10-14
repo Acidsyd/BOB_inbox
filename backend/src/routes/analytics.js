@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
+const { fetchAllWithPagination, fetchCount } = require('../utils/supabaseHelpers');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -171,9 +172,10 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
 
 
     // Get total sent emails count (for accurate reply rate calculation)
-    const { data: totalSentEmails, error: totalSentError } = await supabase
+    // Use count query instead of fetching IDs
+    const { count: totalSentEmailsCount, error: totalSentError } = await supabase
       .from('scheduled_emails')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .eq('organization_id', organizationId)
       .in('status', ['sent', 'delivered']);
 
@@ -181,9 +183,10 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
 
     // Get total replies count (all time, for accurate reply rate)
     // Count all received messages (both campaign and organic)
-    const { data: totalReplies, error: totalRepliesError } = await supabase
+    // Use count query instead of fetching IDs
+    const { count: totalRepliesCount, error: totalRepliesError } = await supabase
       .from('conversation_messages')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .eq('organization_id', organizationId)
       .eq('direction', 'received')
       .not('received_at', 'is', null);
@@ -191,32 +194,92 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
     if (totalRepliesError) console.error('Error fetching total replies:', totalRepliesError);
 
     // Get replies received in current period (for period-specific metrics)
-    // Count all received messages in the period
-    const { data: periodReplies, error: periodRepliesError } = await supabase
-      .from('conversation_messages')
-      .select('id, direction, received_at, from_email, to_email')
-      .eq('organization_id', organizationId)
-      .eq('direction', 'received')
-      .gte('received_at', startDate.toISOString())
-      .lte('received_at', endDate.toISOString())
-      .not('received_at', 'is', null);
+    // Use pagination to handle large datasets
+    let periodReplies = [];
+    let periodRepliesError = null;
+    try {
+      // Note: fetchAllWithPagination doesn't support .gte/.lte/.not filters yet
+      // For now, use raw query with pagination manually
+      const { count: periodRepliesCount } = await supabase
+        .from('conversation_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .eq('direction', 'received')
+        .gte('received_at', startDate.toISOString())
+        .lte('received_at', endDate.toISOString())
+        .not('received_at', 'is', null);
 
-    if (periodRepliesError) console.error('Error fetching period replies:', periodRepliesError);
+      if (periodRepliesCount && periodRepliesCount > 0) {
+        const pageSize = 1000;
+        let page = 0;
+        const allReplies = [];
+
+        while (allReplies.length < periodRepliesCount) {
+          const { data: pageData, error: pageError } = await supabase
+            .from('conversation_messages')
+            .select('id, direction, received_at, from_email, to_email')
+            .eq('organization_id', organizationId)
+            .eq('direction', 'received')
+            .gte('received_at', startDate.toISOString())
+            .lte('received_at', endDate.toISOString())
+            .not('received_at', 'is', null)
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+
+          if (pageError) throw pageError;
+          if (!pageData || pageData.length === 0) break;
+
+          allReplies.push(...pageData);
+          page++;
+        }
+
+        periodReplies = allReplies;
+      }
+    } catch (error) {
+      periodRepliesError = error;
+      console.error('Error fetching period replies:', periodRepliesError);
+    }
 
     const replies = periodReplies || [];
 
 
-    // Get label statistics (fetch all label assignments - not limited)
-    const { data: labelAssignments, error: labelError } = await supabase
-      .from('conversation_label_assignments')
-      .select(`
-        conversation_id,
-        label_id,
-        conversation_labels!inner(name, color)
-      `)
-      .eq('organization_id', organizationId);
+    // Get label statistics (fetch all label assignments with pagination)
+    let labelAssignments = [];
+    let labelError = null;
+    try {
+      const { count: labelCount } = await supabase
+        .from('conversation_label_assignments')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', organizationId);
 
-    if (labelError) console.error('Error fetching labels:', labelError);
+      if (labelCount && labelCount > 0) {
+        const pageSize = 1000;
+        let page = 0;
+        const allLabels = [];
+
+        while (allLabels.length < labelCount) {
+          const { data: pageData, error: pageError } = await supabase
+            .from('conversation_label_assignments')
+            .select(`
+              conversation_id,
+              label_id,
+              conversation_labels!inner(name, color)
+            `)
+            .eq('organization_id', organizationId)
+            .range(page * pageSize, (page + 1) * pageSize - 1);
+
+          if (pageError) throw pageError;
+          if (!pageData || pageData.length === 0) break;
+
+          allLabels.push(...pageData);
+          page++;
+        }
+
+        labelAssignments = allLabels;
+      }
+    } catch (error) {
+      labelError = error;
+      console.error('Error fetching labels:', labelError);
+    }
 
     // Get total conversations count (use count query to avoid 1000 limit)
     const { count: totalConversationsCount, error: convCountError } = await supabase
@@ -314,15 +377,15 @@ const getDashboardAnalytics = async (organizationId, period = 'month', customSta
     const activeAccounts = accounts.filter(a => a.status === 'active').length;
     const avgHealth = totalAccounts > 0 ? Math.round((activeAccounts / totalAccounts) * 100) : 0;
 
-    // Get inbox unread count
-    const { data: unreadMessages, error: unreadError } = await supabase
+    // Get inbox unread count - use count query instead of fetching IDs
+    const { count: unreadCount, error: unreadError } = await supabase
       .from('conversation_messages')
-      .select('id')
+      .select('*', { count: 'exact', head: true })
       .eq('organization_id', organizationId)
       .eq('direction', 'received')
       .eq('is_read', false);
-    
-    const unreadCount = unreadMessages ? unreadMessages.length : 0;
+
+    if (unreadError) console.error('Error fetching unread count:', unreadError);
 
     return {
       period: {
