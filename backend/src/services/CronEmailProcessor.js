@@ -693,16 +693,22 @@ class CronEmailProcessor {
     const baseTime = lastEmailSentTime || new Date(); // Use last send time or current time if no emails sent
 
     // Reschedule emails from OTHER accounts for the next campaign interval
+    // 🚨 CRITICAL FIX: Use rescheduleEmailsWithInterval to properly stagger emails
+    let emailsToReschedule = [];
     for (let i = 0; i < accountEntries.length; i++) {
       if (i === currentAccountIndex) continue; // Skip current account, already processed
 
       const [otherAccountId, otherAccountEmails] = accountEntries[i];
       if (otherAccountEmails.length > 0) {
-        // 🚨 CRITICAL FIX: Calculate based on last email time, not current time
-        const nextIntervalTime = new Date(baseTime.getTime() + (actualIntervalMinutes * 60 * 1000));
-        console.log(`🚨 FIXED: Rescheduling ${otherAccountEmails.length} emails from account ${i + 1}/${accountCount} to ${nextIntervalTime.toISOString()} (${actualIntervalMinutes}min from last send)`);
-        await this.rescheduleEmails(otherAccountEmails, nextIntervalTime);
+        emailsToReschedule.push(...otherAccountEmails);
       }
+    }
+
+    // Reschedule all OTHER account emails with proper interval staggering
+    if (emailsToReschedule.length > 0) {
+      const nextIntervalTime = new Date(baseTime.getTime() + (actualIntervalMinutes * 60 * 1000));
+      console.log(`🚨 FIXED RESCHEDULE: Rescheduling ${emailsToReschedule.length} emails from other accounts starting at ${nextIntervalTime.toISOString()} with ${actualIntervalMinutes}min intervals`);
+      await this.rescheduleEmailsWithInterval(emailsToReschedule, nextIntervalTime, actualIntervalMinutes);
     }
   }
 
