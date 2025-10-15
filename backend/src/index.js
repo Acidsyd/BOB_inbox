@@ -103,6 +103,14 @@ app.listen(PORT, '0.0.0.0', () => {
     backgroundSyncService.start();
     console.log('🔄 BackgroundSyncService started - syncing emails every 15 minutes');
   }
+
+  // Start cron email processor
+  if (process.env.NODE_ENV !== 'test') {
+    const CronEmailProcessor = require('./services/CronEmailProcessor');
+    const cronProcessor = new CronEmailProcessor();
+    cronProcessor.start();
+    console.log('⏰ CronEmailProcessor started - processing scheduled emails every minute');
+  }
 });
 
 module.exports = app;

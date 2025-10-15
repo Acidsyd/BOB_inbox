@@ -371,6 +371,8 @@ class CronEmailProcessor {
     // Calculate dynamic batch size based on system load
     const batchSize = await this.calculateOptimalBatchSize();
 
+    // CRITICAL FIX: JOIN with campaigns table to only fetch emails from ACTIVE campaigns
+    // This prevents stopped campaigns from blocking active ones in the batch
     const { data: emails, error } = await supabase
       .from('scheduled_emails')
       .select(`
@@ -386,10 +388,12 @@ class CronEmailProcessor {
         status,
         attempts,
         message_id_header,
-        thread_id
-      `) // Only select needed columns instead of *
-      .lte('send_at', new Date().toISOString()) // FIXED: Use UTC timestamp instead of new Date().toISOString()
+        thread_id,
+        campaigns!inner(status)
+      `)
+      .lte('send_at', new Date().toISOString())
       .eq('status', 'scheduled')
+      .eq('campaigns.status', 'active') // Only fetch from ACTIVE campaigns
       .order('send_at', { ascending: true })
       .limit(batchSize);
 
@@ -402,10 +406,11 @@ class CronEmailProcessor {
       return [];
     }
 
-    // Filter emails based on campaign status and sending hours configuration
+    // Filter emails based on sending hours configuration
+    // Note: Campaign status already filtered in query above
     const emailsWithinSendingHours = await this.filterBySendingHours(emails);
-    
-    console.log(`📊 Query optimization: Retrieved ${emails.length} emails, ${emailsWithinSendingHours.length} from active campaigns within sending hours (batch size: ${batchSize})`);
+
+    console.log(`📊 Query optimization: Retrieved ${emails.length} emails from ACTIVE campaigns, ${emailsWithinSendingHours.length} within sending hours (batch size: ${batchSize})`);
     return emailsWithinSendingHours;
   }
 
@@ -480,12 +485,16 @@ class CronEmailProcessor {
 
       const { start, end } = sendingHours;
 
-      // Use TimezoneService for reliable business hours checking
-      const isWithinHours = TimezoneService.isWithinBusinessHours(
-        campaignTimezone,
-        new Date(),
-        { start, end }
-      );
+      // Check if current time is within campaign's sending hours
+      const currentHour = parseInt(new Date().toLocaleString('en-US', {
+        timeZone: campaignTimezone,
+        hour: 'numeric',
+        hour12: false
+      }));
+
+      // Use inclusive range check: >= start and < end
+      // For example: start=9, end=17 means 9:00-16:59 (9 AM to just before 5 PM)
+      const isWithinHours = currentHour >= start && currentHour < end;
 
       if (!isWithinHours) {
         const currentTime = TimezoneService.convertToUserTimezone(new Date(), campaignTimezone, {
@@ -820,10 +829,12 @@ class CronEmailProcessor {
       }
       
       const success = await this.sendSingleEmail(email, organizationId);
-      
+
       // Record usage only if email was successfully sent
       if (success) {
         await this.rateLimitService.recordEmailSent(accountId, organizationId, 1);
+        // 🚨 CRITICAL FIX: Update in-memory status to prevent rescheduling sent emails
+        email.status = 'sent';
       }
     }
   }
@@ -882,6 +893,14 @@ class CronEmailProcessor {
         } catch (unifiedInboxError) {
           console.error('⚠️ Error ingesting sent email into unified inbox (non-fatal):', unifiedInboxError);
           // Don't fail the email sending if unified inbox fails
+        }
+
+        // 🔥 NEW: Schedule follow-up emails if configured
+        try {
+          await this.scheduleFollowUpEmails(email, campaignConfig, organizationId, result);
+        } catch (followUpError) {
+          console.error('⚠️ Error scheduling follow-up emails (non-fatal):', followUpError);
+          // Don't fail the email sending if follow-up scheduling fails
         }
 
         return true; // Email sent successfully
@@ -1327,6 +1346,116 @@ class CronEmailProcessor {
   }
 
   /**
+   * Schedule follow-up emails based on campaign sequence configuration
+   * @param {Object} sentEmail - The email that was just sent
+   * @param {Object} campaignConfig - Campaign configuration
+   * @param {string} organizationId - Organization ID
+   * @param {Object} sendResult - Result from email send operation
+   */
+  async scheduleFollowUpEmails(sentEmail, campaignConfig, organizationId, sendResult) {
+    try {
+      // Check if follow-ups are enabled
+      if (!campaignConfig?.followUpEnabled) {
+        console.log(`⏭️ Follow-ups not enabled for campaign ${sentEmail.campaign_id}`);
+        return;
+      }
+
+      // Check if campaign has follow-up sequence
+      const emailSequence = campaignConfig?.emailSequence || [];
+      if (emailSequence.length === 0) {
+        console.log(`⏭️ No follow-up sequence configured for campaign ${sentEmail.campaign_id}`);
+        return;
+      }
+
+      // Only schedule follow-ups for initial emails (sequence_step 0)
+      const currentSequenceStep = sentEmail.sequence_step || 0;
+      if (currentSequenceStep !== 0) {
+        console.log(`⏭️ Email is already a follow-up (step ${currentSequenceStep}), not scheduling further follow-ups`);
+        return;
+      }
+
+      console.log(`📧 Scheduling ${emailSequence.length} follow-up email(s) for ${sentEmail.to_email}`);
+
+      // Get campaign timezone for scheduling
+      const campaignTimezone = campaignConfig?.timezone || 'UTC';
+      const sentAtTime = new Date(sentEmail.sent_at || new Date());
+
+      // Create follow-up emails for each step in the sequence
+      for (let i = 0; i < emailSequence.length; i++) {
+        const followUpStep = emailSequence[i];
+        const sequenceStep = i + 1; // Follow-ups start at step 1
+
+        // Calculate send time based on delay (in days)
+        const delayDays = followUpStep.delay || 1;
+        const baseFollowUpTime = sentAtTime.getTime() + (delayDays * 24 * 60 * 60 * 1000);
+
+        // 🎲 Add random jitter to make follow-ups more natural (±120 minutes)
+        const minJitterMinutes = -120; // Up to 2 hours earlier
+        const maxJitterMinutes = 120;  // Up to 2 hours later
+        const randomJitterMinutes = Math.floor(Math.random() * (maxJitterMinutes - minJitterMinutes + 1)) + minJitterMinutes;
+        const jitterMs = randomJitterMinutes * 60 * 1000;
+
+        const followUpSendTime = new Date(baseFollowUpTime + jitterMs);
+        console.log(`🎲 Follow-up jitter: ${randomJitterMinutes > 0 ? '+' : ''}${randomJitterMinutes} minutes (base: ${new Date(baseFollowUpTime).toISOString()})`);
+
+        // Prepare follow-up email data
+        const followUpEmail = {
+          campaign_id: sentEmail.campaign_id,
+          lead_id: sentEmail.lead_id,
+          organization_id: organizationId,
+          email_account_id: sentEmail.email_account_id, // Use same account
+          to_email: sentEmail.to_email,
+          from_email: sentEmail.from_email,
+          subject: followUpStep.subject || sentEmail.subject, // Use follow-up subject or original
+          content: followUpStep.content,
+          send_at: followUpSendTime.toISOString(),
+          status: 'scheduled',
+          sequence_step: sequenceStep,
+          parent_email_id: sentEmail.id, // Link to parent email
+          is_follow_up: true,
+          reply_to_same_thread: followUpStep.replyToSameThread || false,
+          tracking_token: this.generateTrackingToken(), // Generate new tracking token
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        // If replying to same thread, use thread info from parent
+        if (followUpStep.replyToSameThread) {
+          followUpEmail.thread_id = sendResult.threadId || null;
+          followUpEmail.message_id_header = sendResult.actualMessageId || null;
+        }
+
+        // Insert follow-up email into scheduled_emails table
+        const { data: insertedEmail, error } = await supabase
+          .from('scheduled_emails')
+          .insert(followUpEmail)
+          .select()
+          .single();
+
+        if (error) {
+          console.error(`❌ Error scheduling follow-up ${sequenceStep} for ${sentEmail.to_email}:`, error);
+          continue; // Continue with other follow-ups
+        }
+
+        console.log(`✅ Follow-up ${sequenceStep} scheduled for ${sentEmail.to_email} at ${followUpSendTime.toISOString()} (delay: ${delayDays} days)`);
+      }
+
+      console.log(`✅ Successfully scheduled ${emailSequence.length} follow-up(s) for ${sentEmail.to_email}`);
+
+    } catch (error) {
+      console.error(`❌ Error in scheduleFollowUpEmails for email ${sentEmail.id}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a unique tracking token for email tracking
+   */
+  generateTrackingToken() {
+    return require('crypto').randomBytes(16).toString('hex');
+  }
+
+  /**
    * Check if it's this account's turn to send based on staggered rotation and timing
    */
   async isAccountTurnToSend(campaignId, accountIndex, staggerMinutes) {
@@ -1392,13 +1521,19 @@ class CronEmailProcessor {
       const [accountId, accountEmails] = accountEntries[accountIndex];
 
       if (accountEmails && accountEmails.length > 0) {
-        // Add each email with its account index for rotation tracking
+        // 🚨 CRITICAL FIX: Only reschedule emails that are still in 'scheduled' status
+        // This prevents rescheduling emails that were just sent (status updated to 'sent')
         accountEmails.forEach(email => {
-          allEmailsToSchedule.push({
-            email: email,
-            accountId: accountId,
-            accountIndex: accountIndex
-          });
+          // Skip emails that have been sent (status may have been updated in database)
+          if (email.status === 'scheduled') {
+            allEmailsToSchedule.push({
+              email: email,
+              accountId: accountId,
+              accountIndex: accountIndex
+            });
+          } else {
+            console.log(`⏭️  Skipping email ${email.id.substring(0,8)}... with status '${email.status}' from rescheduling`);
+          }
         });
       }
     }

@@ -13,19 +13,28 @@ class HealthCheckService {
     const timestamp = new Date().toISOString();
     try {
       // Update heartbeat in database
-      await this.supabase
+      const { data, error } = await this.supabase
         .from('system_health')
         .upsert({
           service: 'cron_processor',
           status: 'running',
           last_heartbeat: timestamp,
           updated_at: timestamp
+        }, {
+          onConflict: 'service'  // Specify which column to check for conflicts
         });
+
+      if (error) {
+        console.error('❌ Supabase upsert error:', error);
+        console.error('   Error details:', JSON.stringify(error, null, 2));
+        throw error;
+      }
 
       this.lastCronHeartbeat = new Date();
       console.log('💓 Cron heartbeat recorded:', timestamp);
     } catch (error) {
       console.error('❌ Error recording cron heartbeat:', error);
+      console.error('   Full error:', error.message || error);
     }
   }
 

@@ -174,3 +174,85 @@ package-lock.json
 .env.digitalocean
 .do/
 config/.env.production
+mcp-baserow/
+
+# Debug and test scripts (temporary one-off scripts)
+backend/check_*.js
+backend/check_*.cjs
+backend/test_*.js
+backend/test_*.cjs
+backend/debug_*.js
+backend/debug_*.cjs
+backend/verify_*.js
+backend/verify_*.cjs
+backend/investigate_*.js
+backend/investigate_*.cjs
+backend/fix_*.js
+backend/fix_*.cjs
+backend/create_*.js
+backend/create_*.cjs
+backend/delete_*.js
+backend/delete_*.cjs
+backend/remove_*.js
+backend/remove_*.cjs
+backend/diagnose_*.js
+backend/diagnose_*.cjs
+backend/apply_*.js
+backend/apply_*.cjs
+backend/restore_*.js
+backend/restore_*.cjs
+backend/recover_*.js
+backend/recover_*.cjs
+backend/export_*.js
+backend/export_*.cjs
+backend/monitor_*.js
+backend/monitor_*.cjs
+backend/compare_*.js
+backend/compare_*.cjs
+backend/run_*.js
+backend/run_*.cjs
+backend/execute_*.js
+backend/execute_*.cjs
+backend/list_*.js
+backend/list_*.cjs
+backend/reset_*.js
+backend/reset_*.cjs
+backend/restart_*.js
+backend/restart_*.cjs
+
+# Temporary files and data exports
+backend/*.csv
+backend/*.md
+backend/*_temp.js
+backend/src/*-health-check.js
+backend/src/routes/*_temp.js
+backend/src/services/*HealthChecker.js
+
+# Archive and temporary tool directories
+archive/
+tools/
+
+# Process manager config (environment-specific)
+ecosystem.config.cjs
+
+# Environment config examples (keep templates, ignore filled versions)
+config/.env.example
+config/.env.production.example
+config/.env.production.template
+
+# Specific one-off debug and migration scripts
+backend/deep_campaign_analysis.js
+backend/final_cleanup.cjs
+backend/get_restore_options.cjs
+scripts/apply-fast-migration.cjs
+scripts/fix-email-timestamp.cjs
+scripts/migrate-timestamps-fast.sql
+scripts/migrate-timestamps-to-utc.cjs
+scripts/restart-nginx.sh
+
+# Deployment build artifacts
+deployment/*.tar.gz
+deployment/*.zip
+
+# Files with naming errors
+"enanched serch.md "
