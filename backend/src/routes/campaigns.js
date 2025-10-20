@@ -263,7 +263,22 @@ const getCampaignMetrics = async (campaignId, organizationId) => {
       (totalAttempted > 0 ? Math.round((bounced / totalAttempted) * 100) : 0);
 
     console.log(`📊 Campaign ${campaignId} metrics: sent=${sent}, bounced=${bounced}, failed=${failed}, bounceRate=${bounceRate}%`);
-    
+
+    // Get sequence step breakdown
+    const { count: initialEmailsCount } = await supabase
+      .from('scheduled_emails')
+      .select('*', { count: 'exact', head: true })
+      .eq('campaign_id', campaignId)
+      .eq('organization_id', organizationId)
+      .eq('sequence_step', 0);
+
+    const { count: followUpEmailsCount } = await supabase
+      .from('scheduled_emails')
+      .select('*', { count: 'exact', head: true })
+      .eq('campaign_id', campaignId)
+      .eq('organization_id', organizationId)
+      .gt('sequence_step', 0);
+
     return {
       sent,
       delivered,
@@ -277,7 +292,9 @@ const getCampaignMetrics = async (campaignId, organizationId) => {
       replyRate,
       bounceRate,
       hardBounces,
-      softBounces
+      softBounces,
+      initialEmails: initialEmailsCount || 0,
+      followUpEmails: followUpEmailsCount || 0
     };
   } catch (error) {
     console.error('❌ Error in getCampaignMetrics:', error);
@@ -294,7 +311,9 @@ const getCampaignMetrics = async (campaignId, organizationId) => {
       replyRate: 0,
       bounceRate: 0,
       hardBounces: 0,
-      softBounces: 0
+      softBounces: 0,
+      initialEmails: 0,
+      followUpEmails: 0
     };
   }
 };
@@ -625,7 +644,9 @@ router.post('/', authenticateToken, async (req, res) => {
       includeUnsubscribe: includeUnsubscribe !== undefined ? includeUnsubscribe : true,
       // Human-like timing settings
       enableJitter: enableJitter !== undefined ? enableJitter : true,
-      jitterMinutes: Math.min(3, Math.max(1, jitterMinutes || 3))
+      jitterMinutes: Math.min(3, Math.max(1, jitterMinutes || 3)),
+      // 🔥 CRITICAL FIX: Auto-enable follow-ups when email sequence is configured
+      followUpEnabled: (emailSequence && emailSequence.length > 0) ? true : false
     };
 
     // Insert campaign into database
@@ -1471,7 +1492,8 @@ router.get('/:id/activity', authenticateToken, async (req, res) => {
         sent_at,
         created_at,
         error_message,
-        email_account_id
+        email_account_id,
+        sequence_step
       `)
       .eq('campaign_id', campaignId)
       .eq('organization_id', organizationId)
@@ -1537,7 +1559,8 @@ router.get('/:id/activity', authenticateToken, async (req, res) => {
         to: email.to_email || 'Unknown',
         subject: email.subject || 'No subject',
         status: email.status,
-        error: email.error_message
+        error: email.error_message,
+        sequence_step: email.sequence_step || 0
       };
     });
 
@@ -2503,13 +2526,30 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return defaultValue;
     };
 
+    // 🔥 CRITICAL FIX: Determine final email sequence value
+    const finalEmailSequence = getValueOrExisting(emailSequence, existingConfig.emailSequence, []);
+
+    // 🔥 CRITICAL FIX: Auto-enable follow-ups when email sequence is configured
+    // Priority: 1) Explicit followUpEnabled from frontend, 2) Auto-detect from sequence, 3) Existing config
+    let finalFollowUpEnabled;
+    if (followUpEnabled !== undefined) {
+      // Frontend explicitly set the value
+      finalFollowUpEnabled = followUpEnabled;
+    } else if (finalEmailSequence && finalEmailSequence.length > 0) {
+      // Auto-enable if sequence has items
+      finalFollowUpEnabled = true;
+    } else {
+      // Fallback to existing config or false
+      finalFollowUpEnabled = existingConfig.followUpEnabled || false;
+    }
+
     // Build campaign config - preserve existing values if new values are empty
     const campaignConfig = {
       description: getValueOrExisting(description, existingConfig.description, ''),
       emailSubject: getValueOrExisting(emailSubject, existingConfig.emailSubject),
       emailContent: getValueOrExisting(emailContent, existingConfig.emailContent),
-      followUpEnabled: followUpEnabled !== undefined ? followUpEnabled : existingConfig.followUpEnabled,
-      emailSequence: getValueOrExisting(emailSequence, existingConfig.emailSequence, []),
+      followUpEnabled: finalFollowUpEnabled,
+      emailSequence: finalEmailSequence,
       leadListId: getValueOrExisting(selectedLeadListId, existingConfig.leadListId),
       leadListName: getValueOrExisting(selectedLeadListName, existingConfig.leadListName),
       leadCount: selectedLeadListCount !== undefined ? selectedLeadListCount : existingConfig.leadCount,
