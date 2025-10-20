@@ -1389,6 +1389,19 @@ class CronEmailProcessor {
         const delayDays = followUpStep.delay || 1;
         const baseFollowUpTime = sentAtTime.getTime() + (delayDays * 24 * 60 * 60 * 1000);
 
+        // 🚨 CRITICAL FIX: Check if follow-up already exists to prevent duplicates
+        const { data: existingFollowUp } = await supabase
+          .from('scheduled_emails')
+          .select('id')
+          .eq('parent_email_id', sentEmail.id)
+          .eq('sequence_step', sequenceStep)
+          .single();
+
+        if (existingFollowUp) {
+          console.log(`⏭️  Follow-up ${sequenceStep} already exists for ${sentEmail.to_email}, skipping`);
+          continue; // Skip to next follow-up
+        }
+
         // 🎲 Add random jitter to make follow-ups more natural (±120 minutes)
         const minJitterMinutes = -120; // Up to 2 hours earlier
         const maxJitterMinutes = 120;  // Up to 2 hours later
