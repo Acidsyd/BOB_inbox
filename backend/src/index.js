@@ -104,13 +104,9 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log('🔄 BackgroundSyncService started - syncing emails every 15 minutes');
   }
 
-  // Start cron email processor
-  if (process.env.NODE_ENV !== 'test') {
-    const CronEmailProcessor = require('./services/CronEmailProcessor');
-    const cronProcessor = new CronEmailProcessor();
-    cronProcessor.start();
-    console.log('⏰ CronEmailProcessor started - processing scheduled emails every minute');
-  }
+  // NOTE: CronEmailProcessor runs as standalone process (npm run cron or npm run cron:dev)
+  // See backend/src/cron.js for standalone cron worker
+  console.log('ℹ️  CronEmailProcessor: Use standalone process (npm run cron:dev for development)');
 });
 
 module.exports = app;

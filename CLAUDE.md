@@ -6,11 +6,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 ```bash
 # Development
-npm run dev              # Starts both frontend (3001) and backend (4000)
-npm run dev:backend      # Backend only (port 4000)
+npm run dev              # Starts both frontend (3001) and backend (4000) - API server only
+npm run dev:backend      # Backend only (port 4000) - API server only
 npm run dev:frontend     # Frontend only (port 3001)
-npm run cron:dev         # Email processor (every minute) - PRODUCTION-READY with 4-phase enhancements
+npm run cron:dev         # Standalone cron worker (REQUIRED for email processing)
 npm run reply-monitor:dev # Reply monitoring cron (development mode)
+
+# Cron Architecture (IMPORTANT: Prevent Duplicate Emails!)
+# Backend = API server ONLY (no cron auto-start)
+# Cron = ALWAYS runs as standalone process
+
+# Development Mode:
+npm run dev:backend      # API server only
+npm run cron:dev         # Dedicated cron worker (required)
+
+# Production Mode:
+npm run start            # API server only
+npm run cron             # Dedicated cron worker (required)
 
 # Testing & Quality
 npm run test             # Unit tests (Jest)
@@ -140,7 +152,7 @@ UNIQUE(email, organization_id)
 
 ### Campaign Processing
 ```
-Campaign Start → Auto-starts cron processor → Creates scheduled_emails →
+Campaign Start → Creates scheduled_emails → Standalone cron processor →
 Cron (1 min) → Enforces timing rules → Account rotation → OAuth2/SMTP send →
 Updates conversations → Tracks metrics → Schedules follow-ups
 ```
@@ -301,7 +313,7 @@ SMTP_PASS=your-app-password
 - `src/utils/supabaseHelpers.js` - **Pagination utilities** (fetchAllWithPagination, fetchCount, batchUpdate)
 
 ### API Routes
-- `src/routes/campaigns.js` - Campaign CRUD with auto-start processor
+- `src/routes/campaigns.js` - Campaign CRUD (email scheduling)
 - `src/routes/oauth2.js` - OAuth2 flow management
 - `src/routes/inbox.js` - Unified inbox with conversation threading
 - `src/routes/leadLists.js` - Lead management with unlimited count support
@@ -504,6 +516,7 @@ const { success, failed } = await batchUpdate(supabase, tableName, [
 
 | Issue | Solution |
 |-------|----------|
+| Duplicate emails sent to recipients | Multiple cron instances running! Ensure ONLY ONE cron process is running (npm run cron:dev or npm run cron) |
 | OAuth2 accounts not showing | Verify status = 'linked_to_account' |
 | Emails not respecting intervals | Check CronEmailProcessor.js `slice(0, 1)` fix |
 | Duplicates not detected | Ensure organization_id filter only |

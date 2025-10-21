@@ -41,8 +41,23 @@ class CronEmailProcessor {
    * Start the cron job processor with error resilience
    */
   start() {
+    // Generate unique instance ID for debugging
+    this.instanceId = `cron-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
     console.log('🚀 Starting Cron Email Processor...');
-    
+    console.log(`🆔 Instance ID: ${this.instanceId}`);
+    console.log('');
+    console.log('⚠️  ═══════════════════════════════════════════════════════════');
+    console.log('⚠️  WARNING: Ensure ONLY ONE CronEmailProcessor is running!');
+    console.log('⚠️  Multiple instances will cause DUPLICATE EMAILS to be sent!');
+    console.log('⚠️  ═══════════════════════════════════════════════════════════');
+    console.log('');
+    console.log('💡 This is a STANDALONE cron worker:');
+    console.log('   • Development: npm run cron:dev');
+    console.log('   • Production:  npm run cron');
+    console.log('   • Backend runs API server ONLY (no cron auto-start)');
+    console.log('');
+
     // Add graceful shutdown handlers
     this.setupGracefulShutdown();
     
