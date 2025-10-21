@@ -177,6 +177,19 @@ config/.env.production
 mcp-baserow/
 
 # Debug and test scripts (temporary one-off scripts)
+# Root directory diagnostic scripts
+check-*.cjs
+check-*.js
+verify-*.cjs
+verify-*.js
+fix-*.cjs
+fix-*.js
+dump-*.cjs
+dump-*.js
+debug-*.cjs
+debug-*.js
+
+# Backend directory scripts
 backend/check_*.js
 backend/check_*.cjs
 backend/test_*.js
