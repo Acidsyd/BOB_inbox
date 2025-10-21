@@ -757,6 +757,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
       clickRate: metrics.clickRate,
       replyRate: metrics.replyRate,
       bounceRate: metrics.bounceRate,
+      // Add sequence step breakdown
+      initialEmails: metrics.initialEmails,
+      followUpEmails: metrics.followUpEmails,
       // Keep original config for reference
       _config: campaign.config
     };
