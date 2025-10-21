@@ -380,6 +380,7 @@ class CronEmailProcessor {
         campaign_id,
         organization_id,
         email_account_id,
+        lead_id,
         to_email,
         from_email,
         subject,
@@ -387,6 +388,9 @@ class CronEmailProcessor {
         send_at,
         status,
         attempts,
+        sequence_step,
+        is_follow_up,
+        reply_to_same_thread,
         message_id_header,
         thread_id,
         campaigns!inner(status)
