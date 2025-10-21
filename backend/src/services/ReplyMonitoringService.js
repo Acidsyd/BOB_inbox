@@ -411,12 +411,81 @@ class ReplyMonitoringService {
         console.error('⚠️ Error ingesting reply into unified inbox (non-fatal):', unifiedInboxError);
         // Don't fail the reply storage if unified inbox fails
       }
-      
+
+      // 🔥 HYBRID APPROACH: Proactively cancel scheduled follow-ups after reply detected
+      try {
+        await this.cancelFollowUpsAfterReply(reply, organizationId);
+      } catch (cancelError) {
+        console.error('⚠️ Error cancelling follow-ups after reply (non-fatal):', cancelError);
+        // Don't fail the reply storage if cancellation fails
+        // The send-time check will still catch this as a safety net
+      }
+
       return true;
-      
+
     } catch (error) {
       console.error('❌ Error in storeReply:', error);
       return false;
+    }
+  }
+
+  /**
+   * Cancel scheduled follow-ups after a reply is detected (Proactive Cancellation)
+   * This is part of the hybrid approach - provides immediate cancellation
+   * while the send-time check acts as a safety net
+   */
+  async cancelFollowUpsAfterReply(reply, organizationId) {
+    try {
+      console.log(`🔍 Checking for scheduled follow-ups to cancel for lead ${reply.leadId} in campaign ${reply.campaignId}`);
+
+      // First check if the campaign has stopOnReply enabled
+      const { data: campaign } = await supabase
+        .from('campaigns')
+        .select('config')
+        .eq('id', reply.campaignId)
+        .eq('organization_id', organizationId)
+        .single();
+
+      if (!campaign?.config?.stopOnReply) {
+        console.log('⚠️ Campaign does not have stopOnReply enabled, skipping cancellation');
+        return;
+      }
+
+      console.log('✅ Campaign has stopOnReply enabled, proceeding with cancellation');
+
+      // Cancel all scheduled follow-ups for this lead in this campaign
+      // Only cancel follow-ups (sequence_step > 0), not initial emails
+      // Use 'skipped' status (database constraint doesn't allow 'cancelled')
+      const { data: cancelledEmails, error } = await supabase
+        .from('scheduled_emails')
+        .update({
+          status: 'skipped',
+          updated_at: new Date().toISOString()
+        })
+        .eq('campaign_id', reply.campaignId)
+        .eq('lead_id', reply.leadId)
+        .eq('status', 'scheduled')
+        .gt('sequence_step', 0)
+        .select('id, to_email, subject, send_at, sequence_step');
+
+      if (error) {
+        console.error('❌ Error cancelling follow-ups:', error);
+        return;
+      }
+
+      if (!cancelledEmails || cancelledEmails.length === 0) {
+        console.log('📭 No scheduled follow-ups found to cancel');
+        return;
+      }
+
+      console.log(`✅ Proactively cancelled ${cancelledEmails.length} scheduled follow-up(s) after reply:`);
+      cancelledEmails.forEach(email => {
+        console.log(`   - Email ${email.id}: "${email.subject}" to ${email.to_email} (was scheduled for ${email.send_at})`);
+      });
+
+    } catch (error) {
+      console.error('❌ Error in cancelFollowUpsAfterReply:', error);
+      throw error;
     }
   }
 
