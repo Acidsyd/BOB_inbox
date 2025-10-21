@@ -868,8 +868,9 @@ class CronEmailProcessor {
 
       let result;
       // Always use EmailService for consistent tracking
-      console.log('📨 Sending via EmailService with tracking');
-      result = await this.emailService.sendEmail({
+
+      // 🔥 CRITICAL FIX: Check if this is a follow-up that should reply to same thread
+      const sendParams = {
         accountId: email.email_account_id,
         organizationId: organizationId,
         to: email.to_email,
@@ -881,7 +882,20 @@ class CronEmailProcessor {
         trackClicks: trackClicks,
         trackingToken: email.tracking_token,
         scheduledEmailId: email.id
-      });
+      };
+
+      // 🔥 CRITICAL FIX: Add threading parameters for follow-ups replying to same thread
+      if (email.is_follow_up && email.reply_to_same_thread && email.thread_id) {
+        console.log(`🧵 Sending follow-up as reply to thread ${email.thread_id}`);
+        sendParams.inReplyTo = email.message_id_header; // The Message-ID we're replying to
+        sendParams.threadId = email.thread_id; // Gmail thread ID
+        sendParams.references = email.message_id_header; // References chain
+        console.log(`🔗 In-Reply-To: ${sendParams.inReplyTo}`);
+        console.log(`🔗 Thread-ID: ${sendParams.threadId}`);
+      }
+
+      console.log('📨 Sending via EmailService with tracking');
+      result = await this.emailService.sendEmail(sendParams);
 
       if (result.success) {
         await this.updateEmailStatus(email.id, 'sent', result.messageId, null, result.actualMessageId, result.threadId);
@@ -1411,7 +1425,72 @@ class CronEmailProcessor {
         const followUpSendTime = new Date(baseFollowUpTime + jitterMs);
         console.log(`🎲 Follow-up jitter: ${randomJitterMinutes > 0 ? '+' : ''}${randomJitterMinutes} minutes (base: ${new Date(baseFollowUpTime).toISOString()})`);
 
-        // Prepare follow-up email data
+        // 🔥 CRITICAL FIX: Fetch lead data to apply spintax processing and personalization
+        const { data: lead, error: leadError } = await supabase
+          .from('leads')
+          .select('*')
+          .eq('id', sentEmail.lead_id)
+          .single();
+
+        if (leadError || !lead) {
+          console.error(`❌ Error fetching lead ${sentEmail.lead_id} for follow-up:`, leadError);
+          continue; // Skip this follow-up if we can't get lead data
+        }
+
+        // 🔥 CRITICAL FIX: Apply spintax processing and personalization (same as initial emails)
+        const rawSubject = followUpStep.subject || sentEmail.subject;
+        const rawContent = followUpStep.content;
+
+        // Define personalization tokens
+        const replacements = {
+          '{{firstName}}': lead.first_name || '',
+          '{{lastName}}': lead.last_name || '',
+          '{{fullName}}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+          '{{company}}': lead.company || '',
+          '{{jobTitle}}': lead.job_title || '',
+          '{{website}}': lead.website || '',
+          '{{email}}': lead.email || '',
+          '{firstName}': lead.first_name || '',
+          '{lastName}': lead.last_name || '',
+          '{fullName}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+          '{company}': lead.company || '',
+          '{jobTitle}': lead.job_title || '',
+          '{website}': lead.website || '',
+          '{email}': lead.email || '',
+          '{first_name}': lead.first_name || '',
+          '{last_name}': lead.last_name || '',
+          '{full_name}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+          '{job_title}': lead.job_title || ''
+        };
+
+        // Apply spintax processing first (using lead email as seed for consistency)
+        let processedSubject = SpintaxParser.spinWithSeed(rawSubject, lead.email);
+        let processedContent = SpintaxParser.spinWithSeed(rawContent, lead.email);
+
+        // Apply personalization tokens
+        function escapeRegExp(string) {
+          return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        Object.entries(replacements).forEach(([token, value]) => {
+          processedSubject = processedSubject.replace(new RegExp(escapeRegExp(token), 'g'), value);
+          processedContent = processedContent.replace(new RegExp(escapeRegExp(token), 'g'), value);
+        });
+
+        // 🔥 CRITICAL FIX: Handle "Re:" prefix for replies to same thread
+        if (followUpStep.replyToSameThread) {
+          // For replies, use "Re:" prefix with the original initial email subject
+          const initialSubject = campaignConfig?.emailSubject || sentEmail.subject;
+          processedSubject = `Re: ${SpintaxParser.spinWithSeed(initialSubject, lead.email)}`;
+          // Apply personalization to the reply subject too
+          Object.entries(replacements).forEach(([token, value]) => {
+            processedSubject = processedSubject.replace(new RegExp(escapeRegExp(token), 'g'), value);
+          });
+        }
+
+        console.log(`✅ Processed spintax and personalization for follow-up ${sequenceStep} to ${lead.email}`);
+
+        // Prepare follow-up email data with processed content
         const followUpEmail = {
           campaign_id: sentEmail.campaign_id,
           lead_id: sentEmail.lead_id,
@@ -1419,8 +1498,8 @@ class CronEmailProcessor {
           email_account_id: sentEmail.email_account_id, // Use same account
           to_email: sentEmail.to_email,
           from_email: sentEmail.from_email,
-          subject: followUpStep.subject || sentEmail.subject, // Use follow-up subject or original
-          content: followUpStep.content,
+          subject: processedSubject, // ✅ Now uses processed subject with spintax & personalization
+          content: processedContent, // ✅ Now uses processed content with spintax & personalization
           send_at: followUpSendTime.toISOString(),
           status: 'scheduled',
           sequence_step: sequenceStep,
