@@ -14,18 +14,34 @@ if [ ! -f "package.json" ]; then
     exit 1
 fi
 
-# Step 1: Rebuild frontend with standalone output
-echo "📦 Step 1: Building frontend with standalone output..."
+# Step 1: Clean and rebuild frontend with standalone output
+echo "📦 Step 1: Cleaning and building frontend with standalone output..."
 cd frontend
+
+# Clean previous build artifacts
+echo "🧹 Cleaning previous build..."
+rm -rf .next
+rm -rf out
+
+# Fresh build
 npm run build
+
 cd ..
 echo "✅ Frontend build complete"
 echo ""
 
 # Step 2: Rebuild Docker images
 echo "🐳 Step 2: Rebuilding Docker containers..."
+
+# Stop all services
 docker-compose down
-docker-compose build --no-cache
+
+# Remove old frontend image to force complete rebuild
+docker rmi mailsender-app 2>/dev/null || true
+
+# Rebuild with no cache
+docker-compose build --no-cache app
+
 echo "✅ Docker images rebuilt"
 echo ""
 
