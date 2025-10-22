@@ -917,7 +917,11 @@ class CronEmailProcessor {
       result = await this.emailService.sendEmail(sendParams);
 
       if (result.success) {
-        await this.updateEmailStatus(email.id, 'sent', result.messageId, null, result.actualMessageId, result.threadId);
+        // 🔥 CRITICAL FIX: Don't overwrite message_id_header for follow-ups replying to same thread
+        // For follow-ups, message_id_header contains the PARENT's Message-ID (for In-Reply-To header)
+        // For initial emails, message_id_header should contain their OWN Message-ID
+        const isThreadedFollowUp = email.is_follow_up && email.reply_to_same_thread;
+        await this.updateEmailStatus(email.id, 'sent', result.messageId, null, result.actualMessageId, result.threadId, isThreadedFollowUp);
         console.log(`✅ Email ${email.id} sent successfully - MessageID: ${result.messageId}, ActualMessageID: ${result.actualMessageId || 'N/A'}`);
 
         // 🔥 NEW: Ingest sent email into unified inbox system
@@ -1000,7 +1004,7 @@ class CronEmailProcessor {
   /**
    * Update email status in database
    */
-  async updateEmailStatus(emailId, status, messageId = null, errorMessage = null, actualMessageId = null, threadId = null) {
+  async updateEmailStatus(emailId, status, messageId = null, errorMessage = null, actualMessageId = null, threadId = null, isThreadedFollowUp = false) {
     const updateData = {
       status: status,
       updated_at: new Date().toISOString()
@@ -1009,7 +1013,14 @@ class CronEmailProcessor {
     if (status === 'sent') {
       updateData.sent_at = new Date().toISOString();
       if (messageId) updateData.message_id = messageId;
-      if (actualMessageId) updateData.message_id_header = actualMessageId;
+
+      // 🔥 CRITICAL FIX: Don't overwrite message_id_header for threaded follow-ups
+      // Threaded follow-ups need to preserve the PARENT's Message-ID for In-Reply-To header
+      // Only initial emails should store their OWN Message-ID in this field
+      if (actualMessageId && !isThreadedFollowUp) {
+        updateData.message_id_header = actualMessageId;
+      }
+
       if (threadId) updateData.thread_id = threadId;
     }
 
