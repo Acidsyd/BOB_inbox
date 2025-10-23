@@ -904,13 +904,20 @@ class CronEmailProcessor {
       };
 
       // 🔥 CRITICAL FIX: Add threading parameters for follow-ups replying to same thread
-      if (email.is_follow_up && email.reply_to_same_thread && email.thread_id) {
-        console.log(`🧵 Sending follow-up as reply to thread ${email.thread_id}`);
+      // Check for message_id_header (parent's Message-ID) instead of thread_id
+      if (email.is_follow_up && email.reply_to_same_thread && email.message_id_header) {
+        console.log(`🧵 Sending follow-up as reply to parent Message-ID: ${email.message_id_header}`);
         sendParams.inReplyTo = email.message_id_header; // The Message-ID we're replying to
-        sendParams.threadId = email.thread_id; // Gmail thread ID
         sendParams.references = email.message_id_header; // References chain
+
+        // Only add threadId if it exists (optional, Gmail will create/match thread based on In-Reply-To)
+        if (email.thread_id) {
+          sendParams.threadId = email.thread_id;
+          console.log(`🔗 Thread-ID: ${sendParams.threadId}`);
+        }
+
         console.log(`🔗 In-Reply-To: ${sendParams.inReplyTo}`);
-        console.log(`🔗 Thread-ID: ${sendParams.threadId}`);
+        console.log(`🔗 References: ${sendParams.references}`);
       }
 
       console.log('📨 Sending via EmailService with tracking');
