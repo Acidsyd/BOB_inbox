@@ -2134,6 +2134,12 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
 
     console.log(`📊 Found ${allLeadsForRestart.length} leads for rescheduling (unlimited processing)`);
 
+    // 🔥 CRITICAL FIX: Filter out already-sent leads BEFORE scheduling
+    // Bug: Scheduling ALL leads then filtering creates massive time gaps
+    // Fix: Only schedule leads that actually need scheduling
+    const leadsToSchedule = allLeadsForRestart.filter(lead => !sentEmails.has(lead.id));
+    console.log(`🔥 Filtered to ${leadsToSchedule.length} leads (excluding ${sentEmails.size} already sent)`);
+
     // Step 2.3: Create fresh schedule starting from NOW (reuse existing logic)
     const emailAccounts = campaign.config?.emailAccounts || [];
     if (emailAccounts.length === 0) {
@@ -2155,7 +2161,8 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
     });
 
     console.log(`📅 Creating fresh schedule with PERFECT ROTATION starting from NOW...`);
-    const leadSchedules = scheduler.scheduleEmailsWithPerfectRotation(allLeadsForRestart, emailAccounts);
+    // 🔥 CRITICAL FIX: Only schedule leads that need scheduling (not sent ones)
+    const leadSchedules = scheduler.scheduleEmailsWithPerfectRotation(leadsToSchedule, emailAccounts);
     console.log(`✅ Generated ${leadSchedules.length} schedules with perfect rotation`);
 
     if (leadSchedules.length > 0) {
