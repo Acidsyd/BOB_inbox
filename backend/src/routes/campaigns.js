@@ -2212,6 +2212,8 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
             send_at: schedule.sendAt.toISOString(),
             status: 'scheduled', // Reset to scheduled if was 'skipped' or 'failed'
             email_account_id: schedule.emailAccountId,
+            subject: campaign.config.emailSubject, // 🔥 UPDATE: Use current config subject
+            email_content: campaign.config.emailContent, // 🔥 UPDATE: Use current config content
             updated_at: new Date().toISOString(),
             error_message: null // Clear any previous errors
           })
