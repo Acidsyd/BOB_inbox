@@ -2205,6 +2205,47 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
 
       for (const schedule of batch) {
         const existingEmail = updateableEmailMap.get(schedule.lead.id);
+        const lead = schedule.lead;
+
+        // 🔥 CRITICAL: Process spintax and personalization (same as createScheduledEmailRecord)
+        const rawSubject = campaign.config.emailSubject;
+        const rawContent = campaign.config.emailContent;
+
+        // Apply spintax processing with lead email as seed for consistency
+        let processedSubject = SpintaxParser.spinWithSeed(rawSubject, lead.email);
+        let processedContent = SpintaxParser.spinWithSeed(rawContent, lead.email);
+
+        // Define personalization tokens
+        const replacements = {
+          '{{firstName}}': lead.first_name || '',
+          '{{lastName}}': lead.last_name || '',
+          '{{fullName}}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+          '{{company}}': lead.company || '',
+          '{{jobTitle}}': lead.job_title || '',
+          '{{website}}': lead.website || '',
+          '{{email}}': lead.email || '',
+          '{firstName}': lead.first_name || '',
+          '{lastName}': lead.last_name || '',
+          '{fullName}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+          '{company}': lead.company || '',
+          '{jobTitle}': lead.job_title || '',
+          '{website}': lead.website || '',
+          '{email}': lead.email || '',
+          '{first_name}': lead.first_name || '',
+          '{last_name}': lead.last_name || '',
+          '{full_name}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+          '{job_title}': lead.job_title || ''
+        };
+
+        // Apply personalization tokens
+        function escapeRegExp(string) {
+          return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        Object.entries(replacements).forEach(([token, value]) => {
+          processedSubject = processedSubject.replace(new RegExp(escapeRegExp(token), 'g'), value);
+          processedContent = processedContent.replace(new RegExp(escapeRegExp(token), 'g'), value);
+        });
 
         const { error: updateError } = await supabase
           .from('scheduled_emails')
@@ -2212,8 +2253,8 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
             send_at: schedule.sendAt.toISOString(),
             status: 'scheduled', // Reset to scheduled if was 'skipped' or 'failed'
             email_account_id: schedule.emailAccountId,
-            subject: campaign.config.emailSubject, // 🔥 UPDATE: Use current config subject
-            content: campaign.config.emailContent, // 🔥 UPDATE: Use current config content
+            subject: processedSubject, // 🔥 FIXED: Use processed subject with spintax + personalization
+            content: processedContent, // 🔥 FIXED: Use processed content with spintax + personalization
             updated_at: new Date().toISOString(),
             error_message: null // Clear any previous errors
           })
