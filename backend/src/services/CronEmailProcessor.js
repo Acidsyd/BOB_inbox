@@ -1652,14 +1652,17 @@ class CronEmailProcessor {
       if (accountEmails && accountEmails.length > 0) {
         // 🚨 CRITICAL FIX: Only reschedule emails that are still in 'scheduled' status
         // This prevents rescheduling emails that were just sent (status updated to 'sent')
+        // 🔥 FOLLOW-UP FIX: Exclude follow-ups from rescheduling - they have their own timing
         accountEmails.forEach(email => {
           // Skip emails that have been sent (status may have been updated in database)
-          if (email.status === 'scheduled') {
+          if (email.status === 'scheduled' && !email.is_follow_up) {
             allEmailsToSchedule.push({
               email: email,
               accountId: accountId,
               accountIndex: accountIndex
             });
+          } else if (email.is_follow_up) {
+            console.log(`⏭️  Skipping follow-up ${email.id.substring(0,8)}... from rescheduling (has fixed timing)`);
           } else {
             console.log(`⏭️  Skipping email ${email.id.substring(0,8)}... with status '${email.status}' from rescheduling`);
           }
