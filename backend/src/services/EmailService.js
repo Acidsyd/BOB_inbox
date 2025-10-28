@@ -311,7 +311,10 @@ class EmailService {
     trackOpens = false,
     trackClicks = false,
     trackingToken = null,
-    scheduledEmailId = null
+    scheduledEmailId = null,
+    inReplyTo = null,
+    references = null,
+    threadId = null
   }) {
     try {
       console.log('📤 === SENDING EMAIL ===');
@@ -322,6 +325,9 @@ class EmailService {
       if (cc) console.log('📮 CC:', cc);
       if (bcc) console.log('📩 BCC:', bcc);
       console.log('📊 Tracking:', { trackOpens, trackClicks, trackingToken });
+      if (inReplyTo) console.log('🔗 In-Reply-To:', inReplyTo);
+      if (references) console.log('🔗 References:', references);
+      if (threadId) console.log('🧵 Thread-ID:', threadId);
 
       // Get email account
       const account = await EmailService.getEmailAccount(accountId, organizationId);
@@ -356,7 +362,10 @@ class EmailService {
           organizationId: organizationId,
           attachments,
           campaignId,
-          includeUnsubscribe
+          includeUnsubscribe,
+          inReplyTo,
+          references,
+          threadId
         });
       } else {
         console.log('📨 Using SMTP for sending');
@@ -370,7 +379,10 @@ class EmailService {
           text,
           campaignId,
           includeUnsubscribe,
-          organizationId
+          organizationId,
+          inReplyTo,
+          references,
+          threadId
         });
       }
 
