@@ -692,7 +692,12 @@ class CronEmailProcessor {
     if (!accountInfo) {
       console.log(`❌ Campaign ${campaignId}: Account ${accountId} not found, rescheduling emails`);
       const rescheduleTime = new Date(Date.now() + 60 * 60 * 1000); // 1 hour later
-      await this.rescheduleEmails(accountEmails, rescheduleTime);
+
+      // 🔥 FOLLOW-UP FIX: Exclude follow-ups from rescheduling - they have fixed timing
+      const emailsToReschedule = accountEmails.filter(e => !e.is_follow_up);
+      console.log(`⏰ Rescheduling ${emailsToReschedule.length} emails (${accountEmails.length - emailsToReschedule.length} follow-ups excluded) - account not found`);
+
+      await this.rescheduleEmails(emailsToReschedule, rescheduleTime);
       return;
     }
     
@@ -703,9 +708,12 @@ class CronEmailProcessor {
     
     if (!rateLimitInfo.canSend) {
       console.log(`⏰ Campaign ${campaignId}: Account ${currentAccountIndex + 1}/${accountCount} reached limits - rescheduling`);
-      
-      
-      await this.rescheduleEmails(accountEmails, rateLimitInfo.nextAvailableTime || new Date(Date.now() + 60 * 60 * 1000));
+
+      // 🔥 FOLLOW-UP FIX: Exclude follow-ups from rescheduling - they have fixed timing
+      const emailsToReschedule = accountEmails.filter(e => !e.is_follow_up);
+      console.log(`⏰ Rescheduling ${emailsToReschedule.length} emails (${accountEmails.length - emailsToReschedule.length} follow-ups excluded) - rate limit reached`);
+
+      await this.rescheduleEmails(emailsToReschedule, rateLimitInfo.nextAvailableTime || new Date(Date.now() + 60 * 60 * 1000));
       return;
     }
     
@@ -787,9 +795,12 @@ class CronEmailProcessor {
     if (timeSinceLastEmail < requiredIntervalMs) {
       const timeToWait = requiredIntervalMs - timeSinceLastEmail;
       const rescheduleTime = new Date(Date.now() + timeToWait);
-      console.log(`⏰ Campaign interval not reached! Rescheduling ${accountEmails.length} emails for ${Math.round(timeToWait / 60000)} minutes from now`);
 
-      await this.rescheduleEmailsWithInterval(accountEmails, rescheduleTime, actualIntervalMinutes);
+      // 🔥 FOLLOW-UP FIX: Exclude follow-ups from rescheduling - they have fixed timing
+      const emailsToReschedule = accountEmails.filter(e => !e.is_follow_up);
+      console.log(`⏰ Campaign interval not reached! Rescheduling ${emailsToReschedule.length} emails (${accountEmails.length - emailsToReschedule.length} follow-ups excluded) for ${Math.round(timeToWait / 60000)} minutes from now`);
+
+      await this.rescheduleEmailsWithInterval(emailsToReschedule, rescheduleTime, actualIntervalMinutes);
       return; // Don't send any emails yet
     }
 
@@ -803,8 +814,12 @@ class CronEmailProcessor {
       console.log(`⏰ Account ${fromEmail} reached limits. Reason: ${rateLimitInfo.reason}`);
       console.log(`📊 Daily: ${rateLimitInfo.dailyRemaining || 0}/${rateLimitInfo.dailyLimit || 'N/A'}, Hourly: ${rateLimitInfo.hourlyRemaining || 0}/${rateLimitInfo.hourlyLimit || 'N/A'}`);
 
+      // 🔥 FOLLOW-UP FIX: Exclude follow-ups from rescheduling - they have fixed timing
+      const emailsToReschedule = accountEmails.filter(e => !e.is_follow_up);
+      console.log(`⏰ Rescheduling ${emailsToReschedule.length} emails (${accountEmails.length - emailsToReschedule.length} follow-ups excluded) due to rate limits`);
+
       // Reschedule all emails for when account becomes available again
-      await this.rescheduleEmailsWithInterval(accountEmails, rateLimitInfo.nextAvailableTime || new Date(Date.now() + 60 * 60 * 1000), actualIntervalMinutes);
+      await this.rescheduleEmailsWithInterval(emailsToReschedule, rateLimitInfo.nextAvailableTime || new Date(Date.now() + 60 * 60 * 1000), actualIntervalMinutes);
       return;
     }
 
@@ -814,9 +829,12 @@ class CronEmailProcessor {
 
     // ALWAYS send exactly 1 email to respect campaign interval timing
     emailsToSendNow = accountEmails.slice(0, 1); // Only first email
-    emailsToReschedule = accountEmails.slice(1);  // Rest for next interval
+    const remainingEmails = accountEmails.slice(1);  // Rest for next interval
 
-    console.log(`✅ Sending ${emailsToSendNow.length} emails, rescheduling ${emailsToReschedule.length}`);
+    // 🔥 FOLLOW-UP FIX: Exclude follow-ups from rescheduling - they have fixed timing
+    emailsToReschedule = remainingEmails.filter(e => !e.is_follow_up);
+
+    console.log(`✅ Sending ${emailsToSendNow.length} emails, rescheduling ${emailsToReschedule.length} (${remainingEmails.length - emailsToReschedule.length} follow-ups excluded)`);
 
     // 🚨 CRITICAL FIX: Calculate reschedule time based on WHEN THIS EMAIL WILL BE SENT
     if (emailsToReschedule.length > 0) {
