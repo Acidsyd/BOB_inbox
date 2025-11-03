@@ -1115,12 +1115,28 @@ class CronEmailProcessor {
    */
   async rescheduleEmailBatch(emails, baseTime, intervalMinutes, startIndex) {
     console.log(`🔄 Rescheduling batch of ${emails.length} emails with ${intervalMinutes}-minute intervals`);
-    
+
+    // Get campaign config for jitter settings (from first email in batch)
+    let enableJitter = true;
+    let jitterMinutes = 3;
+
+    if (emails.length > 0 && emails[0].campaign_id) {
+      const campaignConfig = await this.getCampaignConfig(emails[0].campaign_id);
+      enableJitter = campaignConfig?.enableJitter !== false;
+      jitterMinutes = campaignConfig?.jitterMinutes || 3;
+    }
+
     // Process batch updates individually since Supabase doesn't support batch UPDATE with different values
     for (let i = 0; i < emails.length; i++) {
       const email = emails[i];
-      const rescheduleTime = new Date(baseTime.getTime() + ((startIndex + i) * intervalMinutes * 60 * 1000));
-      
+      let rescheduleTime = new Date(baseTime.getTime() + ((startIndex + i) * intervalMinutes * 60 * 1000));
+
+      // 🔥 FIX: Apply jitter to make timing more human-like
+      if (enableJitter) {
+        const jitterMs = this.applyJitterToTime(jitterMinutes);
+        rescheduleTime = new Date(rescheduleTime.getTime() + jitterMs);
+      }
+
       const { error } = await supabase
         .from('scheduled_emails')
         .update({
@@ -1135,10 +1151,12 @@ class CronEmailProcessor {
         throw new Error(`Failed to reschedule email ${email.id}: ${error.message}`);
       }
 
-      console.log(`⏰ Email ${email.id.substring(0, 8)}... rescheduled to ${rescheduleTime.toISOString()}`);
+      if (i < 5) { // Log first 5 to show jitter is working
+        console.log(`⏰ Email ${email.id.substring(0, 8)}... rescheduled to ${rescheduleTime.toISOString()}${enableJitter ? ' (jittered)' : ''}`);
+      }
     }
 
-    console.log(`⏰ Successfully rescheduled batch of ${emails.length} emails`);
+    console.log(`⏰ Successfully rescheduled batch of ${emails.length} emails${enableJitter ? ' with jitter' : ''}`);
   }
 
   /**
@@ -1146,11 +1164,27 @@ class CronEmailProcessor {
    */
   async rescheduleEmailsIndividually(emails, baseTime, intervalMinutes, startIndex) {
     console.log(`🔄 Falling back to individual updates for ${emails.length} emails`);
-    
+
+    // Get campaign config for jitter settings (from first email in batch)
+    let enableJitter = true;
+    let jitterMinutes = 3;
+
+    if (emails.length > 0 && emails[0].campaign_id) {
+      const campaignConfig = await this.getCampaignConfig(emails[0].campaign_id);
+      enableJitter = campaignConfig?.enableJitter !== false;
+      jitterMinutes = campaignConfig?.jitterMinutes || 3;
+    }
+
     for (let i = 0; i < emails.length; i++) {
       const email = emails[i];
-      const rescheduleTime = new Date(baseTime.getTime() + ((startIndex + i) * intervalMinutes * 60 * 1000));
-      
+      let rescheduleTime = new Date(baseTime.getTime() + ((startIndex + i) * intervalMinutes * 60 * 1000));
+
+      // 🔥 FIX: Apply jitter to make timing more human-like
+      if (enableJitter) {
+        const jitterMs = this.applyJitterToTime(jitterMinutes);
+        rescheduleTime = new Date(rescheduleTime.getTime() + jitterMs);
+      }
+
       try {
         const { error } = await supabase
           .from('scheduled_emails')
@@ -1685,6 +1719,29 @@ class CronEmailProcessor {
     // Collect all emails that need rescheduling (from all accounts)
     let allEmailsToSchedule = [];
 
+    // 🔥 FIX: Get campaign config for jitter settings
+    let enableJitter = true;
+    let jitterMinutes = 3;
+    let campaignId = null;
+
+    // Find the first email to get campaign_id
+    for (let offset = 1; offset <= totalAccounts; offset++) {
+      const accountIndex = (currentAccountIndex + offset) % totalAccounts;
+      const [, accountEmails] = accountEntries[accountIndex];
+
+      if (accountEmails && accountEmails.length > 0 && accountEmails[0].campaign_id) {
+        campaignId = accountEmails[0].campaign_id;
+        break;
+      }
+    }
+
+    // Fetch campaign config if we found a campaign_id
+    if (campaignId) {
+      const campaignConfig = await this.getCampaignConfig(campaignId);
+      enableJitter = campaignConfig?.enableJitter !== false;
+      jitterMinutes = campaignConfig?.jitterMinutes || 3;
+    }
+
     // Start from the next account after current
     for (let offset = 1; offset <= totalAccounts; offset++) {
       const accountIndex = (currentAccountIndex + offset) % totalAccounts;
@@ -1745,7 +1802,13 @@ class CronEmailProcessor {
         for (let i = 0; i < batch.length; i++) {
           const globalIndex = batchStart + i;
           const item = batch[i];
-          const rescheduleTime = new Date(baseTime.getTime() + ((globalIndex + 1) * intervalMinutes * 60 * 1000));
+          let rescheduleTime = new Date(baseTime.getTime() + ((globalIndex + 1) * intervalMinutes * 60 * 1000));
+
+          // 🔥 FIX: Apply jitter to make timing more human-like
+          if (enableJitter) {
+            const jitterMs = this.applyJitterToTime(jitterMinutes);
+            rescheduleTime = new Date(rescheduleTime.getTime() + jitterMs);
+          }
 
           const { error } = await supabase
             .from('scheduled_emails')
@@ -1802,6 +1865,17 @@ class CronEmailProcessor {
       result[group].push(item);
       return result;
     }, {});
+  }
+
+  /**
+   * Apply random jitter to create human-like timing variance
+   * @param {number} jitterMinutes - Maximum jitter in minutes (applied as ±jitterMinutes)
+   * @returns {number} - Random jitter in milliseconds
+   */
+  applyJitterToTime(jitterMinutes) {
+    const minJitterMs = -jitterMinutes * 60 * 1000;
+    const maxJitterMs = jitterMinutes * 60 * 1000;
+    return Math.floor(Math.random() * (maxJitterMs - minJitterMs + 1)) + minJitterMs;
   }
 
   /**
