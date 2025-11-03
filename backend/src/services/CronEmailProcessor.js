@@ -773,7 +773,7 @@ class CronEmailProcessor {
     // Get campaign configuration to respect sending intervals
     const campaignConfig = await this.getCampaignConfig(campaignId);
     const sendingIntervalMinutes = campaignConfig?.sendingInterval || 15; // Default 15 minutes
-    const emailsPerHour = campaignConfig?.emailsPerHour || 4; // Default 4 emails/hour
+    const emailsPerHour = campaignConfig?.emailsPerHour || 10; // Default 10 emails/hour (FIXED: was inconsistent with line 664)
 
     // Calculate minimum interval based on emailsPerHour limit
     const minIntervalMinutes = Math.ceil(60 / emailsPerHour); // 60 minutes / emails per hour
@@ -1262,7 +1262,12 @@ class CronEmailProcessor {
         scheduled_email_id: email.id,
         email_account_id: email.email_account_id,
         organization_id: organizationId,
-        provider: result.provider || 'gmail'
+        provider: result.provider || 'gmail',
+
+        // 🔥 FIX: Add threading fields for follow-ups to enable proper conversation grouping in sent folder
+        // For follow-ups with replyToSameThread=true, pass the parent's Message-ID for threading
+        in_reply_to: email.is_follow_up && email.reply_to_same_thread && email.message_id_header ? email.message_id_header : null,
+        message_references: email.is_follow_up && email.reply_to_same_thread && email.message_id_header ? email.message_id_header : null
       };
 
       // Ingest as sent email
