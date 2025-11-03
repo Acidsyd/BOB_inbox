@@ -2336,6 +2336,12 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
 
     console.log(`✅ Inserted ${totalInserted} new scheduled_emails`);
 
+    // 🔥 NEW: Rescue follow-ups stuck on inactive days or marked as skipped
+    console.log(`\n🔧 Checking for stuck follow-ups to rescue...`);
+    const CronEmailProcessor = require('../services/CronEmailProcessor');
+    const cronProcessor = new CronEmailProcessor();
+    await cronProcessor.rescueStuckFollowUps(organizationId, campaignId, campaign.config);
+
     console.log(`🎉 Campaign restart completed successfully!`);
     console.log(`🔄 Updated: ${totalUpdated} emails`);
     console.log(`➕ Inserted: ${totalInserted} emails`);

@@ -1482,8 +1482,26 @@ class CronEmailProcessor {
         const randomJitterMinutes = Math.floor(Math.random() * (maxJitterMinutes - minJitterMinutes + 1)) + minJitterMinutes;
         const jitterMs = randomJitterMinutes * 60 * 1000;
 
-        const followUpSendTime = new Date(baseFollowUpTime + jitterMs);
+        let followUpSendTime = new Date(baseFollowUpTime + jitterMs);
         console.log(`🎲 Follow-up jitter: ${randomJitterMinutes > 0 ? '+' : ''}${randomJitterMinutes} minutes (base: ${new Date(baseFollowUpTime).toISOString()})`);
+
+        // 🔥 NEW: Move to next active day if scheduled on inactive day or outside sending hours
+        const activeDays = campaignConfig?.activeDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+        const sendingHours = campaignConfig?.sendingHours || { start: 9, end: 17 };
+        const movedTime = this.moveToNextActiveDay(followUpSendTime, campaignTimezone, activeDays, sendingHours);
+
+        if (movedTime.getTime() !== followUpSendTime.getTime()) {
+          const originalDay = followUpSendTime.toLocaleDateString('en-US', {
+            weekday: 'long',
+            timeZone: campaignTimezone
+          });
+          const newDay = movedTime.toLocaleDateString('en-US', {
+            weekday: 'long',
+            timeZone: campaignTimezone
+          });
+          console.log(`📅 Follow-up rescheduled from ${followUpSendTime.toISOString()} (${originalDay}) to ${movedTime.toISOString()} (${newDay}) - inactive day`);
+          followUpSendTime = movedTime;
+        }
 
         // 🔥 CRITICAL FIX: Fetch lead data to apply spintax processing and personalization
         const { data: lead, error: leadError } = await supabase
@@ -1784,6 +1802,148 @@ class CronEmailProcessor {
       result[group].push(item);
       return result;
     }, {});
+  }
+
+  /**
+   * Move a date to the next active day/time if it falls on an inactive day or outside sending hours
+   * @param {Date} date - The date to check
+   * @param {string} timezone - Campaign timezone
+   * @param {Array} activeDays - Array of active day names (e.g., ['monday', 'tuesday'])
+   * @param {Object} sendingHours - Object with start and end hours (e.g., {start: 9, end: 17})
+   * @returns {Date} - The adjusted date, or original if already valid
+   */
+  moveToNextActiveDay(date, timezone, activeDays, sendingHours) {
+    let targetDate = new Date(date);
+    let attempts = 0;
+    const maxAttempts = 14; // Don't loop forever (2 weeks max)
+
+    while (attempts < maxAttempts) {
+      const dayName = targetDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        timeZone: timezone
+      }).toLowerCase();
+
+      const hour = parseInt(targetDate.toLocaleString('en-US', {
+        timeZone: timezone,
+        hour: 'numeric',
+        hour12: false
+      }));
+
+      // Check if this is an active day
+      if (activeDays.includes(dayName)) {
+        // Check if within sending hours
+        if (hour >= sendingHours.start && hour < sendingHours.end) {
+          return targetDate; // Found valid day/time
+        } else if (hour < sendingHours.start) {
+          // Too early, move to start hour
+          targetDate = new Date(targetDate);
+          const currentDateStr = targetDate.toLocaleDateString('en-US', { timeZone: timezone });
+          const startTimeStr = `${currentDateStr} ${sendingHours.start}:00:00`;
+          targetDate = new Date(new Date(startTimeStr).toLocaleString('en-US', { timeZone: 'UTC' }));
+          return targetDate;
+        }
+        // Too late, will move to next day below
+      }
+
+      // Move to next day, same time
+      targetDate = new Date(targetDate.getTime() + (24 * 60 * 60 * 1000));
+      attempts++;
+    }
+
+    // Fallback: return original date if we couldn't find a valid day
+    console.warn(`⚠️ Could not find active day within ${maxAttempts} days, using original date`);
+    return date;
+  }
+
+  /**
+   * Rescue follow-ups stuck on inactive days or marked as skipped
+   * This handles the case where follow-ups were scheduled for weekends or marked as skipped during campaign stop
+   */
+  async rescueStuckFollowUps(organizationId, campaignId, campaignConfig) {
+    try {
+      console.log(`🔄 Checking for stuck follow-ups in campaign ${campaignId}...`);
+
+      const timezone = campaignConfig?.timezone || 'UTC';
+      const activeDays = campaignConfig?.activeDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+      const sendingHours = campaignConfig?.sendingHours || { start: 9, end: 17 };
+
+      // Find follow-ups that need rescue:
+      // 1. is_follow_up = true
+      // 2. status = 'skipped' OR (status = 'scheduled' AND send_at is in past)
+      const now = new Date();
+
+      const { data: stuckFollowUps, error: fetchError } = await supabase
+        .from('scheduled_emails')
+        .select('id, to_email, send_at, status, sequence_step')
+        .eq('campaign_id', campaignId)
+        .eq('organization_id', organizationId)
+        .eq('is_follow_up', true)
+        .in('status', ['skipped', 'scheduled']);
+
+      if (fetchError) {
+        console.error('❌ Error fetching stuck follow-ups:', fetchError);
+        return;
+      }
+
+      if (!stuckFollowUps || stuckFollowUps.length === 0) {
+        console.log('✅ No stuck follow-ups found');
+        return;
+      }
+
+      console.log(`📧 Found ${stuckFollowUps.length} potential stuck follow-ups`);
+
+      let rescuedCount = 0;
+
+      for (const followUp of stuckFollowUps) {
+        const sendAt = new Date(followUp.send_at);
+        const dayName = sendAt.toLocaleDateString('en-US', {
+          weekday: 'long',
+          timeZone: timezone
+        }).toLowerCase();
+
+        const isInactiveDay = !activeDays.includes(dayName);
+        const isInPast = sendAt < now;
+        const isSkipped = followUp.status === 'skipped';
+
+        // Needs rescue if:
+        // - Scheduled for inactive day (regardless of time)
+        // - Marked as skipped
+        // - Scheduled in the past
+        if (isInactiveDay || isSkipped || isInPast) {
+          const newSendAt = this.moveToNextActiveDay(
+            isInPast ? now : sendAt,
+            timezone,
+            activeDays,
+            sendingHours
+          );
+
+          console.log(`🔧 Rescuing follow-up to ${followUp.to_email}:`);
+          console.log(`   Old: ${followUp.send_at} (${dayName}) - status: ${followUp.status}`);
+          console.log(`   New: ${newSendAt.toISOString()}`);
+
+          const { error: updateError } = await supabase
+            .from('scheduled_emails')
+            .update({
+              send_at: newSendAt.toISOString(),
+              status: 'scheduled',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', followUp.id);
+
+          if (updateError) {
+            console.error(`❌ Error rescuing follow-up ${followUp.id}:`, updateError);
+          } else {
+            rescuedCount++;
+          }
+        }
+      }
+
+      console.log(`✅ Rescued ${rescuedCount} stuck follow-up(s)`);
+
+    } catch (error) {
+      console.error('❌ Error in rescueStuckFollowUps:', error);
+      // Non-fatal error, don't throw
+    }
   }
 }
 
