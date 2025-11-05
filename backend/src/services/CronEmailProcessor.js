@@ -857,7 +857,14 @@ class CronEmailProcessor {
         await this.updateEmailStatus(email.id, 'skipped', null, 'Lead replied - campaign paused for this contact');
         continue;
       }
-      
+
+      // 🔥 NEW: Check if previous email to this recipient bounced
+      if (await this.shouldStopOnBounce(email, organizationId)) {
+        console.log(`📭 Skipping email ${email.id} to ${email.to_email} - previous email bounced`);
+        await this.updateEmailStatus(email.id, 'skipped', null, 'Previous email bounced - invalid email address');
+        continue;
+      }
+
       // 🚫 NEW: Check if lead has unsubscribed
       if (await this.isLeadUnsubscribed(email.to_email, organizationId)) {
         console.log(`🚫 Skipping email ${email.id} to ${email.to_email} - lead has unsubscribed`);
@@ -1426,6 +1433,99 @@ class CronEmailProcessor {
     } catch (error) {
       console.error(`❌ Error in shouldStopOnReply for email ${email.id}:`, error);
       return false; // Continue sending if there's an error
+    }
+  }
+
+  /**
+   * Check if previous emails to this recipient bounced
+   * @param {Object} email - Email object to check
+   * @param {string} organizationId - Organization ID
+   * @returns {Promise<boolean>} True if previous emails bounced
+   */
+  async shouldStopOnBounce(email, organizationId) {
+    try {
+      const recipientEmail = email.to_email.toLowerCase();
+      const recipientDomain = recipientEmail.split('@')[1];
+
+      if (!recipientDomain) {
+        return false;
+      }
+
+      // Check for bounce messages in conversation_messages
+      // Bounces typically come from mailer-daemon@domain or postmaster@domain
+      const bounceFromAddresses = [
+        `mailer-daemon@${recipientDomain}`,
+        `postmaster@${recipientDomain}`,
+        'mailer-daemon@googlemail.com',
+        'mailer-daemon@gmail.com'
+      ];
+
+      const { data: bounceMessages, error } = await supabase
+        .from('conversation_messages')
+        .select('id, subject, received_at, from_email')
+        .eq('organization_id', organizationId)
+        .eq('direction', 'received')
+        .in('from_email', bounceFromAddresses)
+        .order('received_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error(`❌ Error checking bounce messages for ${email.to_email}:`, error);
+        return false;
+      }
+
+      if (!bounceMessages || bounceMessages.length === 0) {
+        return false;
+      }
+
+      // Check if any bounce message is about this recipient
+      for (const bounce of bounceMessages) {
+        const subject = (bounce.subject || '').toLowerCase();
+
+        // Common bounce indicators in subject
+        const isBounce = subject.includes('undeliverable') ||
+                        subject.includes('delivery status notification') ||
+                        subject.includes('mail delivery failed') ||
+                        subject.includes('returned mail') ||
+                        subject.includes('failure notice');
+
+        if (isBounce) {
+          // Check if the bounce is about our recipient
+          // The subject usually contains the original recipient or subject line
+          if (subject.includes(recipientEmail) || subject.includes(recipientDomain)) {
+            console.log(`📭 Bounce detected for ${email.to_email} at ${bounce.received_at}`);
+            return true;
+          }
+
+          // Additional check: get the bounce message body to find recipient email
+          // (We could enhance this by checking message body, but subject is usually sufficient)
+        }
+      }
+
+      // Also check if there's a 'failed' status in scheduled_emails for this recipient
+      const { data: failedEmails, error: failedError } = await supabase
+        .from('scheduled_emails')
+        .select('id, status, error_message')
+        .eq('campaign_id', email.campaign_id)
+        .eq('to_email', email.to_email)
+        .eq('status', 'failed')
+        .limit(1);
+
+      if (failedError) {
+        console.error(`❌ Error checking failed emails for ${email.to_email}:`, failedError);
+        return false;
+      }
+
+      if (failedEmails && failedEmails.length > 0) {
+        console.log(`📭 Previous email to ${email.to_email} failed - skipping follow-ups`);
+        return true;
+      }
+
+      return false;
+
+    } catch (error) {
+      console.error(`❌ Error in shouldStopOnBounce for email ${email.id}:`, error);
+      return false;
     }
   }
 
