@@ -1376,36 +1376,53 @@ class CronEmailProcessor {
       if (!campaignConfig?.stopOnReply) {
         return false;
       }
-      
-      // Only stop follow-up emails, not the initial email
-      if (!email.is_follow_up) {
-        return false;
+
+      // Exclude system/bounce messages from stopOnReply check
+      const emailLower = email.to_email.toLowerCase();
+      const isSystemEmail = emailLower.includes('mailer-daemon') ||
+                           emailLower.includes('postmaster') ||
+                           emailLower.includes('no-reply') ||
+                           emailLower.includes('noreply');
+
+      if (isSystemEmail) {
+        return false; // Don't check stopOnReply for system emails
       }
-      
-      console.log(`🔍 Checking for replies from lead ${email.to_email} in campaign ${email.campaign_id}`);
-      
-      // Check if there are any replies for this lead in this campaign
-      const { data: replies, error } = await supabase
-        .from('email_replies')
-        .select('id, reply_message_id, replied_at, from_email')
-        .eq('campaign_id', email.campaign_id)
-        .eq('from_email', email.to_email)
+
+      // Stop ALL emails (initial and follow-ups) if recipient has replied
+      console.log(`🔍 Checking if ${email.to_email} has sent any replies`);
+
+      // 🔥 FIX: Check conversation_messages for ANY received email from this recipient
+      // This is simpler and more reliable than checking email_replies table
+      const { data: receivedMessages, error } = await supabase
+        .from('conversation_messages')
+        .select('id, received_at, subject, from_email')
         .eq('organization_id', organizationId)
+        .eq('direction', 'received')
+        .eq('from_email', email.to_email)
         .limit(1);
-      
+
       if (error) {
-        console.error(`❌ Error checking replies for lead ${email.to_email}:`, error);
-        return false; // Continue sending if we can't check replies
+        console.error(`❌ Error checking received messages from ${email.to_email}:`, error);
+        return false; // Continue sending if we can't check
       }
-      
-      // If we found any replies, stop sending
-      if (replies && replies.length > 0) {
-        console.log(`✅ Found ${replies.length} reply(s) from lead ${email.to_email} - stopping further emails`);
+
+      // Filter out system/bounce messages from the results
+      const legitimateReplies = receivedMessages?.filter(msg => {
+        const fromLower = msg.from_email.toLowerCase();
+        return !fromLower.includes('mailer-daemon') &&
+               !fromLower.includes('postmaster') &&
+               !fromLower.includes('no-reply') &&
+               !fromLower.includes('noreply');
+      });
+
+      // If we received ANY legitimate email from this person, stop all future campaign emails
+      if (legitimateReplies && legitimateReplies.length > 0) {
+        console.log(`🛑 Found received message from ${email.to_email} at ${legitimateReplies[0].received_at} - stopping all campaign emails`);
         return true;
       }
-      
+
       return false;
-      
+
     } catch (error) {
       console.error(`❌ Error in shouldStopOnReply for email ${email.id}:`, error);
       return false; // Continue sending if there's an error
