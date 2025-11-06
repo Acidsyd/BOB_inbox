@@ -525,6 +525,97 @@ class EmailService {
   }
 
   /**
+   * Send reply email via SMTP with threading headers
+   * @param {Object} params - Reply email parameters
+   * @param {Object} params.account - Email account object
+   * @param {string} params.to - Recipient email address
+   * @param {string} params.subject - Email subject
+   * @param {string} params.html - HTML email content
+   * @param {string} params.text - Plain text email content (optional)
+   * @param {string} params.inReplyTo - Message-ID of the email being replied to
+   * @param {string} params.references - References header for threading
+   * @returns {Object} Send result with success status and metadata
+   */
+  async sendReplyViaSmtp({ account, to, subject, html, text, inReplyTo, references }) {
+    try {
+      console.log('📬 === SENDING SMTP REPLY EMAIL ===');
+      console.log('From:', account.email);
+      console.log('To:', to);
+      console.log('Subject:', subject);
+      console.log('In-Reply-To:', inReplyTo);
+
+      // Create SMTP transporter
+      const transporter = await EmailService.createTransporter(account);
+      if (!transporter) {
+        throw new Error('Failed to create SMTP transporter');
+      }
+
+      // Prepare email with RFC-compliant threading headers
+      const mailOptions = {
+        from: {
+          name: account.display_name || account.email.split('@')[0],
+          address: account.email
+        },
+        to: to,
+        subject: subject,
+        html: html,
+        text: text || html?.replace(/<[^>]*>/g, '') || '',
+        // Threading headers for proper conversation threading
+        inReplyTo: inReplyTo,
+        references: references,
+        // Standard email headers
+        headers: {
+          'X-Mailer': 'Mailsender SMTP',
+          'X-Priority': '3'
+        }
+      };
+
+      console.log('📧 SMTP reply options prepared with threading headers');
+
+      // Send email via SMTP
+      const result = await transporter.sendMail(mailOptions);
+
+      console.log('✅ SMTP reply sent successfully!');
+      console.log('Message-ID:', result.messageId);
+      console.log('Response:', result.response);
+
+      return {
+        success: true,
+        messageId: result.messageId,
+        response: result.response,
+        from: account.email,
+        to: to,
+        subject: subject,
+        timestamp: new Date().toISOString(),
+        provider: 'smtp',
+        threadingHeaders: {
+          inReplyTo: inReplyTo,
+          references: references
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ SMTP reply failed:', error.message);
+      console.error('Error details:', error);
+
+      // Parse bounce information from error
+      const bounceInfo = BounceTrackingService.parseBounceFromError(error, 'smtp');
+
+      return {
+        success: false,
+        error: error.message,
+        errorCode: error.code,
+        provider: 'smtp',
+        bounceInfo: bounceInfo,
+        from: account.email,
+        to: to,
+        subject: subject,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
    * Send test email with personalization
    */
   async sendTestEmail({
