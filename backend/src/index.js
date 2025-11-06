@@ -39,6 +39,9 @@ app.use((req, res, next) => {
 // Static uploads directory
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
+// Public routes (no authentication required)
+app.use('/api/public/leads', require('./routes/publicLeads'));
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/plans', require('./routes/plans'));
