@@ -408,6 +408,7 @@ class CronEmailProcessor {
         reply_to_same_thread,
         message_id_header,
         thread_id,
+        tracking_token,
         campaigns!inner(status)
       `)
       .lte('send_at', new Date().toISOString())
