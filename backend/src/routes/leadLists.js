@@ -951,6 +951,24 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
       return res.status(500).json({ error: 'Failed to create lead list' });
     }
 
+    // Send webhook notification for lead list creation
+    try {
+      await webhookService.sendEmailWebhook(
+        req.user.organizationId,
+        'lead_list.created',
+        {
+          lead_list_id: newList.id,
+          name: newList.name,
+          lead_count: 0,
+          created_by: req.user.userId,
+          created_at: newList.created_at
+        }
+      );
+    } catch (webhookError) {
+      console.error('⚠️ Failed to send lead_list.created webhook:', webhookError);
+      // Don't fail the request if webhook fails
+    }
+
     // Now process the CSV upload for this new list
     const results = [];
     const errors = [];
