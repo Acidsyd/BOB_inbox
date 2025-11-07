@@ -162,6 +162,7 @@ router.post('/', authenticateToken, async (req, res) => {
 
     // Send webhook notification for lead list creation
     try {
+      console.log('📤 Sending lead_list.created webhook for list:', newList.id);
       await webhookService.sendEmailWebhook(
         req.user.organizationId,
         'lead_list.created',
@@ -173,6 +174,7 @@ router.post('/', authenticateToken, async (req, res) => {
           created_at: newList.created_at
         }
       );
+      console.log('✅ lead_list.created webhook sent successfully');
     } catch (webhookError) {
       console.error('⚠️ Failed to send lead_list.created webhook:', webhookError);
       // Don't fail the request if webhook fails
@@ -953,6 +955,7 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
 
     // Send webhook notification for lead list creation
     try {
+      console.log('📤 Sending lead_list.created webhook for list:', newList.id);
       await webhookService.sendEmailWebhook(
         req.user.organizationId,
         'lead_list.created',
@@ -964,6 +967,7 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
           created_at: newList.created_at
         }
       );
+      console.log('✅ lead_list.created webhook sent successfully');
     } catch (webhookError) {
       console.error('⚠️ Failed to send lead_list.created webhook:', webhookError);
       // Don't fail the request if webhook fails

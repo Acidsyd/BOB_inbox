@@ -320,12 +320,44 @@ router.post('/test', authenticateToken, async (req, res) => {
       webhook_url: testWebhook.url,
       test_timestamp: new Date().toISOString(),
 
-      // Example label event data
+      // Example label event data (for label.assigned, label.removed)
       label_id: 'example-label-uuid-12345',
       label_name: 'Interested',
       conversation_id: 'example-conversation-uuid-67890',
       action: 'assigned', // or 'removed'
       assigned_by: 'user@example.com',
+
+      // Example lead list event data (for lead_list.created, lead_list.updated)
+      lead_list_id: 'example-list-uuid-33333',
+      name: 'Tech Industry Leads Q1 2025',
+      lead_count: 125,
+      leads_added: 25,
+      total_leads: 150,
+      duplicates: 5,
+      created_by: 'user-uuid-44444',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+
+      // Example email/follow-up event data (for email.sent, follow_up.sent)
+      email_id: 'example-email-uuid-88888',
+      to_email: 'lead@company.com',
+      from_email: 'user@example.com',
+      subject: 'Partnership Opportunity with Tech Solutions',
+      campaign_id: 'example-campaign-uuid-22222',
+      lead_id: 'example-lead-uuid-11111',
+      is_follow_up: true,
+      sequence_step: 2,
+      sent_at: new Date().toISOString(),
+      message_id: '<example-message-id@gmail.com>',
+      thread_id: 'example-thread-12345',
+
+      // Example campaign event data (for campaign.started, campaign.paused)
+      emails_scheduled: 1250,
+      first_email_at: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+      last_email_at: new Date(Date.now() + 86400000 * 7).toISOString(), // 7 days from now
+      started_at: new Date().toISOString(),
+      paused_at: new Date().toISOString(),
+      previous_status: 'active',
 
       // Example conversation data
       conversation: {
@@ -448,9 +480,13 @@ router.post('/test', authenticateToken, async (req, res) => {
 
     console.log(`🧪 Testing webhook form data at ${testWebhook.url} with enriched example data`);
 
+    // Use the first event type from the selected events, or default to label.assigned
+    const testEventType = (events && events.length > 0) ? events[0] : 'label.assigned';
+    console.log(`📋 Using event type for test: ${testEventType}`);
+
     // Send test webhook directly without creating delivery record
     const payload = {
-      event: 'label.assigned', // Use actual label event type instead of webhook.test
+      event: testEventType,
       timestamp: new Date().toISOString(),
       organization_id: organizationId,
       data: testPayload
