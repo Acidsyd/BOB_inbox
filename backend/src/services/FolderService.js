@@ -214,12 +214,12 @@ class FolderService {
         case 'inbox':
           console.log('🔍 DEBUG: ENTERED INBOX CASE');
 
-          // Inbox shows campaign conversations that have received replies (message_count > 1)
-          // Keeps them visible even after being read
+          // Inbox shows campaign conversations that have received replies (unread_count > 0)
+          // Only counts RECEIVED messages, not sent follow-ups
           query = query
             .eq('conversation_type', 'campaign')
             .neq('status', 'archived')
-            .gt('message_count', 1); // Only show campaigns with replies (>1 message)
+            .gt('unread_count', 0); // Only show campaigns with received replies
 
           console.log(`🔍 DEBUG INBOX: Querying campaign conversations with replies`);
           break;

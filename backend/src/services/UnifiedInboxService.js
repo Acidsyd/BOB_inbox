@@ -1176,9 +1176,15 @@ class UnifiedInboxService {
       'mailer-daemon',
       'mail delivery subsystem',
       'postmaster',
+      'postmaster@',
+      'bounce@',
+      'bounces@',
+      'notifications@',
       'no-reply@google.com',
       'noreply-',
-      'mail-noreply@'
+      'mail-noreply@',
+      'mailer@',
+      'daemon@'
     ];
     
     const lowerFrom = from_email.toLowerCase();
@@ -1195,7 +1201,17 @@ class UnifiedInboxService {
       'delivery failure',
       'failure notice',
       'message could not be delivered',
-      'undeliverable:'
+      'undeliverable:',
+      'undeliverable',
+      'address not found',
+      'recipient rejected',
+      'mailbox unavailable',
+      'message not delivered',
+      'permanent error',
+      'delivery incomplete',
+      'user unknown',
+      'invalid recipient',
+      'does not exist'
     ];
     
     const lowerSubject = subject.toLowerCase();
