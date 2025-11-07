@@ -307,21 +307,27 @@ export default function CSVUploader() {
 
       const results = response.data
       console.log('📋 Processing results:', results)
-      
+
+      // Validate response data
+      if (!results || !results.listId) {
+        console.error('❌ Invalid response structure:', results)
+        throw new Error('Invalid response from server: missing listId')
+      }
+
       // Transform backend response to match frontend interface
       const transformedResults: CSVUploadResults = {
         leadList: {
           id: results.listId,
           name: listName,
           description: '',
-          totalLeads: results.inserted,
+          totalLeads: results.inserted || 0,
           createdAt: new Date().toISOString()
         },
         importResults: {
-          totalProcessed: results.inserted + results.duplicates + results.errors,
-          imported: results.inserted,
-          duplicates: results.duplicates,
-          errors: results.errors
+          totalProcessed: (results.inserted || 0) + (results.duplicates || 0) + ((results.failed || 0) + (results.errors?.length || 0)),
+          imported: results.inserted || 0,
+          duplicates: results.duplicates || 0,
+          errors: results.failed || results.errors?.length || 0
         }
       }
       
