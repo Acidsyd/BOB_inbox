@@ -310,7 +310,7 @@ router.post('/test', authenticateToken, async (req, res) => {
       name: 'Test Webhook',
       url: url.trim(),
       secret: secret?.trim() || null,
-      events: events || ['webhook.test'],
+      events: events || ['label.assigned'], // Default to a valid event
       is_active: true
     };
 
@@ -550,25 +550,51 @@ router.post('/:id/test', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Webhook not found' });
     }
 
-    // Create test payload
+    // Use the first event from the webhook's configured events
+    const testEventType = (webhook.events && webhook.events.length > 0) ? webhook.events[0] : 'label.assigned';
+    console.log(`📋 Using event type for test: ${testEventType}`);
+
+    // Create test payload with comprehensive example data (same as /test endpoint)
     const testPayload = {
-      event: 'webhook.test',
+      event: testEventType,
       timestamp: new Date().toISOString(),
       organization_id: organizationId,
       data: {
         message: 'This is a test webhook delivery',
         webhook_id: webhook.id,
-        webhook_name: webhook.name
+        webhook_name: webhook.name,
+        test_timestamp: new Date().toISOString(),
+
+        // Include example data for all event types (same as POST /test)
+        label_id: 'example-label-uuid-12345',
+        label_name: 'Interested',
+        conversation_id: 'example-conversation-uuid-67890',
+        action: 'assigned',
+        assigned_by: 'user@example.com',
+
+        lead_list_id: 'example-list-uuid-33333',
+        name: 'Tech Industry Leads Q1 2025',
+        lead_count: 125,
+        created_by: 'user-uuid-44444',
+
+        email_id: 'example-email-uuid-88888',
+        to_email: 'lead@company.com',
+        from_email: 'user@example.com',
+        subject: 'Partnership Opportunity',
+        campaign_id: 'example-campaign-uuid-22222',
+        is_follow_up: true,
+        sequence_step: 2,
+        sent_at: new Date().toISOString()
       }
     };
 
-    console.log(`🧪 Testing webhook ${id} at ${webhook.url}`);
+    console.log(`🧪 Testing webhook ${id} at ${webhook.url} with event: ${testEventType}`);
 
     // Send test webhook
     const WebhookService = require('../services/WebhookService');
     const webhookService = new WebhookService();
 
-    await webhookService.deliverWebhook(webhook, 'webhook.test', testPayload.data);
+    await webhookService.deliverWebhook(webhook, testEventType, testPayload.data);
 
     res.json({
       message: 'Test webhook sent successfully',
