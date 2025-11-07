@@ -662,14 +662,17 @@ class CronEmailProcessor {
     // Get campaign configuration for proper interval handling
     const campaignConfig = await this.getCampaignConfig(campaignId);
     const sendingIntervalMinutes = campaignConfig?.sendingInterval || 15;
-    const emailsPerHour = campaignConfig?.emailsPerHour || 10; // Default 10 emails/hour
-    
-    // Calculate minimum interval based on emailsPerHour limit
-    const minIntervalMinutes = Math.ceil(60 / emailsPerHour); // 60 minutes / emails per hour
-    const actualIntervalMinutes = Math.max(sendingIntervalMinutes, minIntervalMinutes);
-    
-    console.log(`⏱️ Campaign ${campaignId} SIMPLE ROTATION: Base interval ${sendingIntervalMinutes}min, ${emailsPerHour} emails/hour limit`);
-    console.log(`⏱️ Using actual interval: ${actualIntervalMinutes} minutes (min: ${minIntervalMinutes}min for hourly limit)`);
+
+    // 🔥 DEPRECATED: emailsPerHour is no longer used - sendingInterval controls pacing
+    // emailsPerHour was causing override issues where high values forced shorter intervals
+    // Example: emailsPerHour=60 forced 1-min intervals even with sendingInterval=15
+    if (campaignConfig?.emailsPerHour) {
+      console.log(`⚠️ DEPRECATED: emailsPerHour (${campaignConfig.emailsPerHour}) is set but ignored - using sendingInterval (${sendingIntervalMinutes}min) only`);
+    }
+
+    const actualIntervalMinutes = sendingIntervalMinutes; // Use sendingInterval directly, no override
+
+    console.log(`⏱️ Campaign ${campaignId} SIMPLE ROTATION: Using sendingInterval ${actualIntervalMinutes} minutes (emailsPerHour deprecated)`);
 
     const accountEntries = Object.entries(emailsByAccount);
 
@@ -774,14 +777,15 @@ class CronEmailProcessor {
     // Get campaign configuration to respect sending intervals
     const campaignConfig = await this.getCampaignConfig(campaignId);
     const sendingIntervalMinutes = campaignConfig?.sendingInterval || 15; // Default 15 minutes
-    const emailsPerHour = campaignConfig?.emailsPerHour || 10; // Default 10 emails/hour (FIXED: was inconsistent with line 664)
 
-    // Calculate minimum interval based on emailsPerHour limit
-    const minIntervalMinutes = Math.ceil(60 / emailsPerHour); // 60 minutes / emails per hour
-    const actualIntervalMinutes = Math.max(sendingIntervalMinutes, minIntervalMinutes);
+    // 🔥 DEPRECATED: emailsPerHour no longer used (removed override logic)
+    if (campaignConfig?.emailsPerHour) {
+      console.log(`⚠️ DEPRECATED: emailsPerHour (${campaignConfig.emailsPerHour}) is ignored - using sendingInterval (${sendingIntervalMinutes}min) only`);
+    }
 
-    console.log(`⏱️ Campaign ${campaignId} config: ${sendingIntervalMinutes} min interval, ${emailsPerHour} emails/hour limit`);
-    console.log(`⏱️ Using actual interval: ${actualIntervalMinutes} minutes (min: ${minIntervalMinutes}min for hourly limit)`);
+    const actualIntervalMinutes = sendingIntervalMinutes; // Use sendingInterval directly
+
+    console.log(`⏱️ Campaign ${campaignId} config: ${sendingIntervalMinutes} min interval (emailsPerHour deprecated)`);
 
     // 🚨 CRITICAL FIX: Check when the last email was sent for this campaign
     const lastEmailSentTime = await this.getLastEmailSentTime(campaignId, organizationId);

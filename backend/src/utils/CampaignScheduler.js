@@ -23,7 +23,8 @@ class CampaignScheduler {
     }
 
     this.emailsPerDay = config.emailsPerDay || 100;
-    this.emailsPerHour = config.emailsPerHour || 10;
+    // 🔥 DEPRECATED: emailsPerHour is no longer used (kept for backwards compatibility)
+    this.emailsPerHour = config.emailsPerHour || 10; // Deprecated - not used in calculations
     this.sendingInterval = Math.max(5, config.sendingInterval || 15); // Enforce minimum 5 minutes
     
     // Validate and fix sending hours to prevent 00:00-00:00 bug
@@ -119,15 +120,14 @@ class CampaignScheduler {
     let currentDay = this.getDateInTimezone(currentTime);
     let currentHour = this.getHourInTimezone(currentTime);
 
-    // Calculate minimum interval based on emailsPerHour constraint
-    const minIntervalMinutes = Math.ceil(60 / this.emailsPerHour); // 60 minutes / emails per hour
-    const actualIntervalMinutes = Math.max(this.sendingInterval, minIntervalMinutes);
+    // 🔥 DEPRECATED: emailsPerHour no longer used in calculations
+    // Using sendingInterval directly to avoid override issues
+    const actualIntervalMinutes = this.sendingInterval;
 
     console.log(`📅 Starting scheduling from: ${currentTime.toISOString()}`);
     console.log(`   Timezone: ${this.timezone}`);
-    console.log(`   Limits: ${this.emailsPerHour}/hour, ${this.emailsPerDay}/day`);
-    console.log(`   User interval: ${this.sendingInterval} minutes`);
-    console.log(`   Minimum required interval: ${minIntervalMinutes} minutes (based on ${this.emailsPerHour} emails/hour)`);
+    console.log(`   Daily limit: ${this.emailsPerDay}/day`);
+    console.log(`   Sending interval: ${this.sendingInterval} minutes (emailsPerHour deprecated)`);
     console.log(`   Actual interval used: ${actualIntervalMinutes} minutes`);
     console.log(`   Jitter: ${this.enableJitter ? `±${this.jitterMinutes} minutes` : 'disabled'}`);
 
@@ -238,14 +238,13 @@ class CampaignScheduler {
 
     currentTime = this.moveToNextValidSendingWindow(currentTime);
 
-    // Calculate interval
-    const minIntervalMinutes = Math.ceil(60 / this.emailsPerHour);
-    const actualIntervalMinutes = Math.max(this.sendingInterval, minIntervalMinutes);
+    // 🔥 DEPRECATED: emailsPerHour no longer used - use sendingInterval directly
+    const actualIntervalMinutes = this.sendingInterval;
 
     console.log(`\n⏰ Scheduling parameters:`);
     console.log(`   Start time: ${currentTime.toISOString()}`);
     console.log(`   Timezone: ${this.timezone}`);
-    console.log(`   Interval: ${actualIntervalMinutes} minutes`);
+    console.log(`   Interval: ${actualIntervalMinutes} minutes (emailsPerHour deprecated)`);
     console.log(`   Jitter: ${this.enableJitter ? `±${this.jitterMinutes} min` : 'disabled'}\n`);
 
     // Step 3: Schedule in perfect rounds
