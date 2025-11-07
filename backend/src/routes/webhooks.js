@@ -72,7 +72,20 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     // Validate events array
-    const validEvents = ['label.assigned', 'label.removed', 'label.created'];
+    const validEvents = [
+      'label.assigned',
+      'label.removed',
+      'label.created',
+      'email.sent',
+      'email.delivered',
+      'email.bounced',
+      'reply.received',
+      'lead_list.created',
+      'lead_list.updated',
+      'follow_up.sent',
+      'campaign.started',
+      'campaign.paused'
+    ];
     const webhookEvents = events || validEvents;
 
     const invalidEvents = webhookEvents.filter(event => !validEvents.includes(event));
@@ -154,7 +167,20 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (is_active !== undefined) updateData.is_active = is_active;
 
     if (events !== undefined) {
-      const validEvents = ['label.assigned', 'label.removed', 'label.created'];
+      const validEvents = [
+        'label.assigned',
+        'label.removed',
+        'label.created',
+        'email.sent',
+        'email.delivered',
+        'email.bounced',
+        'reply.received',
+        'lead_list.created',
+        'lead_list.updated',
+        'follow_up.sent',
+        'campaign.started',
+        'campaign.paused'
+      ];
       const invalidEvents = events.filter(event => !validEvents.includes(event));
       if (invalidEvents.length > 0) {
         return res.status(400).json({
