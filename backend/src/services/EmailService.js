@@ -73,14 +73,31 @@ class EmailService {
       // Try oauth2_tokens table if not found in email_accounts
       const { data: oauthAccount, error: oauthError } = await supabase
         .from('oauth2_tokens')
-        .select('id, email, provider, created_at, updated_at, status')
+        .select('id, email, provider, encrypted_tokens, created_at, updated_at, status')
         .eq('id', accountId)
         .eq('organization_id', organizationId)
         .eq('status', 'linked_to_account')
         .single();
 
       if (oauthAccount) {
-        console.log('✅ Found OAuth2 account:', oauthAccount.email, '- Provider:', oauthAccount.provider);
+        console.log('✅ Found account in oauth2_tokens:', oauthAccount.email, '- Provider:', oauthAccount.provider);
+
+        // Check if this is an SMTP account (stored in oauth2_tokens with provider='smtp')
+        if (oauthAccount.provider === 'smtp') {
+          console.log('🔐 Decrypting SMTP credentials from oauth2_tokens');
+
+          // Decrypt SMTP credentials
+          const tokensData = JSON.parse(oauthAccount.encrypted_tokens);
+          const decrypted = this.decryptCredentials(tokensData.encrypted, tokensData.iv);
+
+          return {
+            ...oauthAccount,
+            type: 'smtp',
+            credentials: decrypted
+          };
+        }
+
+        // Otherwise it's an OAuth2 account (Gmail/Microsoft)
         return { ...oauthAccount, type: 'oauth2' };
       }
 
@@ -89,6 +106,26 @@ class EmailService {
     } catch (error) {
       console.error('❌ Database error getting email account:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Decrypt SMTP credentials from oauth2_tokens table
+   */
+  static decryptCredentials(encryptedData, iv) {
+    try {
+      const algorithm = 'aes-256-cbc';
+      const key = Buffer.from(process.env.EMAIL_ENCRYPTION_KEY, 'hex');
+      const ivBuffer = Buffer.from(iv, 'hex');
+
+      const decipher = crypto.createDecipheriv(algorithm, key, ivBuffer);
+      let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+
+      return JSON.parse(decrypted);
+    } catch (error) {
+      console.error('🔐 Decryption error:', error.message);
+      throw new Error('Failed to decrypt SMTP credentials');
     }
   }
 
@@ -145,7 +182,7 @@ class EmailService {
         auth: { ...transportConfig.auth, pass: '***', clientSecret: '***', refreshToken: '***' }
       });
 
-      const transporter = nodemailer.createTransporter(transportConfig);
+      const transporter = nodemailer.createTransport(transportConfig);
 
       // Verify transporter
       console.log('🔍 Verifying transporter...');
@@ -164,7 +201,13 @@ class EmailService {
    */
   static async shouldUseOAuth2(account, organizationId) {
     try {
-      // If account was found in oauth2_tokens table, use OAuth2
+      // If account provider is 'smtp', always use SMTP
+      if (account.provider === 'smtp') {
+        console.log('📨 Account provider is SMTP, using SMTP transport');
+        return false;
+      }
+
+      // If account was found in oauth2_tokens table with OAuth2 provider, use OAuth2
       if (account.type === 'oauth2') {
         console.log('🔐 Account is OAuth2 type, using OAuth2');
         return true;
@@ -173,7 +216,7 @@ class EmailService {
       // Check if OAuth2 tokens exist for this account email
       const { data: tokenData, error } = await supabase
         .from('oauth2_tokens')
-        .select('id, status')
+        .select('id, status, provider')
         .eq('email', account.email)
         .eq('organization_id', organizationId)
         .eq('provider', 'gmail')

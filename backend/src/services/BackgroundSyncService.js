@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const EmailSyncService = require('./EmailSyncService');
+const ImapService = require('./ImapService');
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -10,7 +11,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
  * Simple Background Sync Service
  *
  * Features:
- * - Syncs all OAuth accounts every 15 minutes
+ * - Syncs all OAuth2 and SMTP/IMAP accounts every 15 minutes
  * - Single background process for all organizations
  * - Simple error handling and logging
  * - No complex activity-based intervals
@@ -19,6 +20,7 @@ class BackgroundSyncService {
   constructor() {
     this.syncInterval = null;
     this.emailSyncService = new EmailSyncService();
+    this.imapService = new ImapService();
     this.isShuttingDown = false;
     this.isSyncing = false;
 
@@ -70,7 +72,7 @@ class BackgroundSyncService {
   }
 
   /**
-   * Sync all OAuth accounts across all organizations
+   * Sync all email accounts (OAuth2 + SMTP/IMAP) across all organizations
    */
   async syncAllAccounts() {
     if (this.isSyncing) {
@@ -84,63 +86,108 @@ class BackgroundSyncService {
     try {
       console.log('🔄 === BACKGROUND SYNC STARTED ===');
 
-      // Get all active OAuth accounts
-      const { data: accounts, error } = await supabase
+      // Get all active OAuth2 accounts
+      const { data: oauth2Accounts, error: oauth2Error } = await supabase
         .from('oauth2_tokens')
         .select('id, email, organization_id')
         .eq('status', 'linked_to_account');
 
-      if (error) {
-        throw new Error(`Failed to fetch accounts: ${error.message}`);
+      if (oauth2Error) {
+        console.error('❌ Failed to fetch OAuth2 accounts:', oauth2Error.message);
       }
 
-      if (!accounts || accounts.length === 0) {
-        console.log('📭 No OAuth accounts found to sync');
+      // Get all active SMTP/IMAP accounts (stored in oauth2_tokens with provider='smtp')
+      const { data: smtpAccounts, error: smtpError } = await supabase
+        .from('oauth2_tokens')
+        .select('id, email, organization_id')
+        .eq('provider', 'smtp')
+        .eq('status', 'linked_to_account');
+
+      if (smtpError) {
+        console.error('❌ Failed to fetch SMTP/IMAP accounts:', smtpError.message);
+      }
+
+      const totalOAuth2 = oauth2Accounts?.length || 0;
+      const totalSmtp = smtpAccounts?.length || 0;
+
+      if (totalOAuth2 === 0 && totalSmtp === 0) {
+        console.log('📭 No email accounts found to sync');
         return;
       }
 
-      console.log(`📧 Found ${accounts.length} accounts to sync`);
+      console.log(`📧 Found ${totalOAuth2} OAuth2 account(s) and ${totalSmtp} SMTP/IMAP account(s) to sync`);
 
       let successCount = 0;
       let errorCount = 0;
       const errors = [];
 
-      // Sync each account
-      for (const account of accounts) {
-        try {
-          console.log(`🔄 Syncing account: ${account.email}`);
+      // Sync OAuth2 accounts
+      if (oauth2Accounts && oauth2Accounts.length > 0) {
+        for (const account of oauth2Accounts) {
+          try {
+            console.log(`🔄 Syncing OAuth2 account: ${account.email}`);
 
-          const result = await this.emailSyncService.syncAccount(
-            account.id,
-            account.organization_id
-          );
+            const result = await this.emailSyncService.syncAccount(
+              account.id,
+              account.organization_id
+            );
 
-          if (result.success) {
-            successCount++;
-            console.log(`✅ ${account.email} - ${result.newMessages || 0} new, ${result.updatedMessages || 0} updated`);
-          } else {
+            if (result.success) {
+              successCount++;
+              console.log(`✅ ${account.email} (OAuth2) - ${result.newMessages || 0} new, ${result.updatedMessages || 0} updated`);
+            } else {
+              errorCount++;
+              errors.push(`${account.email} (OAuth2): ${result.error || 'Unknown error'}`);
+              console.error(`❌ ${account.email} (OAuth2) - Sync failed`);
+            }
+
+          } catch (accountError) {
             errorCount++;
-            errors.push(`${account.email}: ${result.error || 'Unknown error'}`);
-            console.error(`❌ ${account.email} - Sync failed`);
+            errors.push(`${account.email} (OAuth2): ${accountError.message}`);
+            console.error(`❌ ${account.email} (OAuth2) - Sync error:`, accountError.message);
           }
+        }
+      }
 
-        } catch (accountError) {
-          errorCount++;
-          errors.push(`${account.email}: ${accountError.message}`);
-          console.error(`❌ ${account.email} - Sync error:`, accountError.message);
+      // Sync SMTP/IMAP accounts
+      if (smtpAccounts && smtpAccounts.length > 0) {
+        for (const account of smtpAccounts) {
+          try {
+            console.log(`🔄 Syncing SMTP/IMAP account: ${account.email}`);
+
+            const result = await this.imapService.syncEmailsForAccount(
+              account.id,
+              account.organization_id
+            );
+
+            if (result.success) {
+              successCount++;
+              console.log(`✅ ${account.email} (IMAP) - ${result.emailsProcessed || 0} emails synced`);
+            } else {
+              errorCount++;
+              errors.push(`${account.email} (IMAP): ${result.error || 'Unknown error'}`);
+              console.error(`❌ ${account.email} (IMAP) - Sync failed`);
+            }
+
+          } catch (accountError) {
+            errorCount++;
+            errors.push(`${account.email} (IMAP): ${accountError.message}`);
+            console.error(`❌ ${account.email} (IMAP) - Sync error:`, accountError.message);
+          }
         }
       }
 
       const duration = Date.now() - syncStart;
+      const totalAccounts = totalOAuth2 + totalSmtp;
       console.log(`✅ Background sync completed in ${duration}ms`);
-      console.log(`📊 Results: ${successCount} success, ${errorCount} errors`);
+      console.log(`📊 Results: ${successCount}/${totalAccounts} success, ${errorCount} errors`);
 
       if (errors.length > 0) {
         console.log('⚠️ Sync errors:', errors);
       }
 
       // Store sync result for monitoring
-      await this.recordSyncResult(accounts.length, successCount, errorCount, duration);
+      await this.recordSyncResult(totalAccounts, successCount, errorCount, duration);
 
     } catch (error) {
       console.error('❌ Background sync failed:', error);

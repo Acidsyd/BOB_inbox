@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
 const nodemailer = require('nodemailer');
+const Imap = require('imap');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 
@@ -96,6 +97,49 @@ async function testSmtpConnection(smtpConfig) {
   });
 }
 
+/**
+ * Test IMAP connection
+ */
+async function testImapConnection(imapConfig) {
+  return new Promise((resolve, reject) => {
+    const imap = new Imap({
+      user: imapConfig.user,
+      password: imapConfig.pass,
+      host: imapConfig.host,
+      port: imapConfig.port,
+      tls: imapConfig.secure !== false,
+      tlsOptions: { rejectUnauthorized: false },
+      connTimeout: 10000,
+      authTimeout: 5000
+    });
+
+    let connectionSuccessful = false;
+
+    imap.once('ready', () => {
+      connectionSuccessful = true;
+      imap.end();
+      resolve(true);
+    });
+
+    imap.once('error', (err) => {
+      imap.end();
+      reject(err);
+    });
+
+    imap.once('end', () => {
+      if (!connectionSuccessful) {
+        reject(new Error('IMAP connection ended before ready'));
+      }
+    });
+
+    try {
+      imap.connect();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
 // Rate limiting for test-connection endpoint
 const testConnectionLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
@@ -169,24 +213,40 @@ router.get('/providers', authenticateToken, (req, res) => {
 
 /**
  * POST /api/smtp/test-connection
- * Test SMTP connection without saving credentials
+ * Test both SMTP and IMAP connections without saving credentials
  */
 router.post('/test-connection', authenticateToken, testConnectionLimiter, async (req, res) => {
   try {
-    const { host, port, secure, user, pass } = req.body;
+    const { host, port, secure, user, pass, imapHost, imapPort, imapSecure } = req.body;
 
-    // Validate required fields
+    // Validate required SMTP fields
     if (!host || !port || !user || !pass) {
       return res.status(400).json({
-        error: 'Missing required fields',
+        error: 'Missing required SMTP fields',
         required: ['host', 'port', 'user', 'pass']
       });
     }
 
-    // Validate port number
+    // Validate required IMAP fields
+    if (!imapHost || !imapPort) {
+      return res.status(400).json({
+        error: 'Missing required IMAP fields',
+        required: ['imapHost', 'imapPort'],
+        message: 'IMAP settings are required for inbox sync and reply detection'
+      });
+    }
+
+    // Validate port numbers
     if (isNaN(port) || port < 1 || port > 65535) {
       return res.status(400).json({
-        error: 'Invalid port number',
+        error: 'Invalid SMTP port number',
+        message: 'Port must be between 1 and 65535'
+      });
+    }
+
+    if (isNaN(imapPort) || imapPort < 1 || imapPort > 65535) {
+      return res.status(400).json({
+        error: 'Invalid IMAP port number',
         message: 'Port must be between 1 and 65535'
       });
     }
@@ -202,7 +262,7 @@ router.post('/test-connection', authenticateToken, testConnectionLimiter, async 
 
     console.log('🧪 Testing SMTP connection:', { host, port, user });
 
-    // Test connection
+    // Test SMTP connection
     await testSmtpConnection({
       host,
       port: parseInt(port),
@@ -213,38 +273,51 @@ router.post('/test-connection', authenticateToken, testConnectionLimiter, async 
 
     console.log('✅ SMTP connection successful');
 
+    console.log('🧪 Testing IMAP connection:', { host: imapHost, port: imapPort, user });
+
+    // Test IMAP connection
+    await testImapConnection({
+      host: imapHost,
+      port: parseInt(imapPort),
+      secure: imapSecure === true || imapSecure === 'true',
+      user,
+      pass
+    });
+
+    console.log('✅ IMAP connection successful');
+
     res.json({
       success: true,
-      message: 'SMTP connection successful',
+      message: 'Both SMTP and IMAP connections successful',
       config: {
-        host,
-        port: parseInt(port),
-        user
+        smtp: { host, port: parseInt(port), user },
+        imap: { host: imapHost, port: parseInt(imapPort), user }
       }
     });
 
   } catch (error) {
-    console.error('❌ SMTP connection test failed:', error.message);
+    console.error('❌ Connection test failed:', error.message);
 
     // Provide user-friendly error messages
     let errorMessage = error.message;
     let errorCode = error.code;
     let suggestions = [];
 
-    if (error.code === 'EAUTH') {
+    if (error.code === 'EAUTH' || error.code === 'AUTHENTICATIONFAILED') {
       errorMessage = 'Authentication failed';
       suggestions.push('Verify your email and password are correct');
       suggestions.push('Check if you need an App Password instead of regular password');
-      suggestions.push('Ensure SMTP access is enabled in your email account settings');
-    } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
-      errorMessage = 'Connection timeout';
-      suggestions.push('Verify the SMTP host and port are correct');
+      suggestions.push('Ensure SMTP/IMAP access is enabled in your email account settings');
+    } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+      errorMessage = 'Connection timeout or refused';
+      suggestions.push('Verify the server host and port are correct');
       suggestions.push('Check your firewall or network settings');
-      suggestions.push('Try port 465 (SSL) or 587 (TLS) if current port fails');
+      suggestions.push('For SMTP, try port 465 (SSL) or 587 (TLS)');
+      suggestions.push('For IMAP, try port 993 (SSL) or 143 (TLS)');
     } else if (error.code === 'ESOCKET') {
       errorMessage = 'Socket error';
-      suggestions.push('Check if the SMTP server is reachable');
-      suggestions.push('Verify SSL/TLS settings (try toggling "secure" option)');
+      suggestions.push('Check if the mail server is reachable');
+      suggestions.push('Verify SSL/TLS settings');
     }
 
     res.status(400).json({
@@ -259,17 +332,26 @@ router.post('/test-connection', authenticateToken, testConnectionLimiter, async 
 
 /**
  * POST /api/smtp/credentials
- * Save SMTP credentials for an email account
+ * Save SMTP and IMAP credentials for an email account
  */
 router.post('/credentials', authenticateToken, async (req, res) => {
   try {
-    const { email, displayName, host, port, secure, user, pass, providerId } = req.body;
+    const { email, displayName, host, port, secure, user, pass, providerId, imapHost, imapPort, imapSecure } = req.body;
 
-    // Validate required fields
+    // Validate required SMTP fields
     if (!email || !host || !port || !user || !pass) {
       return res.status(400).json({
-        error: 'Missing required fields',
+        error: 'Missing required SMTP fields',
         required: ['email', 'host', 'port', 'user', 'pass']
+      });
+    }
+
+    // Validate required IMAP fields
+    if (!imapHost || !imapPort) {
+      return res.status(400).json({
+        error: 'Missing required IMAP fields',
+        required: ['imapHost', 'imapPort'],
+        message: 'IMAP settings are required for inbox sync and reply detection'
       });
     }
 
@@ -282,7 +364,7 @@ router.post('/credentials', authenticateToken, async (req, res) => {
       });
     }
 
-    // Test connection first
+    // Test SMTP connection first
     console.log('🧪 Testing SMTP connection before saving...');
     await testSmtpConnection({
       host,
@@ -292,46 +374,65 @@ router.post('/credentials', authenticateToken, async (req, res) => {
       pass
     });
 
-    console.log('✅ SMTP connection test passed, saving credentials...');
+    console.log('✅ SMTP connection test passed');
 
-    // Prepare SMTP credentials for encryption
-    const smtpCredentials = {
+    // Test IMAP connection
+    console.log('🧪 Testing IMAP connection before saving...');
+    await testImapConnection({
+      host: imapHost,
+      port: parseInt(imapPort),
+      secure: imapSecure === true || imapSecure === 'true',
+      user,
+      pass
+    });
+
+    console.log('✅ IMAP connection test passed, saving credentials...');
+
+    // Prepare credentials for encryption (both SMTP and IMAP)
+    const emailCredentials = {
       smtp: {
         host,
         port: parseInt(port),
         secure: secure === true || secure === 'true',
         user,
         pass
+      },
+      imap: {
+        host: imapHost,
+        port: parseInt(imapPort),
+        secure: imapSecure === true || imapSecure === 'true',
+        user,
+        pass
       }
     };
 
     // Encrypt credentials
-    const { encryptedData, iv } = encryptCredentials(smtpCredentials);
+    const { encryptedData, iv } = encryptCredentials(emailCredentials);
 
-    // Save to database
+    // Create encrypted tokens structure (similar to OAuth2 format)
+    const encryptedTokens = JSON.stringify({
+      encrypted: encryptedData,
+      iv: iv,
+      smtp: emailCredentials.smtp,
+      imap: emailCredentials.imap
+    });
+
+    // Save to oauth2_tokens table (SMTP accounts use this table for credential storage)
     const { data: newAccount, error: insertError } = await supabase
-      .from('email_accounts')
+      .from('oauth2_tokens')
       .insert({
         organization_id: req.user.organizationId,
         email: email.toLowerCase().trim(),
-        display_name: displayName || email.split('@')[0],
         provider: 'smtp',
-        provider_id: providerId || 'custom',
-        status: 'active',
-        credentials: {
-          encrypted: encryptedData,
-          iv: iv
-        },
-        daily_limit: 500,
-        hourly_limit: 50,
-        emails_sent_today: 0,
-        created_by: req.user.userId
+        encrypted_tokens: encryptedTokens,
+        status: 'linked_to_account',
+        scopes: ['smtp', 'imap']
       })
       .select()
       .single();
 
     if (insertError) {
-      console.error('Error saving SMTP account:', insertError);
+      console.error('Error saving SMTP/IMAP account:', insertError);
 
       if (insertError.code === '23505') {
         return res.status(409).json({
@@ -343,30 +444,31 @@ router.post('/credentials', authenticateToken, async (req, res) => {
       throw insertError;
     }
 
-    console.log('✅ SMTP account saved successfully:', newAccount.id);
+    console.log('✅ SMTP/IMAP account saved successfully:', newAccount.id);
 
-    // Return account without credentials
-    const { credentials, ...accountWithoutCredentials } = newAccount;
+    // Return account without encrypted tokens
+    const { encrypted_tokens, ...accountWithoutCredentials } = newAccount;
 
     res.status(201).json({
-      message: 'SMTP account added successfully',
+      success: true,
+      message: 'SMTP/IMAP account added successfully with full inbox support',
       account: accountWithoutCredentials
     });
 
   } catch (error) {
-    console.error('Error saving SMTP credentials:', error);
+    console.error('Error saving SMTP/IMAP credentials:', error);
 
     // If it's a connection error, return 400
-    if (error.code === 'EAUTH' || error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
+    if (error.code === 'EAUTH' || error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT' || error.code === 'AUTHENTICATIONFAILED') {
       return res.status(400).json({
-        error: 'SMTP connection failed',
-        message: 'Could not connect to SMTP server. Please verify your credentials and settings.',
+        error: 'Connection test failed',
+        message: 'Could not connect to SMTP or IMAP server. Please verify your credentials and settings.',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
 
     res.status(500).json({
-      error: 'Failed to save SMTP credentials',
+      error: 'Failed to save credentials',
       message: 'An internal error occurred. Please try again later.'
     });
   }

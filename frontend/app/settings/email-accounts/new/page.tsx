@@ -30,7 +30,6 @@ import { useWorkflowNavigation } from '../../../../lib/navigation/context'
 
 type SetupStep = 'provider-selection' | 'gmail-oauth2-setup' | 'microsoft-oauth2-setup' | 'smtp-setup'
 type Provider = 'gmail-oauth2' | 'microsoft-oauth2' | 'smtp'
-type SMTPProvider = 'gmail' | 'outlook' | 'yahoo' | 'protonmail' | 'custom'
 
 interface SMTPConfig {
   email: string
@@ -38,41 +37,56 @@ interface SMTPConfig {
   host: string
   port: string
   secure: boolean
-  provider: SMTPProvider
   displayName: string
+  // IMAP Configuration (for receiving emails)
+  imapHost: string
+  imapPort: string
+  imapSecure: boolean
 }
 
-// Provider configurations for SMTP
+// Provider configurations for SMTP + IMAP
 const smtpProviders = {
   gmail: {
     name: 'Gmail SMTP',
     host: 'smtp.gmail.com',
     port: '587',
     secure: false,
+    imapHost: 'imap.gmail.com',
+    imapPort: '993',
+    imapSecure: true,
     instructions: 'Use Gmail App Password instead of your regular password. Enable 2FA first.',
     icon: '🔗'
   },
   outlook: {
-    name: 'Outlook SMTP', 
+    name: 'Outlook SMTP',
     host: 'smtp-mail.outlook.com',
     port: '587',
     secure: false,
+    imapHost: 'outlook.office365.com',
+    imapPort: '993',
+    imapSecure: true,
     instructions: 'Use Outlook App Password. Enable 2FA and generate app-specific password.',
     icon: '📧'
   },
   yahoo: {
     name: 'Yahoo Mail SMTP',
-    host: 'smtp.mail.yahoo.com', 
+    host: 'smtp.mail.yahoo.com',
     port: '587',
     secure: false,
+    imapHost: 'imap.mail.yahoo.com',
+    imapPort: '993',
+    imapSecure: true,
     instructions: 'Generate Yahoo App Password from Account Security settings.',
     icon: '💜'
   },
   protonmail: {
     name: 'ProtonMail SMTP',
     host: 'mail.protonmail.ch',
-    port: '587', 
+    port: '587',
     secure: false,
+    imapHost: '127.0.0.1',
+    imapPort: '1143',
+    imapSecure: false,
     instructions: 'Requires ProtonMail Bridge. Download and configure Bridge first.',
     icon: '🛡️'
   },
@@ -81,6 +95,9 @@ const smtpProviders = {
     host: '',
     port: '587',
     secure: false,
+    imapHost: '',
+    imapPort: '993',
+    imapSecure: true,
     instructions: 'Configure your custom SMTP server settings.',
     icon: '⚙️'
   }
@@ -108,8 +125,10 @@ function AddEmailAccountContent() {
     host: '',
     port: '587',
     secure: false,
-    provider: 'gmail',
-    displayName: ''
+    displayName: '',
+    imapHost: '',
+    imapPort: '993',
+    imapSecure: true
   })
 
   // Check for OAuth2 callback results
@@ -289,12 +308,15 @@ function AddEmailAccountContent() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          email: smtpConfig.email,
-          password: smtpConfig.password,
+          user: smtpConfig.email,
+          pass: smtpConfig.password,
           host: smtpConfig.host,
           port: smtpConfig.port,
           secure: smtpConfig.secure,
-          provider: smtpConfig.provider
+          // IMAP configuration for receiving emails
+          imapHost: smtpConfig.imapHost,
+          imapPort: smtpConfig.imapPort,
+          imapSecure: smtpConfig.imapSecure
         })
       })
 
@@ -304,21 +326,28 @@ function AddEmailAccountContent() {
         setConnectionTestPassed(true)
         addToast({
           title: 'Connection Test Passed!',
-          description: result.testEmailSent ? 
-            'SMTP connection successful and test email sent.' : 
+          description: result.testEmailSent ?
+            'SMTP connection successful and test email sent.' :
             'SMTP connection successful.',
           type: 'success'
         })
       } else {
-        throw new Error(result.details || 'SMTP connection test failed')
+        // Show detailed error with suggestions if available
+        const errorDetails = result.suggestions && result.suggestions.length > 0
+          ? `${result.error || 'Connection failed'}\n\nSuggestions:\n${result.suggestions.map((s: string) => `• ${s}`).join('\n')}`
+          : result.details || result.error || 'SMTP connection test failed';
+
+        throw new Error(errorDetails)
       }
 
     } catch (error: any) {
       console.error('SMTP test error:', error)
+      console.error('Full error details:', error.message)
       addToast({
         title: 'Connection Test Failed',
         description: error.message || 'Failed to test SMTP connection',
-        type: 'error'
+        type: 'error',
+        duration: 10000 // Show longer for detailed errors
       })
     } finally {
       setIsTestingConnection(false)
@@ -347,12 +376,17 @@ function AddEmailAccountContent() {
         },
         body: JSON.stringify({
           email: smtpConfig.email,
-          password: smtpConfig.password,
+          user: smtpConfig.email, // SMTP username (usually same as email)
+          pass: smtpConfig.password,
           host: smtpConfig.host,
           port: smtpConfig.port,
           secure: smtpConfig.secure,
-          provider: smtpConfig.provider,
-          displayName: smtpConfig.displayName || smtpConfig.email.split('@')[0]
+          providerId: 'custom', // Always use custom for manual SMTP/IMAP setup
+          displayName: smtpConfig.displayName || smtpConfig.email.split('@')[0],
+          // IMAP configuration for receiving emails
+          imapHost: smtpConfig.imapHost,
+          imapPort: smtpConfig.imapPort,
+          imapSecure: smtpConfig.imapSecure
         })
       })
 
@@ -404,7 +438,10 @@ function AddEmailAccountContent() {
       provider,
       host: providerConfig.host,
       port: providerConfig.port,
-      secure: providerConfig.secure
+      secure: providerConfig.secure,
+      imapHost: providerConfig.imapHost,
+      imapPort: providerConfig.imapPort,
+      imapSecure: providerConfig.imapSecure
     }))
     setConnectionTestPassed(false)
   }
@@ -706,28 +743,6 @@ function AddEmailAccountContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Provider Selection */}
-            <div className="space-y-3">
-              <Label htmlFor="provider">Email Provider</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {Object.entries(smtpProviders).map(([key, provider]) => (
-                  <Button
-                    key={key}
-                    variant={smtpConfig.provider === key ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handleSMTPProviderChange(key as SMTPProvider)}
-                    className="justify-start"
-                  >
-                    <span className="mr-2">{provider.icon}</span>
-                    {provider.name}
-                  </Button>
-                ))}
-              </div>
-              <p className="text-xs text-gray-500">
-                {smtpProviders[smtpConfig.provider].instructions}
-              </p>
-            </div>
-
             {/* Email Address */}
             <div className="space-y-2">
               <Label htmlFor="email">Email Address *</Label>
@@ -769,25 +784,78 @@ function AddEmailAccountContent() {
               </div>
             </div>
 
-            {/* SMTP Settings */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="host">SMTP Host *</Label>
-                <Input
-                  id="host"
-                  placeholder="smtp.gmail.com"
-                  value={smtpConfig.host}
-                  onChange={(e) => setSMTPConfig(prev => ({ ...prev, host: e.target.value }))}
-                />
+            {/* SMTP Settings (Outgoing) */}
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Mail className="h-4 w-4 text-purple-600" />
+                <Label className="text-sm font-semibold">SMTP Settings (Sending Emails)</Label>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="port">Port *</Label>
-                <Input
-                  id="port"
-                  placeholder="587"
-                  value={smtpConfig.port}
-                  onChange={(e) => setSMTPConfig(prev => ({ ...prev, port: e.target.value }))}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="host">SMTP Host *</Label>
+                  <Input
+                    id="host"
+                    placeholder="smtp.gmail.com"
+                    value={smtpConfig.host}
+                    onChange={(e) => setSMTPConfig(prev => ({ ...prev, host: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="port">SMTP Port *</Label>
+                  <Input
+                    id="port"
+                    placeholder="587 or 465"
+                    value={smtpConfig.port}
+                    onChange={(e) => {
+                      const port = e.target.value;
+                      // Auto-detect SSL based on port: 465 = SSL, 587 = STARTTLS
+                      const secure = port === '465';
+                      setSMTPConfig(prev => ({ ...prev, port, secure }))
+                    }}
+                  />
+                  <p className="text-xs text-gray-500">
+                    Port 465 (SSL) or 587 (STARTTLS)
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* IMAP Settings (Incoming) */}
+            <div className="space-y-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <Server className="h-4 w-4 text-blue-600" />
+                <Label className="text-sm font-semibold">IMAP Settings (Receiving Emails)</Label>
+              </div>
+              <p className="text-xs text-blue-700">
+                IMAP enables inbox sync, reply detection, and conversation threading - just like OAuth2 accounts.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="imapHost">IMAP Host *</Label>
+                  <Input
+                    id="imapHost"
+                    placeholder="imap.gmail.com"
+                    value={smtpConfig.imapHost}
+                    onChange={(e) => setSMTPConfig(prev => ({ ...prev, imapHost: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="imapPort">IMAP Port *</Label>
+                  <Input
+                    id="imapPort"
+                    placeholder="993 or 143"
+                    value={smtpConfig.imapPort}
+                    onChange={(e) => {
+                      const port = e.target.value;
+                      // Auto-detect SSL based on port: 993 = SSL, 143 = STARTTLS
+                      const imapSecure = port === '993';
+                      setSMTPConfig(prev => ({ ...prev, imapPort: port, imapSecure }))
+                    }}
+                  />
+                  <p className="text-xs text-gray-500">
+                    Port 993 (SSL) or 143 (STARTTLS)
+                  </p>
+                </div>
               </div>
             </div>
 
