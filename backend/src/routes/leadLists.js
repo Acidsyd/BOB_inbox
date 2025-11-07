@@ -6,7 +6,11 @@ const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const jwt = require('jsonwebtoken');
 const batchProcessingService = require('../services/BatchProcessingService');
+const WebhookService = require('../services/WebhookService');
 const router = express.Router();
+
+// Initialize WebhookService
+const webhookService = new WebhookService();
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -148,6 +152,24 @@ router.post('/', authenticateToken, async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    // Send webhook notification for lead list creation
+    try {
+      await webhookService.sendEmailWebhook(
+        req.user.organizationId,
+        'lead_list.created',
+        {
+          lead_list_id: newList.id,
+          name: newList.name,
+          lead_count: 0,
+          created_by: req.user.userId,
+          created_at: newList.created_at
+        }
+      );
+    } catch (webhookError) {
+      console.error('⚠️ Failed to send lead_list.created webhook:', webhookError);
+      // Don't fail the request if webhook fails
+    }
 
     res.status(201).json(newList);
   } catch (error) {
@@ -1001,6 +1023,25 @@ router.post('/upload', authenticateToken, upload.single('csvFile'), async (req, 
         fs.unlinkSync(csvFile.path);
       } catch (cleanupError) {
         console.error('Error cleaning up file:', cleanupError);
+      }
+
+      // Send webhook notification for lead list update (leads added via CSV)
+      try {
+        await webhookService.sendEmailWebhook(
+          req.user.organizationId,
+          'lead_list.updated',
+          {
+            lead_list_id: newList.id,
+            name: newList.name,
+            leads_added: batchResults.inserted,
+            total_leads: batchResults.inserted,
+            duplicates: batchResults.duplicates,
+            updated_at: new Date().toISOString()
+          }
+        );
+      } catch (webhookError) {
+        console.error('⚠️ Failed to send lead_list.updated webhook:', webhookError);
+        // Don't fail the request if webhook fails
       }
 
       // Return batch processing results

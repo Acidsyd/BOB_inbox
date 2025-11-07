@@ -6,6 +6,7 @@ const AccountRateLimitService = require('./AccountRateLimitService');
 const BounceTrackingService = require('./BounceTrackingService');
 const HealthCheckService = require('./HealthCheckService');
 const TimezoneService = require('./TimezoneService');
+const WebhookService = require('./WebhookService');
 const SpintaxParser = require('../utils/spintax');
 const { toLocalTimestamp } = require('../utils/dateUtils.cjs');
 
@@ -22,6 +23,7 @@ class CronEmailProcessor {
     this.rateLimitService = new AccountRateLimitService();
     this.bounceTrackingService = new BounceTrackingService();
     this.healthCheckService = new HealthCheckService();
+    this.webhookService = new WebhookService();
     this.isProcessing = false;
     
     // 🔄 Account rotation tracking - ensures fair distribution across accounts
@@ -975,6 +977,35 @@ class CronEmailProcessor {
         } catch (followUpError) {
           console.error('⚠️ Error scheduling follow-up emails (non-fatal):', followUpError);
           // Don't fail the email sending if follow-up scheduling fails
+        }
+
+        // Send webhook notification for email sent (initial or follow-up)
+        try {
+          const eventType = email.is_follow_up ? 'follow_up.sent' : 'email.sent';
+          await this.webhookService.sendEmailWebhook(
+            organizationId,
+            eventType,
+            {
+              email_id: email.id,
+              to_email: email.to_email,
+              from_email: email.from_email,
+              subject: email.subject,
+              campaign_id: email.campaign_id,
+              lead_id: email.lead_id,
+              is_follow_up: email.is_follow_up || false,
+              sequence_step: email.sequence_step || 0,
+              sent_at: new Date().toISOString(),
+              message_id: result.messageId,
+              thread_id: result.threadId
+            },
+            {
+              campaignId: email.campaign_id,
+              emailAccountId: email.email_account_id
+            }
+          );
+        } catch (webhookError) {
+          console.error(`⚠️ Failed to send ${email.is_follow_up ? 'follow_up.sent' : 'email.sent'} webhook:`, webhookError);
+          // Don't fail the email sending if webhook fails
         }
 
         return true; // Email sent successfully

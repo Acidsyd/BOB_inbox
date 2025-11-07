@@ -71,7 +71,12 @@ export default function WebhookManager() {
     'email.sent',
     'email.delivered',
     'email.bounced',
-    'reply.received'
+    'reply.received',
+    'lead_list.created',
+    'lead_list.updated',
+    'follow_up.sent',
+    'campaign.started',
+    'campaign.paused'
   ]
 
   useEffect(() => {

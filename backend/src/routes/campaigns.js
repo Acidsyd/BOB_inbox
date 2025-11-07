@@ -7,11 +7,13 @@ const EmailService = require('../services/EmailService');
 const EmailTrackingService = require('../services/EmailTrackingService');
 const HealthCheckService = require('../services/HealthCheckService');
 const ProcessManagerService = require('../services/ProcessManagerService');
+const WebhookService = require('../services/WebhookService');
 const SpintaxParser = require('../utils/spintax');
 const { toLocalTimestamp } = require('../utils/dateUtils.cjs');
 const CampaignScheduler = require('../utils/CampaignScheduler');
 const TimezoneService = require('../services/TimezoneService');
 const emailService = new EmailService();
+const webhookService = new WebhookService();
 
 // Helper function to format dates for campaign responses
 function formatCampaignDate(date, timezone = 'UTC', format = 'MMM d, yyyy h:mm a') {
@@ -1234,6 +1236,26 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
     expandedCampaign.replyRate = 0;
     expandedCampaign.bounceRate = 0;
 
+    // Send webhook notification for campaign started
+    try {
+      await webhookService.sendEmailWebhook(
+        req.user.organizationId,
+        'campaign.started',
+        {
+          campaign_id: campaignId,
+          name: campaign.name,
+          lead_count: scheduledEmails.length,
+          emails_scheduled: scheduledEmails.length,
+          first_email_at: scheduledEmails[0]?.send_at,
+          last_email_at: scheduledEmails[scheduledEmails.length - 1]?.send_at,
+          started_at: new Date().toISOString()
+        },
+        { campaignId: campaignId }
+      );
+    } catch (webhookError) {
+      console.error('⚠️ Failed to send campaign.started webhook:', webhookError);
+    }
+
     res.json({
       success: true,
       campaignId: campaignId,
@@ -1345,6 +1367,23 @@ router.post('/:id/pause', authenticateToken, async (req, res) => {
     }
 
     console.log('✅ Campaign paused successfully:', campaignId);
+
+    // Send webhook notification for campaign paused
+    try {
+      await webhookService.sendEmailWebhook(
+        req.user.organizationId,
+        'campaign.paused',
+        {
+          campaign_id: campaignId,
+          name: updatedCampaign.name,
+          paused_at: new Date().toISOString(),
+          previous_status: campaign.status
+        },
+        { campaignId: campaignId }
+      );
+    } catch (webhookError) {
+      console.error('⚠️ Failed to send campaign.paused webhook:', webhookError);
+    }
 
     res.json({
       success: true,
