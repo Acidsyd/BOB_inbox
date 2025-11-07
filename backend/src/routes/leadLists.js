@@ -151,7 +151,14 @@ router.post('/', authenticateToken, async (req, res) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Database error creating lead list:', error);
+      return res.status(500).json({
+        error: 'Failed to create lead list',
+        details: error.message,
+        code: error.code
+      });
+    }
 
     // Send webhook notification for lead list creation
     try {
@@ -173,8 +180,11 @@ router.post('/', authenticateToken, async (req, res) => {
 
     res.status(201).json(newList);
   } catch (error) {
-    console.error('Error creating lead list:', error);
-    res.status(500).json({ error: 'Failed to create lead list' });
+    console.error('❌ Error creating lead list:', error);
+    res.status(500).json({
+      error: 'Failed to create lead list',
+      details: error.message
+    });
   }
 });
 
