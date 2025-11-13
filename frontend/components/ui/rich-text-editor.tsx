@@ -14,9 +14,12 @@ import { Color } from '@tiptap/extension-color'
 import { TextStyle } from '@tiptap/extension-text-style'
 import FontFamily from '@tiptap/extension-font-family'
 import Placeholder from '@tiptap/extension-placeholder'
-import { 
-  Bold, 
-  Italic, 
+import Highlight from '@tiptap/extension-highlight'
+import Dropcursor from '@tiptap/extension-dropcursor'
+import { LineHeight } from './extensions/line-height'
+import {
+  Bold,
+  Italic,
   Underline as UnderlineIcon,
   Strikethrough,
   Code,
@@ -41,7 +44,11 @@ import {
   FileText,
   Minus,
   Paperclip,
-  Upload
+  Upload,
+  Highlighter,
+  IndentIncrease,
+  IndentDecrease,
+  LineChart
 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Separator } from '../ui/separator'
@@ -60,7 +67,7 @@ import {
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { cn } from '../../lib/utils'
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useState, useEffect, useMemo, memo } from 'react'
 import dynamic from 'next/dynamic'
 
 interface RichTextEditorProps {
@@ -71,12 +78,20 @@ interface RichTextEditorProps {
   minHeight?: string
   disabled?: boolean
   onImageUpload?: (file: File) => Promise<string>
-  onAttachmentUpload?: (file: File) => Promise<{ url: string; name: string; size: number }>
+  onAttachmentUpload?: (file: File) => Promise<{ url: string; name: string; size: number; type: string }>
   variables?: { key: string; label: string; value?: string }[]
   templates?: { id: string; name: string; content: string }[]
 }
 
-const MenuBar = ({ editor, onImageUpload, onAttachmentUpload, variables, templates }) => {
+interface MenuBarProps {
+  editor: any
+  onImageUpload?: (file: File) => Promise<string>
+  onAttachmentUpload?: (file: File) => Promise<{ url: string; name: string; size: number; type: string }>
+  variables?: { key: string; label: string; value?: string }[]
+  templates?: { id: string; name: string; content: string }[]
+}
+
+const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, templates }: MenuBarProps) => {
   const [linkUrl, setLinkUrl] = useState('')
   const [isLinkPopoverOpen, setIsLinkPopoverOpen] = useState(false)
   const [selectedColor, setSelectedColor] = useState('#000000')
@@ -85,23 +100,23 @@ const MenuBar = ({ editor, onImageUpload, onAttachmentUpload, variables, templat
 
   if (!editor) return null
 
-  const addLink = () => {
+  const addLink = useCallback(() => {
     if (linkUrl) {
       editor.chain().focus().setLink({ href: linkUrl }).run()
       setLinkUrl('')
       setIsLinkPopoverOpen(false)
     }
-  }
+  }, [linkUrl, editor])
 
-  const addImage = async () => {
+  const addImage = useCallback(async () => {
     if (imageUrl) {
       editor.chain().focus().setImage({ src: imageUrl }).run()
       setImageUrl('')
       setIsImagePopoverOpen(false)
     }
-  }
+  }, [imageUrl, editor])
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file && onImageUpload) {
       try {
@@ -112,21 +127,107 @@ const MenuBar = ({ editor, onImageUpload, onAttachmentUpload, variables, templat
         console.error('Failed to upload image:', error)
       }
     }
-  }
+  }, [editor, onImageUpload])
 
-  const insertVariable = (variable: string) => {
+  const handleImageDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file && file.type.startsWith('image/') && onImageUpload) {
+      onImageUpload(file).then((url) => {
+        editor.chain().focus().setImage({ src: url }).run()
+      }).catch((error) => {
+        console.error('Failed to upload dropped image:', error)
+      })
+    }
+  }, [editor, onImageUpload])
+
+  const handleImagePaste = useCallback((e: ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items || !onImageUpload) return
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        e.preventDefault()
+        const file = items[i].getAsFile()
+        if (file) {
+          onImageUpload(file).then((url) => {
+            editor.chain().focus().setImage({ src: url }).run()
+          }).catch((error) => {
+            console.error('Failed to upload pasted image:', error)
+          })
+        }
+        break
+      }
+    }
+  }, [editor, onImageUpload])
+
+  const insertVariable = useCallback((variable: string) => {
     editor.chain().focus().insertContent(`{{${variable}}}`).run()
-  }
+  }, [editor])
 
-  const insertTemplate = (template: string) => {
+  const insertTemplate = useCallback((template: string) => {
     editor.chain().focus().setContent(template).run()
-  }
+  }, [editor])
+
+  const handleIndent = useCallback(() => {
+    if (editor.isActive('listItem')) {
+      editor.chain().focus().sinkListItem('listItem').run()
+    } else {
+      // For paragraphs, increase margin-left
+      const currentMargin = editor.getAttributes('paragraph').marginLeft || 0
+      editor.chain().focus().updateAttributes('paragraph', {
+        marginLeft: `${parseInt(currentMargin) + 30}px`
+      }).run()
+    }
+  }, [editor])
+
+  const handleOutdent = useCallback(() => {
+    if (editor.isActive('listItem')) {
+      editor.chain().focus().liftListItem('listItem').run()
+    } else {
+      // For paragraphs, decrease margin-left
+      const currentMargin = editor.getAttributes('paragraph').marginLeft || 0
+      const newMargin = Math.max(0, parseInt(currentMargin) - 30)
+      editor.chain().focus().updateAttributes('paragraph', {
+        marginLeft: newMargin > 0 ? `${newMargin}px` : null
+      }).run()
+    }
+  }, [editor])
+
+  // Register paste handler
+  useEffect(() => {
+    if (editor) {
+      const element = editor.view.dom
+      element.addEventListener('paste', handleImagePaste as any)
+      return () => {
+        element.removeEventListener('paste', handleImagePaste as any)
+      }
+    }
+  }, [editor, handleImagePaste])
 
   const colors = [
     '#000000', '#424242', '#636363', '#9C9C94', '#CEC6CE', '#EFEFEF',
     '#F7F7F7', '#FFFFFF', '#FF0000', '#FF9900', '#FFFF00', '#00FF00',
     '#00FFFF', '#0000FF', '#9900FF', '#FF00FF', '#F4CCCC', '#FCE5CD',
     '#FFF2CC', '#D9EAD3', '#D0E0E3', '#CFE2F3', '#D9D2E9', '#EAD1DC'
+  ]
+
+  const highlightColors = [
+    { value: '#fff59d', label: 'Yellow' },
+    { value: '#a7ffeb', label: 'Teal' },
+    { value: '#b39ddb', label: 'Purple' },
+    { value: '#f48fb1', label: 'Pink' },
+    { value: '#80cbc4', label: 'Cyan' },
+    { value: '#ffccbc', label: 'Orange' },
+    { value: '#c5e1a5', label: 'Green' },
+    { value: '#e0e0e0', label: 'Gray' }
+  ]
+
+  const lineHeights = [
+    { value: '1.0', label: '1.0' },
+    { value: '1.5', label: '1.5' },
+    { value: '2.0', label: '2.0' },
+    { value: '2.5', label: '2.5' }
   ]
 
   const fonts = [
@@ -365,6 +466,30 @@ const MenuBar = ({ editor, onImageUpload, onAttachmentUpload, variables, templat
 
       <Separator orientation="vertical" className="h-6" />
 
+      {/* Indent/Outdent */}
+      <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleOutdent}
+          className="h-10 w-10 p-0"
+          title="Decrease Indent (Shift+Tab)"
+        >
+          <IndentDecrease className="h-5 w-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleIndent}
+          className="h-10 w-10 p-0"
+          title="Increase Indent (Tab)"
+        >
+          <IndentIncrease className="h-5 w-5" />
+        </Button>
+      </div>
+
+      <Separator orientation="vertical" className="h-6" />
+
       {/* Alignment */}
       <div className="flex items-center gap-1">
         <Button
@@ -436,6 +561,24 @@ const MenuBar = ({ editor, onImageUpload, onAttachmentUpload, variables, templat
         </SelectContent>
       </Select>
 
+      {/* Line Height */}
+      <Select
+        value={editor.getAttributes('paragraph').lineHeight || '1.5'}
+        onValueChange={(value) => editor.chain().focus().setLineHeight(value).run()}
+      >
+        <SelectTrigger className="h-10 w-24">
+          <LineChart className="h-4 w-4 mr-2" />
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {lineHeights.map((lineHeight) => (
+            <SelectItem key={lineHeight.value} value={lineHeight.value}>
+              {lineHeight.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
       {/* Color Picker */}
       <Popover>
         <PopoverTrigger asChild>
@@ -461,6 +604,53 @@ const MenuBar = ({ editor, onImageUpload, onAttachmentUpload, variables, templat
                 }}
               />
             ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      {/* Highlight Color Picker */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-10 w-10 p-0",
+              editor.isActive('highlight') && "bg-gray-200 shadow-inner"
+            )}
+            title="Highlight Color"
+          >
+            <Highlighter className="h-5 w-5" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Highlight Color</Label>
+            <div className="grid grid-cols-4 gap-2">
+              {highlightColors.map((highlight) => (
+                <button
+                  key={highlight.value}
+                  className="h-8 rounded border border-gray-300 hover:scale-105 transition-transform flex items-center justify-center text-xs font-medium"
+                  style={{ backgroundColor: highlight.value }}
+                  onClick={() => {
+                    editor.chain().focus().setHighlight({ color: highlight.value }).run()
+                  }}
+                  title={highlight.label}
+                >
+                  {highlight.label}
+                </button>
+              ))}
+            </div>
+            {editor.isActive('highlight') && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full mt-2"
+                onClick={() => editor.chain().focus().unsetHighlight().run()}
+              >
+                Remove Highlight
+              </Button>
+            )}
           </div>
         </PopoverContent>
       </Popover>
@@ -706,7 +896,7 @@ const MenuBar = ({ editor, onImageUpload, onAttachmentUpload, variables, templat
       </div>
     </div>
   )
-}
+})
 
 export function RichTextEditor({
   content,
@@ -720,6 +910,17 @@ export function RichTextEditor({
   variables,
   templates
 }: RichTextEditorProps) {
+  // Debounced onChange callback
+  const debouncedOnChange = useMemo(() => {
+    let timeoutId: NodeJS.Timeout
+    return (html: string, text: string) => {
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(() => {
+        onChange(html, text)
+      }, 200)
+    }
+  }, [onChange])
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -756,7 +957,15 @@ export function RichTextEditor({
       FontFamily,
       Placeholder.configure({
         placeholder
-      })
+      }),
+      Highlight.configure({
+        multicolor: true
+      }),
+      Dropcursor.configure({
+        color: '#3b82f6',
+        width: 3
+      }),
+      LineHeight
     ],
     content: content || '',
     editable: !disabled,
@@ -764,7 +973,35 @@ export function RichTextEditor({
     onUpdate: ({ editor }) => {
       const html = editor.getHTML()
       const text = editor.getText()
-      onChange(html, text)
+      debouncedOnChange(html, text)
+    },
+    editorProps: {
+      handleDrop: (view, event, slice, moved) => {
+        if (!event.dataTransfer || moved) {
+          return false
+        }
+
+        const files = Array.from(event.dataTransfer.files)
+        const imageFile = files.find(file => file.type.startsWith('image/'))
+
+        if (imageFile && onImageUpload) {
+          event.preventDefault()
+          onImageUpload(imageFile).then((url) => {
+            const { schema } = view.state
+            const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY })
+            if (coordinates) {
+              const node = schema.nodes.image.create({ src: url })
+              const transaction = view.state.tr.insert(coordinates.pos, node)
+              view.dispatch(transaction)
+            }
+          }).catch((error) => {
+            console.error('Failed to upload dropped image:', error)
+          })
+          return true
+        }
+
+        return false
+      }
     }
   })
 
@@ -845,14 +1082,12 @@ export function RichTextEditor({
             list-style-position: outside !important;
             margin: 0.125rem 0 !important;
             padding: 0 !important;
-            line-height: 1.6 !important;
           }
-          
+
           .ProseMirror li p {
             margin: 0 !important;
             padding: 0 !important;
-            display: inline-block !important;
-            width: 100% !important;
+            display: block !important;
           }
           
           .ProseMirror ul ul {
