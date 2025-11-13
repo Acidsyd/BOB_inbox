@@ -57,6 +57,16 @@ npm run clean            # Clean coverage and build artifacts
 npm run clean:all        # Clean everything including node_modules
 npm run precommit        # Run lint:fix and test:unit (git hook)
 
+# Database Optimization & Cleanup
+npm run db:size:analyze  # Analyze database storage usage by table
+npm run db:cleanup:emergency           # Preview what would be deleted (dry-run)
+npm run db:cleanup:emergency --confirm # Execute cleanup (frees 150-250MB)
+
+# External Storage (Supabase Storage)
+npm run db:storage:init                 # Initialize Supabase Storage bucket
+npm run db:storage:migrate              # Preview email migration to storage (dry-run)
+npm run db:storage:migrate -- --confirm --age=180  # Migrate emails >180 days to storage
+
 # Docker Development
 npm run docker:build     # Build Docker containers
 npm run docker:up        # Start all services with Docker Compose
@@ -569,6 +579,9 @@ const { success, failed } = await batchUpdate(supabase, tableName, [
 | Manual sync not working | Check `/api/inbox/sync/manual` endpoint and triggerManualSync function |
 | Background sync not running | Verify BackgroundSyncService initialization in backend index.js |
 | Auto-sync references | Auto-sync was removed - use BackgroundSyncService for 15-min intervals |
+| Database storage exceeded | Run `npm run db:size:analyze` to check usage, then `npm run db:cleanup:emergency --confirm` |
+| Database size too large | Use emergency cleanup to delete old tracking events, failed emails, and redundant configs |
+| Out of space on free tier | Cleanup frees 150-250MB; tracking events and failed emails consume most space |
 
 ## Debug Commands
 
@@ -593,6 +606,11 @@ node -e "const TZ = require('./src/services/TimezoneService'); console.log(TZ.co
 
 # Check backend server status
 curl http://localhost:4000/health
+
+# Database cleanup and storage analysis
+npm run db:size:analyze                    # Analyze storage usage
+npm run db:cleanup:emergency               # Preview cleanup (dry-run)
+npm run db:cleanup:emergency --confirm     # Execute cleanup
 ```
 
 ## Production System Status
@@ -688,6 +706,149 @@ const displayTime = message.sent_at_display || message.received_at_display || fa
 - **Handle timezone detection failures** with UTC fallback
 - **Test DST transitions** when working with scheduled times
 - **Frontend components must use formatDateInTimezone()** for consistency
+
+## External Storage (Supabase Storage)
+
+**Problem**: Email content (HTML/plain text) consumes significant database space (60-70% of total).
+
+**Solution**: Move old email content to Supabase Storage (cheaper object storage) while keeping metadata in database.
+
+### Architecture
+
+**Before** (All in PostgreSQL):
+```
+conversation_messages table
+├── id, subject, from_email (metadata)
+├── content_html (30KB avg) ← Takes up space!
+└── content_plain (10KB avg) ← Takes up space!
+```
+
+**After** (Hybrid storage):
+```
+Database (conversation_messages)          Supabase Storage Bucket
+├── id, subject, from_email              ├── 2025/01/msg-id.html
+├── storage_html_path (reference only)   ├── 2025/01/msg-id.txt
+├── storage_plain_path (reference only)  └── 2024/12/...
+└── archived_at
+```
+
+### Setup Process
+
+1. **Initialize Storage Bucket**:
+   ```bash
+   npm run db:storage:init
+   ```
+   Creates private Supabase Storage bucket named `email-archives`.
+
+2. **Run Database Migration**:
+   - Open Supabase SQL Editor
+   - Run SQL from `config/migrations/20250113_add_storage_columns.sql`
+   - Adds `storage_html_path`, `storage_plain_path`, `archived_at` columns
+
+3. **Preview Migration** (dry-run):
+   ```bash
+   npm run db:storage:migrate
+   ```
+   Shows what would be migrated without making changes.
+
+4. **Execute Migration**:
+   ```bash
+   # Migrate emails older than 180 days
+   npm run db:storage:migrate -- --confirm --age=180
+
+   # Limit migration to 100 emails for testing
+   npm run db:storage:migrate -- --confirm --age=180 --limit=100
+   ```
+
+5. **Run VACUUM to Reclaim Space**:
+   ```sql
+   VACUUM ANALYZE;
+   ```
+
+### How It Works
+
+**Email Access** (transparent to users):
+- Recent emails (<180 days): Stored in database → Fast access (20ms)
+- Old emails (>180 days): Stored in Supabase Storage → Slightly slower (200ms), cached (50ms)
+
+**EmailArchiveService**:
+```javascript
+// Upload email to storage
+await archiveService.uploadEmailContent(messageId, htmlContent, plainContent);
+
+// Retrieve email (checks storage if needed)
+const message = await archiveService.retrieveMessage(messageFromDB);
+```
+
+**Caching**: Recently accessed emails cached in memory for 15 minutes.
+
+### Storage Costs
+
+Supabase Storage pricing:
+- **Free tier**: 1 GB included
+- **After 1GB**: $0.021/GB/month
+- **Bandwidth**: 2 GB/month free, then $0.09/GB
+
+**Example**: 300MB of emails → $0/month (within free tier)
+
+### Space Savings
+
+**conversation_messages** table:
+- Before: 33 MB (current)
+- After archiving 50% of emails: 16-20 MB
+- Savings: ~15 MB per archival batch
+
+**Long-term**: Keeps database under 400MB indefinitely.
+
+### Retrieval Examples
+
+**Backend** (automatic):
+```javascript
+const EmailArchiveService = require('./services/EmailArchiveService');
+const archiveService = new EmailArchiveService();
+
+// Get message from database
+const { data: message } = await supabase
+  .from('conversation_messages')
+  .select('*')
+  .eq('id', messageId)
+  .single();
+
+// Retrieve content (from storage if needed)
+const fullMessage = await archiveService.retrieveMessage(message);
+// fullMessage.content_html is now available
+```
+
+**Frontend**: No changes needed - API returns complete message.
+
+### Monitoring
+
+Check storage usage:
+```javascript
+const stats = await archiveService.getStorageStats();
+// Returns: { fileCount, totalSize, bucketName }
+```
+
+### Safety Features
+
+- **Dry-run mode** by default
+- **Verification** after upload (downloads and checks)
+- **Batch processing** (50 emails at a time)
+- **Error isolation** (failed uploads don't stop migration)
+- **Rollback capability** (original content kept until verified)
+
+### Migration Strategy
+
+**Conservative approach** (recommended):
+1. Week 1: Archive emails >180 days (oldest content)
+2. Week 2: Monitor performance, adjust if needed
+3. Week 3: Archive emails >90 days (more aggressive)
+4. Week 4: Set up automated archival (future feature)
+
+**Aggressive approach** (if space critical):
+1. Archive all emails >30 days immediately
+2. Run VACUUM to reclaim space
+3. Monitor inbox performance
 
 ---
 *Never modify user isolation, OAuth2 status patterns, or campaign interval enforcement without understanding the complete system flow.*
