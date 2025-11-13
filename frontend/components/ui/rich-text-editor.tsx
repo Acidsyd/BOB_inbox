@@ -145,9 +145,22 @@ const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, te
 
   const handleImagePaste = useCallback((e: ClipboardEvent) => {
     if (!editor) return
-    const items = e.clipboardData?.items
-    if (!items || !onImageUpload) return
+    if (!onImageUpload) return
 
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    // Check if there's HTML content in clipboard (like email signatures)
+    const htmlData = e.clipboardData?.getData('text/html')
+
+    // Only intercept if it's a pure image paste (no HTML content)
+    // This allows HTML signatures to be pasted normally
+    if (htmlData && htmlData.trim().length > 0) {
+      // Let Tiptap handle HTML paste naturally
+      return
+    }
+
+    // Handle standalone image paste
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.startsWith('image/')) {
         e.preventDefault()
@@ -949,16 +962,94 @@ export function RichTextEditor({
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
-      Image,
+      Image.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            style: {
+              default: null,
+              parseHTML: element => element.getAttribute('style'),
+              renderHTML: attributes => {
+                if (!attributes.style) return {}
+                return { style: attributes.style }
+              }
+            },
+            width: {
+              default: null,
+              parseHTML: element => element.getAttribute('width'),
+              renderHTML: attributes => {
+                if (!attributes.width) return {}
+                return { width: attributes.width }
+              }
+            },
+            height: {
+              default: null,
+              parseHTML: element => element.getAttribute('height'),
+              renderHTML: attributes => {
+                if (!attributes.height) return {}
+                return { height: attributes.height }
+              }
+            }
+          }
+        }
+      }),
       Link.configure({
         openOnClick: false,
+        HTMLAttributes: {
+          rel: 'noopener noreferrer nofollow'
+        }
       }),
       Table.configure({
         resizable: true,
+        HTMLAttributes: {
+          class: 'tiptap-table'
+        }
       }),
-      TableRow,
-      TableHeader,
-      TableCell,
+      TableRow.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            style: {
+              default: null,
+              parseHTML: element => element.getAttribute('style'),
+              renderHTML: attributes => {
+                if (!attributes.style) return {}
+                return { style: attributes.style }
+              }
+            }
+          }
+        }
+      }),
+      TableHeader.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            style: {
+              default: null,
+              parseHTML: element => element.getAttribute('style'),
+              renderHTML: attributes => {
+                if (!attributes.style) return {}
+                return { style: attributes.style }
+              }
+            }
+          }
+        }
+      }),
+      TableCell.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            style: {
+              default: null,
+              parseHTML: element => element.getAttribute('style'),
+              renderHTML: attributes => {
+                if (!attributes.style) return {}
+                return { style: attributes.style }
+              }
+            }
+          }
+        }
+      }),
       Color,
       TextStyle,
       FontFamily,
