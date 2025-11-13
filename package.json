@@ -36,6 +36,7 @@
     "db:reset": "cd backend && npm run db:reset",
     "cron": "cd backend && npm run cron",
     "cron:dev": "cd backend && npm run cron:dev",
+    "cron:test-reschedule": "node backend/scripts/test-nightly-reschedule.js",
     "reply-monitor": "cd backend && npm run reply-monitor",
     "reply-monitor:dev": "cd backend && npm run reply-monitor:dev",
     "setup": "npm install && cd backend && npm install && cd ../frontend && npm install",

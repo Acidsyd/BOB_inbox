@@ -62,6 +62,9 @@ interface Campaign {
   // Human-like timing
   enableJitter?: boolean
   jitterMinutes?: number
+  // Nightly reschedule tracking
+  rescheduleCount?: number
+  lastRescheduledAt?: string
 }
 
 interface EmailActivity {
@@ -523,6 +526,22 @@ function CampaignDetailContent() {
                   {new Date(campaign.lastActivity).toLocaleString()}
                 </div>
               </div>
+
+              {/* Nightly Reschedule Tracking */}
+              {campaign.rescheduleCount !== undefined && campaign.rescheduleCount > 0 && (
+                <div>
+                  <div className="text-sm font-medium text-gray-900">Nightly Reschedules</div>
+                  <div className="text-sm text-gray-600 flex items-center">
+                    <Activity className="h-3 w-3 mr-1" />
+                    {campaign.rescheduleCount} time{campaign.rescheduleCount !== 1 ? 's' : ''}
+                    {campaign.lastRescheduledAt && (
+                      <span className="text-xs text-gray-500 ml-2">
+                        (last: {new Date(campaign.lastRescheduledAt).toLocaleDateString()})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Schedule Settings */}
               <div className="border-t pt-4">

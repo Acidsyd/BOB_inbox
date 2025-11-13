@@ -762,6 +762,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
       // Add sequence step breakdown
       initialEmails: metrics.initialEmails,
       followUpEmails: metrics.followUpEmails,
+      // Add nightly reschedule tracking
+      rescheduleCount: campaign.reschedule_count || 0,
+      lastRescheduledAt: campaign.last_rescheduled_at || null,
       // Keep original config for reference
       _config: campaign.config
     };

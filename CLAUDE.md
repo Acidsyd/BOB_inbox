@@ -19,6 +19,7 @@ npm run reply-monitor:dev # Reply monitoring cron (development mode)
 # Development Mode:
 npm run dev:backend      # API server only
 npm run cron:dev         # Dedicated cron worker (required)
+npm run cron:test-reschedule # Test nightly reschedule (picks up new leads)
 
 # Production Mode:
 npm run start            # API server only
@@ -96,6 +97,7 @@ Mailsender/
 
 ### Core Components
 - **CronEmailProcessor**: Production scheduler (1-minute intervals, 99.9% uptime)
+- **NightlyRescheduleService**: Automatic campaign rescheduling at 3am daily (picks up new leads)
 - **BackgroundSyncService**: Simple 15-minute interval sync for all email accounts
 - **OAuth2Service**: Gmail API integration with RFC-compliant threading
 - **UnifiedInboxService**: Conversation threading across all email accounts
@@ -156,6 +158,28 @@ Campaign Start → Creates scheduled_emails → Standalone cron processor →
 Cron (1 min) → Enforces timing rules → Account rotation → OAuth2/SMTP send →
 Updates conversations → Tracks metrics → Schedules follow-ups
 ```
+
+### Nightly Reschedule (NEW)
+```
+Daily at 3am → Fetch all active campaigns → For each campaign:
+  1. Preserve sent emails (conversation history intact)
+  2. Update scheduled/failed/skipped emails with fresh timing
+  3. Add NEW leads added during the day to campaign
+  4. Apply perfect rotation to all scheduled emails
+  5. Increment reschedule_count and update last_rescheduled_at
+Result: New leads automatically included without manual intervention
+```
+
+**Configuration**:
+- `RESCHEDULE_HOUR`: Hour to run (0-23, default: 3)
+- `RESCHEDULE_MINUTE`: Minute to run (0-59, default: 0)
+
+**Tracking**:
+- `reschedule_count`: Number of times campaign has been automatically rescheduled
+- `last_rescheduled_at`: Timestamp of last reschedule operation
+- Displayed in Campaign Info section: "Nightly Reschedules: X times (last: date)"
+
+**Use Case**: When using API to add leads to lead list, they're automatically picked up at 3am and scheduled with proper rotation. No need to manually stop/restart campaigns.
 
 ### Scheduling Rules (ALL enforced by CronEmailProcessor)
 - **Campaign intervals**: 5 minutes minimum, exact compliance
@@ -294,12 +318,17 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-app-password
+
+# Optional - Nightly Reschedule (picks up new leads automatically)
+RESCHEDULE_HOUR=3    # Hour (0-23, default: 3 = 3am)
+RESCHEDULE_MINUTE=0  # Minute (0-59, default: 0)
 ```
 
 ## Key Files
 
 ### Backend Services
 - `src/services/CronEmailProcessor.js` - **Production scheduler** (4-phase enhanced, exact interval compliance)
+- `src/services/NightlyRescheduleService.js` - **Automatic campaign reschedule** (daily at 3am, picks up new leads)
 - `src/services/CampaignScheduler.js` - **Perfect rotation algorithm** (round-robin scheduling with no consecutive duplicates)
 - `src/services/BackgroundSyncService.js` - **Simple background sync** (15-minute intervals for all accounts)
 - `src/services/OAuth2Service.js` - Gmail API integration with attachment support
@@ -534,6 +563,8 @@ const { success, failed } = await batchUpdate(supabase, tableName, [
 | Analytics showing wrong counts | Ensure all count queries use pagination patterns |
 | Rotation has consecutive duplicates | Use `scheduleEmailsWithPerfectRotation` not random shuffle |
 | Campaign missing emails | Check if all scheduled_emails were created on start |
+| New leads added via API not sending | NightlyRescheduleService picks them up at 3am automatically; or manually stop/restart campaign |
+| Nightly reschedule not running | Check if cron service is running with `npm run cron:dev` or `npm run cron` |
 | Tiptap focus/selection issues | Remove content from useEditor deps |
 | Manual sync not working | Check `/api/inbox/sync/manual` endpoint and triggerManualSync function |
 | Background sync not running | Verify BackgroundSyncService initialization in backend index.js |
