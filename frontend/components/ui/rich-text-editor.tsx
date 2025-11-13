@@ -98,9 +98,8 @@ const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, te
   const [isImagePopoverOpen, setIsImagePopoverOpen] = useState(false)
   const [imageUrl, setImageUrl] = useState('')
 
-  if (!editor) return null
-
   const addLink = useCallback(() => {
+    if (!editor) return
     if (linkUrl) {
       editor.chain().focus().setLink({ href: linkUrl }).run()
       setLinkUrl('')
@@ -109,6 +108,7 @@ const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, te
   }, [linkUrl, editor])
 
   const addImage = useCallback(async () => {
+    if (!editor) return
     if (imageUrl) {
       editor.chain().focus().setImage({ src: imageUrl }).run()
       setImageUrl('')
@@ -117,6 +117,7 @@ const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, te
   }, [imageUrl, editor])
 
   const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!editor) return
     const file = e.target.files?.[0]
     if (file && onImageUpload) {
       try {
@@ -130,6 +131,7 @@ const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, te
   }, [editor, onImageUpload])
 
   const handleImageDrop = useCallback((e: React.DragEvent) => {
+    if (!editor) return
     e.preventDefault()
     const file = e.dataTransfer.files?.[0]
     if (file && file.type.startsWith('image/') && onImageUpload) {
@@ -142,6 +144,7 @@ const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, te
   }, [editor, onImageUpload])
 
   const handleImagePaste = useCallback((e: ClipboardEvent) => {
+    if (!editor) return
     const items = e.clipboardData?.items
     if (!items || !onImageUpload) return
 
@@ -162,14 +165,17 @@ const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, te
   }, [editor, onImageUpload])
 
   const insertVariable = useCallback((variable: string) => {
+    if (!editor) return
     editor.chain().focus().insertContent(`{{${variable}}}`).run()
   }, [editor])
 
   const insertTemplate = useCallback((template: string) => {
+    if (!editor) return
     editor.chain().focus().setContent(template).run()
   }, [editor])
 
   const handleIndent = useCallback(() => {
+    if (!editor) return
     if (editor.isActive('listItem')) {
       editor.chain().focus().sinkListItem('listItem').run()
     } else {
@@ -182,6 +188,7 @@ const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, te
   }, [editor])
 
   const handleOutdent = useCallback(() => {
+    if (!editor) return
     if (editor.isActive('listItem')) {
       editor.chain().focus().liftListItem('listItem').run()
     } else {
@@ -301,6 +308,8 @@ const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, te
       }
     }
   }
+
+  if (!editor) return null
 
   return (
     <div className="border-b bg-gray-50 p-3 flex flex-wrap items-center gap-1">
@@ -924,6 +933,7 @@ export function RichTextEditor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
+        dropcursor: false, // Disable StarterKit's dropcursor, use our custom one
         bulletList: {
           keepMarks: true,
           keepAttributes: false,
