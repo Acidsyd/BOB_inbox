@@ -1121,18 +1121,56 @@ export function RichTextEditor({
             padding: 1rem !important;
             cursor: text !important;
           }
-          
+
           .ProseMirror:focus {
             outline: none !important;
             ring: 0 !important;
           }
-          
+
           .ProseMirror p.is-editor-empty:first-child::before {
             color: #adb5bd !important;
             content: attr(data-placeholder) !important;
             float: left !important;
             height: 0 !important;
             pointer-events: none !important;
+          }
+
+          /* Better signature support - preserve table layouts */
+          .ProseMirror table {
+            border-collapse: collapse !important;
+            width: auto !important;
+            margin: 0.5em 0 !important;
+          }
+
+          .ProseMirror td,
+          .ProseMirror th {
+            border: 1px solid #e5e7eb !important;
+            padding: 8px 12px !important;
+            vertical-align: top !important;
+          }
+
+          .ProseMirror th {
+            background-color: #f9fafb !important;
+            font-weight: 600 !important;
+          }
+
+          /* Preserve inline images in signatures */
+          .ProseMirror img {
+            max-width: 100% !important;
+            height: auto !important;
+            display: inline-block !important;
+            vertical-align: middle !important;
+          }
+
+          /* Support for nested divs in signatures */
+          .ProseMirror div {
+            margin: 0 !important;
+          }
+
+          /* Preserve link colors from signatures */
+          .ProseMirror a {
+            color: inherit !important;
+            text-decoration: underline !important;
           }
           
           .ProseMirror ul {
