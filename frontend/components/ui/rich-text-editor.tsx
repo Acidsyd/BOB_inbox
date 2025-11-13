@@ -176,28 +176,25 @@ const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, te
 
   const handleIndent = useCallback(() => {
     if (!editor) return
+
+    // Check if we're in a list item
     if (editor.isActive('listItem')) {
       editor.chain().focus().sinkListItem('listItem').run()
     } else {
-      // For paragraphs, increase margin-left
-      const currentMargin = editor.getAttributes('paragraph').marginLeft || 0
-      editor.chain().focus().updateAttributes('paragraph', {
-        marginLeft: `${parseInt(currentMargin) + 30}px`
-      }).run()
+      // For non-list content, wrap in blockquote for visual indent
+      editor.chain().focus().toggleBlockquote().run()
     }
   }, [editor])
 
   const handleOutdent = useCallback(() => {
     if (!editor) return
+
+    // Check if we're in a list item
     if (editor.isActive('listItem')) {
       editor.chain().focus().liftListItem('listItem').run()
-    } else {
-      // For paragraphs, decrease margin-left
-      const currentMargin = editor.getAttributes('paragraph').marginLeft || 0
-      const newMargin = Math.max(0, parseInt(currentMargin) - 30)
-      editor.chain().focus().updateAttributes('paragraph', {
-        marginLeft: newMargin > 0 ? `${newMargin}px` : null
-      }).run()
+    } else if (editor.isActive('blockquote')) {
+      // Remove blockquote to outdent
+      editor.chain().focus().toggleBlockquote().run()
     }
   }, [editor])
 
@@ -482,7 +479,7 @@ const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, te
           size="sm"
           onClick={handleOutdent}
           className="h-10 w-10 p-0"
-          title="Decrease Indent (Shift+Tab)"
+          title="Outdent (lists) / Remove quote (text)"
         >
           <IndentDecrease className="h-5 w-5" />
         </Button>
@@ -491,7 +488,7 @@ const MenuBar = memo(({ editor, onImageUpload, onAttachmentUpload, variables, te
           size="sm"
           onClick={handleIndent}
           className="h-10 w-10 p-0"
-          title="Increase Indent (Tab)"
+          title="Indent (lists) / Add quote (text)"
         >
           <IndentIncrease className="h-5 w-5" />
         </Button>
