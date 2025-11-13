@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import TextAlign from '@tiptap/extension-text-align'
 import Image from '@tiptap/extension-image'
+import ImageResize from 'tiptap-extension-resize-image'
 import Link from '@tiptap/extension-link'
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
@@ -962,36 +963,9 @@ export function RichTextEditor({
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
-      Image.extend({
-        addAttributes() {
-          return {
-            ...this.parent?.(),
-            style: {
-              default: null,
-              parseHTML: element => element.getAttribute('style'),
-              renderHTML: attributes => {
-                if (!attributes.style) return {}
-                return { style: attributes.style }
-              }
-            },
-            width: {
-              default: null,
-              parseHTML: element => element.getAttribute('width'),
-              renderHTML: attributes => {
-                if (!attributes.width) return {}
-                return { width: attributes.width }
-              }
-            },
-            height: {
-              default: null,
-              parseHTML: element => element.getAttribute('height'),
-              renderHTML: attributes => {
-                if (!attributes.height) return {}
-                return { height: attributes.height }
-              }
-            }
-          }
-        }
+      ImageResize.configure({
+        inline: true,
+        allowBase64: true,
       }),
       Link.configure({
         openOnClick: false,

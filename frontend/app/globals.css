@@ -328,3 +328,65 @@ button, a, [role="button"] {
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
   background: #94a3b8 !important;
 }
+
+/* Tiptap Image Resize Styles */
+.ProseMirror img {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.ProseMirror .image-resizer {
+  position: relative;
+  display: inline-block;
+}
+
+.ProseMirror .image-resizer img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.ProseMirror .image-resizer.selected {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.ProseMirror .image-resizer .resize-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #3b82f6;
+  border: 2px solid white;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.ProseMirror .image-resizer .resize-handle.nw {
+  top: -5px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+
+.ProseMirror .image-resizer .resize-handle.ne {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+
+.ProseMirror .image-resizer .resize-handle.sw {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+
+.ProseMirror .image-resizer .resize-handle.se {
+  bottom: -5px;
+  right: -5px;
+  cursor: nwse-resize;
+}

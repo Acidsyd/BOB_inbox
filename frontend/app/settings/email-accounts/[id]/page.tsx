@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import ProtectedRoute from '../../../../components/auth/ProtectedRoute'
 import AppLayout from '../../../../components/layout/AppLayout'
 import { useEmailAccounts } from '../../../../hooks/useEmailAccounts'
@@ -12,6 +13,12 @@ import { Button } from '../../../../components/ui/button'
 import { Badge } from '../../../../components/ui/badge'
 import { Skeleton } from '../../../../components/ui/skeleton'
 import { useToast } from '../../../../components/ui/toast'
+
+// Dynamic import to prevent SSR issues
+const RichTextEditor = dynamic(() => import('../../../../components/ui/rich-text-editor').then(mod => mod.RichTextEditor), {
+  ssr: false,
+  loading: () => <div className="border border-gray-300 rounded-md p-4 min-h-[200px] bg-gray-50 animate-pulse" />
+})
 import {
   ArrowLeft,
   Settings,
@@ -124,9 +131,18 @@ function AccountConfigurationContent() {
   const [webhooks, setWebhooks] = useState<WebhookConfig[]>([])
   const [assignedWebhookIds, setAssignedWebhookIds] = useState<string[]>([])
   const [loadingWebhooks, setLoadingWebhooks] = useState(false)
+  const [signatureContent, setSignatureContent] = useState('')
 
   // Find the account from the loaded accounts
   const account = accounts.find(acc => acc.id === accountId)
+
+  // Initialize signature content when account loads
+  useEffect(() => {
+    if (account && !signatureContent) {
+      const settings = getAccountSettings(account)
+      setSignatureContent(settings.signature || '')
+    }
+  }, [account, signatureContent])
   
   console.log('📧 Looking for account ID:', accountId)
   console.log('📧 Available accounts:', accounts.map(a => ({ id: a.id, email: a.email })))
@@ -453,18 +469,20 @@ function AccountConfigurationContent() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Email Signature
             </label>
-            <textarea
-              rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="Enter your email signature..."
-              defaultValue={getAccountSettings(account).signature || ''}
-            />
+            <div className="border border-gray-300 rounded-md">
+              <RichTextEditor
+                content={signatureContent}
+                onChange={(html, text) => setSignatureContent(html)}
+                placeholder="Enter your email signature with rich formatting..."
+                minHeight="150px"
+              />
+            </div>
           </div>
 
           {/* Save Button */}
           <div className="flex justify-end">
-            <Button 
-              onClick={() => saveSettings({})}
+            <Button
+              onClick={() => saveSettings({ signature: signatureContent })}
               disabled={saving}
             >
               {saving ? (
