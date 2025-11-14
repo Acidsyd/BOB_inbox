@@ -82,8 +82,8 @@ async function testSmtpConnection(smtpConfig) {
         user: smtpConfig.user,
         pass: smtpConfig.pass
       },
-      connectionTimeout: 10000,
-      greetingTimeout: 5000
+      connectionTimeout: 30000, // 30 seconds (increased for slow networks)
+      greetingTimeout: 15000    // 15 seconds
     });
 
     transporter.verify((error, success) => {
@@ -109,8 +109,8 @@ async function testImapConnection(imapConfig) {
       port: imapConfig.port,
       tls: imapConfig.secure !== false,
       tlsOptions: { rejectUnauthorized: false },
-      connTimeout: 10000,
-      authTimeout: 5000
+      connTimeout: 30000,  // 30 seconds (increased for slow networks)
+      authTimeout: 15000   // 15 seconds
     });
 
     let connectionSuccessful = false;
@@ -260,31 +260,49 @@ router.post('/test-connection', authenticateToken, testConnectionLimiter, async 
       });
     }
 
-    console.log('🧪 Testing SMTP connection:', { host, port, user });
+    console.log('🧪 Testing SMTP connection:', {
+      host,
+      port,
+      secure: secure === true || secure === 'true',
+      user
+    });
 
     // Test SMTP connection
-    await testSmtpConnection({
-      host,
-      port: parseInt(port),
-      secure: secure === true || secure === 'true',
-      user,
-      pass
+    try {
+      await testSmtpConnection({
+        host,
+        port: parseInt(port),
+        secure: secure === true || secure === 'true',
+        user,
+        pass
+      });
+      console.log('✅ SMTP connection successful');
+    } catch (smtpError) {
+      console.error('❌ SMTP connection failed:', smtpError.code, smtpError.message);
+      throw smtpError;
+    }
+
+    console.log('🧪 Testing IMAP connection:', {
+      host: imapHost,
+      port: imapPort,
+      secure: imapSecure === true || imapSecure === 'true',
+      user
     });
-
-    console.log('✅ SMTP connection successful');
-
-    console.log('🧪 Testing IMAP connection:', { host: imapHost, port: imapPort, user });
 
     // Test IMAP connection
-    await testImapConnection({
-      host: imapHost,
-      port: parseInt(imapPort),
-      secure: imapSecure === true || imapSecure === 'true',
-      user,
-      pass
-    });
-
-    console.log('✅ IMAP connection successful');
+    try {
+      await testImapConnection({
+        host: imapHost,
+        port: parseInt(imapPort),
+        secure: imapSecure === true || imapSecure === 'true',
+        user,
+        pass
+      });
+      console.log('✅ IMAP connection successful');
+    } catch (imapError) {
+      console.error('❌ IMAP connection failed:', imapError.code, imapError.message);
+      throw imapError;
+    }
 
     res.json({
       success: true,
