@@ -24,12 +24,21 @@ function generateUnsubscribeToken(email, campaignId, organizationId) {
     organizationId,
     timestamp: Date.now()
   });
-  
-  const cipher = crypto.createCipher('aes-256-cbc', UNSUBSCRIBE_SECRET);
+
+  // Generate a random IV (initialization vector)
+  const iv = crypto.randomBytes(16);
+
+  // Create key from secret (must be 32 bytes for aes-256)
+  const key = crypto.createHash('sha256').update(UNSUBSCRIBE_SECRET).digest();
+
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
   let encrypted = cipher.update(payload, 'utf8', 'hex');
   encrypted += cipher.final('hex');
-  
-  return Buffer.from(encrypted).toString('base64url');
+
+  // Prepend IV to encrypted data (IV is not secret)
+  const combined = iv.toString('hex') + encrypted;
+
+  return Buffer.from(combined).toString('base64url');
 }
 
 /**
@@ -39,20 +48,28 @@ function generateUnsubscribeToken(email, campaignId, organizationId) {
  */
 function decryptUnsubscribeToken(token) {
   try {
-    const encrypted = Buffer.from(token, 'base64url').toString();
-    const decipher = crypto.createDecipher('aes-256-cbc', UNSUBSCRIBE_SECRET);
+    const combined = Buffer.from(token, 'base64url').toString();
+
+    // Extract IV (first 32 hex characters = 16 bytes)
+    const iv = Buffer.from(combined.slice(0, 32), 'hex');
+    const encrypted = combined.slice(32);
+
+    // Create key from secret (must be 32 bytes for aes-256)
+    const key = crypto.createHash('sha256').update(UNSUBSCRIBE_SECRET).digest();
+
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
-    
+
     const payload = JSON.parse(decrypted);
-    
+
     // Check if token is not too old (7 days max)
     const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
     if (Date.now() - payload.timestamp > maxAge) {
       console.log('🚫 Unsubscribe token expired');
       return null;
     }
-    
+
     return payload;
   } catch (error) {
     console.error('❌ Error decrypting unsubscribe token:', error);

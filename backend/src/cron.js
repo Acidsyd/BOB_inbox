@@ -24,9 +24,8 @@ processor.start();
 const bounceDetector = new BounceDetectionService();
 bounceDetector.start();
 
-// Create and start the nightly reschedule service
-const nightlyReschedule = new NightlyRescheduleService();
-nightlyReschedule.start();
+// Start the nightly reschedule service (singleton instance)
+NightlyRescheduleService.start();
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

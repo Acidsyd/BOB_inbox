@@ -317,15 +317,7 @@ class EmailService {
         }, 'sent');
       }
 
-      // Auto-sync the sent message
-      try {
-        const emailSyncService = this.getEmailSyncService();
-        await emailSyncService.syncSentMessage(result, account, organizationId);
-        console.log('🔄 Auto-sync completed for sent reply');
-      } catch (syncError) {
-        console.error('⚠️ Auto-sync failed (non-critical):', syncError.message);
-        // Don't fail the email send if sync fails
-      }
+      // Note: Auto-sync removed - BackgroundSyncService handles all email syncing at 15-min intervals
 
       console.log('✅ Reply sent successfully');
       return result;
@@ -429,17 +421,7 @@ class EmailService {
         });
       }
 
-      // Auto-sync the sent message
-      if (result && result.success) {
-        try {
-          const emailSyncService = this.getEmailSyncService();
-          await emailSyncService.syncSentMessage(result, account, organizationId);
-          console.log('🔄 Auto-sync completed for sent email');
-        } catch (syncError) {
-          console.error('⚠️ Auto-sync failed (non-critical):', syncError.message);
-          // Don't fail the email send if sync fails
-        }
-      }
+      // Note: Auto-sync removed - BackgroundSyncService handles all email syncing at 15-min intervals
 
       return result;
 
