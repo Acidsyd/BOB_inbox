@@ -117,6 +117,7 @@ class ImapService {
             const messagesToFetch = results.slice(-limit);
 
             const fetch = imap.fetch(messagesToFetch, fetchOptions);
+            const parsePromises = [];
 
             fetch.on('message', (msg, seqno) => {
               let buffer = '';
@@ -133,8 +134,8 @@ class ImapService {
               });
 
               msg.once('end', () => {
-                // Parse email
-                simpleParser(buffer)
+                // Create a promise for parsing this email
+                const parsePromise = simpleParser(buffer)
                   .then((parsed) => {
                     emails.push({
                       uid: attributes.uid,
@@ -153,6 +154,8 @@ class ImapService {
                   .catch((parseErr) => {
                     console.error('❌ Error parsing email:', parseErr.message);
                   });
+
+                parsePromises.push(parsePromise);
               });
             });
 
@@ -161,9 +164,18 @@ class ImapService {
               reject(fetchErr);
             });
 
-            fetch.once('end', () => {
-              imap.end();
-              resolve(emails);
+            fetch.once('end', async () => {
+              // Wait for all emails to be parsed before resolving
+              try {
+                await Promise.all(parsePromises);
+                console.log(`✅ Successfully parsed ${emails.length} emails`);
+                imap.end();
+                resolve(emails);
+              } catch (parseError) {
+                console.error('❌ Error waiting for email parsing:', parseError);
+                imap.end();
+                resolve(emails); // Resolve with whatever we managed to parse
+              }
             });
           });
         });
