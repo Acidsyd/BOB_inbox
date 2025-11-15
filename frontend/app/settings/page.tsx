@@ -14,7 +14,8 @@ import {
   ArrowRight,
   CheckCircle,
   AlertTriangle,
-  Clock
+  Clock,
+  Code
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -64,6 +65,15 @@ function SettingsContent() {
       status: 'success',
       statusText: 'Auto-detected',
       color: 'border-purple-200 bg-purple-50'
+    },
+    {
+      title: 'API & Webhooks',
+      description: 'API documentation, endpoints, and developer integrations',
+      icon: Code,
+      href: '/settings/api',
+      status: 'neutral',
+      statusText: 'Ready to integrate',
+      color: 'border-indigo-200 bg-indigo-50'
     }
   ]
 
