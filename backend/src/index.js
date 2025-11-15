@@ -50,6 +50,7 @@ app.use('/api/lead-lists', require('./routes/leadLists'));
 app.use('/api/leads/lists', require('./routes/leadLists'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/email-accounts', require('./routes/emailAccounts'));
+app.use('/api/relay-providers', require('./routes/relayProviders'));
 app.use('/api/smtp', require('./routes/smtp'));
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/oauth2', require('./routes/oauth2'));

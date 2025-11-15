@@ -637,6 +637,98 @@ npm run db:cleanup:emergency --confirm     # Execute cleanup
 - Exact interval compliance for all campaigns
 - Smart account rotation with automatic failover
 
+## Display Name Management
+
+### Architecture
+Email accounts support customizable display names that appear in:
+- Account management list
+- Compose email modal (from dropdown)
+- Email headers when sending
+
+### Database Schema
+```sql
+-- Both tables support display_name
+email_accounts (id, email, provider, display_name, ...)
+oauth2_tokens (id, email, provider, display_name, ...)
+```
+
+### Backend Implementation
+The `/api/email-accounts/:id/settings` endpoint accepts `display_name`:
+
+```javascript
+// emailAccounts.js - PUT /:id/settings
+router.put('/:id/settings', authenticateToken, async (req, res) => {
+  const { display_name, daily_limit, hourly_limit, ... } = req.body;
+
+  const updateData = {};
+  if (display_name !== undefined) updateData.display_name = display_name;
+  // ... other fields
+
+  await supabase
+    .from('email_accounts')
+    .update(updateData)
+    .eq('id', id)
+    .eq('organization_id', req.user.organizationId);
+});
+```
+
+### Frontend Patterns
+
+**Display Name in Compose Modal** (`ComposeEmailModal.tsx`):
+```typescript
+// Show display name prominently, email as secondary
+<SelectItem key={account.id} value={account.id}>
+  <div className="flex flex-col">
+    <div className="flex items-center space-x-2">
+      <span className="font-medium">{account.display_name}</span>
+      <Badge variant="secondary">{account.provider.toUpperCase()}</Badge>
+    </div>
+    {account.display_name !== account.email && (
+      <span className="text-xs text-gray-500">{account.email}</span>
+    )}
+  </div>
+</SelectItem>
+```
+
+**Editable Display Name** (`settings/email-accounts/[id]/page.tsx`):
+```typescript
+// State management
+const [displayName, setDisplayName] = useState('')
+const [isEditingDisplayName, setIsEditingDisplayName] = useState(false)
+const [savingDisplayName, setSavingDisplayName] = useState(false)
+
+// Save function
+const saveDisplayName = async () => {
+  await api.put(`/email-accounts/${account.id}/settings`, {
+    display_name: displayName
+  })
+  // Show success toast, refresh page
+}
+
+// UI with edit/save/cancel buttons
+{isEditingDisplayName ? (
+  <Input value={displayName} onChange={...} />
+  <Button onClick={saveDisplayName}>Save</Button>
+  <Button onClick={cancel}>Cancel</Button>
+) : (
+  <div>{account.display_name || "Not set"}</div>
+  <Button onClick={edit}>Edit</Button>
+)}
+```
+
+### Data Flow
+1. User updates display name in account settings page
+2. PUT request to `/api/email-accounts/:id/settings` with `display_name`
+3. Backend updates `email_accounts` or `oauth2_tokens` table
+4. Frontend refreshes to show updated display name
+5. Compose modal immediately shows new display name in dropdown
+
+### Important Notes
+- Display name defaults to email address if not set
+- Display name is used in "From" header when sending emails
+- Both OAuth2 and relay (Mailgun/SendGrid) accounts support display names
+- Always include `display_name` in SELECT queries for email accounts
+
 ## Critical Patterns
 
 1. **Always use organization_id filtering** for multi-tenant isolation
@@ -652,6 +744,7 @@ npm run db:cleanup:emergency --confirm     # Execute cleanup
 11. **Account rotation prevents single-account bottlenecks**
 12. **Human-like jitter prevents robotic patterns** in email timing
 13. **Frontend timezone consistency requires formatDateInTimezone()** - never use backend display timestamps
+14. **Display names must be included in email account queries** - use in compose dropdowns and email headers
 
 ## Timezone Patterns (CRITICAL)
 

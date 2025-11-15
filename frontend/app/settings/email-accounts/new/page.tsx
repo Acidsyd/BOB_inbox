@@ -7,100 +7,39 @@ import { Button } from '../../../../components/ui/button'
 import { Input } from '../../../../components/ui/input'
 import { Label } from '../../../../components/ui/label'
 import { useToast } from '../../../../components/ui/toast'
-import { 
-  ArrowLeft, 
+import {
+  ArrowLeft,
+  ArrowRight,
   Shield,
   CheckCircle,
-  AlertCircle,
   Loader2,
-  ExternalLink,
   Mail,
-  Server,
   Zap,
   Eye,
   EyeOff,
   TestTube,
   ChevronRight,
-  Settings
+  Send
 } from 'lucide-react'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useWorkflowNavigation } from '../../../../lib/navigation/context'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../../components/ui/select'
 
-type SetupStep = 'provider-selection' | 'gmail-oauth2-setup' | 'microsoft-oauth2-setup' | 'smtp-setup'
-type Provider = 'gmail-oauth2' | 'microsoft-oauth2' | 'smtp'
+type SetupStep = 'provider-selection' | 'gmail-oauth2-setup' | 'microsoft-oauth2-setup' | 'sendgrid-setup' | 'mailgun-setup'
+type Provider = 'gmail-oauth2' | 'microsoft-oauth2' | 'sendgrid' | 'mailgun'
 
-interface SMTPConfig {
-  email: string
-  password: string
-  host: string
-  port: string
-  secure: boolean
-  displayName: string
-  // IMAP Configuration (for receiving emails)
-  imapHost: string
-  imapPort: string
-  imapSecure: boolean
-}
-
-// Provider configurations for SMTP + IMAP
-const smtpProviders = {
-  gmail: {
-    name: 'Gmail SMTP',
-    host: 'smtp.gmail.com',
-    port: '587',
-    secure: false,
-    imapHost: 'imap.gmail.com',
-    imapPort: '993',
-    imapSecure: true,
-    instructions: 'Use Gmail App Password instead of your regular password. Enable 2FA first.',
-    icon: '🔗'
-  },
-  outlook: {
-    name: 'Outlook SMTP',
-    host: 'smtp-mail.outlook.com',
-    port: '587',
-    secure: false,
-    imapHost: 'outlook.office365.com',
-    imapPort: '993',
-    imapSecure: true,
-    instructions: 'Use Outlook App Password. Enable 2FA and generate app-specific password.',
-    icon: '📧'
-  },
-  yahoo: {
-    name: 'Yahoo Mail SMTP',
-    host: 'smtp.mail.yahoo.com',
-    port: '587',
-    secure: false,
-    imapHost: 'imap.mail.yahoo.com',
-    imapPort: '993',
-    imapSecure: true,
-    instructions: 'Generate Yahoo App Password from Account Security settings.',
-    icon: '💜'
-  },
-  protonmail: {
-    name: 'ProtonMail SMTP',
-    host: 'mail.protonmail.ch',
-    port: '587',
-    secure: false,
-    imapHost: '127.0.0.1',
-    imapPort: '1143',
-    imapSecure: false,
-    instructions: 'Requires ProtonMail Bridge. Download and configure Bridge first.',
-    icon: '🛡️'
-  },
-  custom: {
-    name: 'Custom SMTP',
-    host: '',
-    port: '587',
-    secure: false,
-    imapHost: '',
-    imapPort: '993',
-    imapSecure: true,
-    instructions: 'Configure your custom SMTP server settings.',
-    icon: '⚙️'
-  }
+interface RelayProviderConfig {
+  provider_type: 'sendgrid' | 'mailgun'
+  provider_name: string
+  api_key: string
+  from_email: string
+  from_name: string
+  daily_limit: number
+  // Mailgun-specific
+  domain?: string
+  region?: 'us' | 'eu'
 }
 
 function AddEmailAccountContent() {
@@ -108,28 +47,74 @@ function AddEmailAccountContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const workflowNavigation = useWorkflowNavigation()
-  
+
   // State management
   const [currentStep, setCurrentStep] = useState<SetupStep>('provider-selection')
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
+  const [showApiKey, setShowApiKey] = useState(false)
   const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [connectionTestPassed, setConnectionTestPassed] = useState(false)
-  
-  
-  // SMTP Configuration
-  const [smtpConfig, setSMTPConfig] = useState<SMTPConfig>({
-    email: '',
-    password: '',
-    host: '',
-    port: '587',
-    secure: false,
-    displayName: '',
-    imapHost: '',
-    imapPort: '993',
-    imapSecure: true
+
+  // Relay Provider Configuration
+  const [relayConfig, setRelayConfig] = useState<RelayProviderConfig>({
+    provider_type: 'sendgrid',
+    provider_name: '',
+    api_key: '',
+    from_email: '',  // Still needed for SendGrid
+    from_name: '',   // Still needed for SendGrid
+    daily_limit: 100,
+    domain: '',
+    region: 'us'
   })
+
+  // Load existing Mailgun provider and redirect to Step 2 if exists (unless editing)
+  useEffect(() => {
+    const loadMailgunProvider = async () => {
+      if (currentStep !== 'mailgun-setup') return
+
+      // Check if user wants to edit the configuration
+      const isEditMode = searchParams.get('edit') === 'true'
+
+      try {
+        const token = localStorage.getItem('token')
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+
+        const response = await fetch(`${apiUrl}/api/relay-providers`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          const mailgunProvider = data.providers?.find((p: any) => p.provider_type === 'mailgun')
+
+          if (mailgunProvider) {
+            if (isEditMode) {
+              // Edit mode - load configuration into form
+              setRelayConfig({
+                provider_type: 'mailgun',
+                provider_name: mailgunProvider.provider_name || '',
+                api_key: mailgunProvider.api_key || '',
+                from_email: mailgunProvider.from_email || '',
+                from_name: mailgunProvider.from_name || '',
+                daily_limit: mailgunProvider.daily_limit || 100,
+                domain: mailgunProvider.domain || '',
+                region: (mailgunProvider.region || 'us') as 'us' | 'eu'
+              })
+              setConnectionTestPassed(true)
+            } else {
+              // Not edit mode - redirect directly to Step 2 (link-accounts page)
+              router.push(`/settings/email-accounts/mailgun/${mailgunProvider.id}/link-accounts`)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading Mailgun provider:', error)
+      }
+    }
+
+    loadMailgunProvider()
+  }, [currentStep, router, searchParams])
 
   // Check for OAuth2 callback results
   useEffect(() => {
@@ -145,11 +130,9 @@ function AddEmailAccountContent() {
         description: `Successfully connected ${email} via ${providerName}`,
         type: 'success'
       })
-      
+
       setTimeout(() => {
-        // Check if we have a return path from navigation context
         if (workflowNavigation.returnPath) {
-          console.log('🧭 OAuth2 success: Returning to workflow path:', workflowNavigation.returnPath)
           router.push(workflowNavigation.returnPath)
           workflowNavigation.clearNavigationState()
         } else {
@@ -203,7 +186,7 @@ function AddEmailAccountContent() {
           description: 'Opening Google authorization page...',
           type: 'info'
         })
-        
+
         window.location.href = result.authUrl
       } else {
         throw new Error('Failed to get Gmail authorization URL')
@@ -257,7 +240,7 @@ function AddEmailAccountContent() {
           description: 'Opening Microsoft authorization page...',
           type: 'info'
         })
-        
+
         window.location.href = result.authUrl
       } else {
         throw new Error('Failed to get Microsoft authorization URL')
@@ -265,9 +248,8 @@ function AddEmailAccountContent() {
 
     } catch (error: any) {
       console.error('Microsoft OAuth2 setup error:', error)
-      
-      // Check if it's a configuration issue
-      if (error.message.includes('Microsoft OAuth2 service is not available') || 
+
+      if (error.message.includes('Microsoft OAuth2 service is not available') ||
           error.message.includes('not configured')) {
         addToast({
           title: 'Microsoft OAuth2 Not Configured',
@@ -286,8 +268,8 @@ function AddEmailAccountContent() {
     }
   }
 
-  // SMTP Connection Test Handler
-  const handleSMTPTest = async () => {
+  // Relay Provider Test Handler
+  const handleRelayTest = async () => {
     setIsTestingConnection(true)
     setConnectionTestPassed(false)
 
@@ -297,27 +279,49 @@ function AddEmailAccountContent() {
         throw new Error('No authentication token found. Please log in again.')
       }
 
-      if (!smtpConfig.email || !smtpConfig.password || !smtpConfig.host || !smtpConfig.port) {
-        throw new Error('Please fill in all required SMTP fields')
+      // For SendGrid: require from_email
+      if (relayConfig.provider_type === 'sendgrid' && (!relayConfig.api_key || !relayConfig.from_email)) {
+        throw new Error('Please fill in API key and from email')
       }
 
-      const response = await fetch('/api/smtp/test-connection', {
+      // For Mailgun: only require api_key and domain (NO from_email!)
+      if (relayConfig.provider_type === 'mailgun') {
+        if (!relayConfig.api_key || !relayConfig.domain) {
+          throw new Error('Please fill in API key and domain')
+        }
+      }
+
+      // Create relay provider with validation
+      const testPayload: any = {
+        provider_type: relayConfig.provider_type,
+        provider_name: relayConfig.provider_name || `${relayConfig.provider_type} Account`,
+        api_key: relayConfig.api_key,
+        daily_limit: relayConfig.daily_limit,
+        config: {}
+      }
+
+      // Add from_email and from_name ONLY for SendGrid
+      if (relayConfig.provider_type === 'sendgrid') {
+        testPayload.from_email = relayConfig.from_email
+        testPayload.from_name = relayConfig.from_name
+      }
+
+      // Add Mailgun-specific config
+      if (relayConfig.provider_type === 'mailgun') {
+        testPayload.config = {
+          domain: relayConfig.domain,
+          region: relayConfig.region
+        }
+      }
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+      const response = await fetch(`${apiUrl}/api/relay-providers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          user: smtpConfig.email,
-          pass: smtpConfig.password,
-          host: smtpConfig.host,
-          port: smtpConfig.port,
-          secure: smtpConfig.secure,
-          // IMAP configuration for receiving emails
-          imapHost: smtpConfig.imapHost,
-          imapPort: smtpConfig.imapPort,
-          imapSecure: smtpConfig.imapSecure
-        })
+        body: JSON.stringify(testPayload)
       })
 
       const result = await response.json()
@@ -325,92 +329,106 @@ function AddEmailAccountContent() {
       if (result.success) {
         setConnectionTestPassed(true)
         addToast({
-          title: 'Connection Test Passed!',
-          description: result.testEmailSent ?
-            'SMTP connection successful and test email sent.' :
-            'SMTP connection successful.',
+          title: 'API Key Validated!',
+          description: `${relayConfig.provider_type === 'sendgrid' ? 'SendGrid' : 'Mailgun'} connection successful.`,
           type: 'success'
         })
-      } else {
-        // Show detailed error with suggestions if available
-        const errorDetails = result.suggestions && result.suggestions.length > 0
-          ? `${result.error || 'Connection failed'}\n\nSuggestions:\n${result.suggestions.map((s: string) => `• ${s}`).join('\n')}`
-          : result.details || result.error || 'SMTP connection test failed';
 
-        throw new Error(errorDetails)
+        // Store the provider ID for Step 2 (link email accounts)
+        ;(window as any).__temp_relay_provider_id = result.provider.id
+      } else {
+        throw new Error(result.error || 'Validation failed')
       }
 
     } catch (error: any) {
-      console.error('SMTP test error:', error)
-      console.error('Full error details:', error.message)
+      console.error('Relay test error:', error)
       addToast({
         title: 'Connection Test Failed',
-        description: error.message || 'Failed to test SMTP connection',
+        description: error.message || 'Failed to validate API key',
         type: 'error',
-        duration: 10000 // Show longer for detailed errors
+        duration: 10000
       })
     } finally {
       setIsTestingConnection(false)
     }
   }
 
-  // SMTP Save Handler
-  const handleSMTPSave = async () => {
+  // Relay Provider Save Handler
+  const handleRelaySave = async () => {
     setIsLoading(true)
 
     try {
-      const token = localStorage.getItem('token')
-      if (!token) {
-        throw new Error('No authentication token found. Please log in again.')
-      }
-
       if (!connectionTestPassed) {
         throw new Error('Please test the connection first before saving')
       }
 
-      const response = await fetch('/api/smtp/credentials', {
+      // Get the relay provider ID from temp storage
+      const relayProviderId = (window as any).__temp_relay_provider_id
+      if (!relayProviderId) {
+        throw new Error('Relay provider ID not found. Please test connection again.')
+      }
+
+      // For Mailgun: Redirect to Step 2 (link email accounts)
+      if (relayConfig.provider_type === 'mailgun') {
+        addToast({
+          title: 'Mailgun Configured!',
+          description: 'Now link your email accounts to this provider',
+          type: 'success'
+        })
+
+        // Redirect to link-accounts page
+        router.push(`/settings/email-accounts/mailgun/${relayProviderId}/link-accounts`)
+        return
+      }
+
+      // For SendGrid: Keep the old flow (create email account directly)
+      const token = localStorage.getItem('token')
+      if (!token) {
+        throw new Error('No authentication token found')
+      }
+
+      // Create an email account associated with this relay provider
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+      const emailAccountResponse = await fetch(`${apiUrl}/api/email-accounts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          email: smtpConfig.email,
-          user: smtpConfig.email, // SMTP username (usually same as email)
-          pass: smtpConfig.password,
-          host: smtpConfig.host,
-          port: smtpConfig.port,
-          secure: smtpConfig.secure,
-          providerId: 'custom', // Always use custom for manual SMTP/IMAP setup
-          displayName: smtpConfig.displayName || smtpConfig.email.split('@')[0],
-          // IMAP configuration for receiving emails
-          imapHost: smtpConfig.imapHost,
-          imapPort: smtpConfig.imapPort,
-          imapSecure: smtpConfig.imapSecure
+          email: relayConfig.from_email,
+          provider: relayConfig.provider_type,
+          relay_provider_id: relayProviderId,
+          settings: {
+            from_name: relayConfig.from_name,
+            daily_limit: relayConfig.daily_limit
+          }
         })
       })
 
-      const result = await response.json()
-
-      if (result.success) {
-        addToast({
-          title: 'SMTP Account Added!',
-          description: `Successfully configured ${result.email} via SMTP`,
-          type: 'success'
-        })
-        
-        setTimeout(() => {
-          router.push('/settings/email-accounts')
-        }, 2000)
-      } else {
-        throw new Error(result.details || 'Failed to save SMTP credentials')
+      if (!emailAccountResponse.ok) {
+        const errorData = await emailAccountResponse.json()
+        throw new Error(errorData.error || 'Failed to create email account')
       }
 
+      addToast({
+        title: 'SendGrid Added!',
+        description: `Successfully configured ${relayConfig.from_email}`,
+        type: 'success'
+      })
+
+      // Clean up temp storage
+      delete (window as any).__temp_relay_provider_id
+
+      setTimeout(() => {
+        router.push('/settings/email-accounts')
+      }, 2000)
+
     } catch (error: any) {
-      console.error('SMTP save error:', error)
+      console.error('Relay save error:', error)
       addToast({
         title: 'Setup Failed',
-        description: error.message || 'Failed to save SMTP configuration',
+        description: error.message || 'Failed to save configuration',
         type: 'error'
       })
     } finally {
@@ -425,25 +443,13 @@ function AddEmailAccountContent() {
       setCurrentStep('gmail-oauth2-setup')
     } else if (provider === 'microsoft-oauth2') {
       setCurrentStep('microsoft-oauth2-setup')
-    } else {
-      setCurrentStep('smtp-setup')
+    } else if (provider === 'sendgrid') {
+      setRelayConfig(prev => ({ ...prev, provider_type: 'sendgrid' }))
+      setCurrentStep('sendgrid-setup')
+    } else if (provider === 'mailgun') {
+      setRelayConfig(prev => ({ ...prev, provider_type: 'mailgun' }))
+      setCurrentStep('mailgun-setup')
     }
-  }
-
-  // SMTP Provider Change Handler
-  const handleSMTPProviderChange = (provider: SMTPProvider) => {
-    const providerConfig = smtpProviders[provider]
-    setSMTPConfig(prev => ({
-      ...prev,
-      provider,
-      host: providerConfig.host,
-      port: providerConfig.port,
-      secure: providerConfig.secure,
-      imapHost: providerConfig.imapHost,
-      imapPort: providerConfig.imapPort,
-      imapSecure: providerConfig.imapSecure
-    }))
-    setConnectionTestPassed(false)
   }
 
   // Provider Selection Step
@@ -465,9 +471,9 @@ function AddEmailAccountContent() {
         </div>
 
         {/* Provider Options */}
-        <div className="grid lg:grid-cols-3 md:grid-cols-2 gap-6">
+        <div className="grid lg:grid-cols-2 md:grid-cols-2 gap-6">
           {/* Gmail OAuth2 Option */}
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-blue-500" 
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-blue-500"
                 onClick={() => handleProviderSelect('gmail-oauth2')}>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -505,7 +511,7 @@ function AddEmailAccountContent() {
           </Card>
 
           {/* Microsoft OAuth2 Option */}
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-orange-500" 
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-orange-500"
                 onClick={() => handleProviderSelect('microsoft-oauth2')}>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -542,39 +548,77 @@ function AddEmailAccountContent() {
             </CardContent>
           </Card>
 
-          {/* SMTP Option */}
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-purple-500" 
-                onClick={() => handleProviderSelect('smtp')}>
+          {/* SendGrid Option */}
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-indigo-500"
+                onClick={() => handleProviderSelect('sendgrid')}>
             <CardHeader>
               <CardTitle className="flex items-center">
-                <Server className="h-6 w-6 mr-3 text-purple-600" />
-                SMTP Integration
+                <Send className="h-6 w-6 mr-3 text-indigo-600" />
+                SendGrid
               </CardTitle>
               <CardDescription>
-                Connect via SMTP for Gmail, Outlook, Yahoo, ProtonMail, or custom servers
+                Professional email delivery with SendGrid API (100 emails/day free)
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="flex items-center space-x-3">
-                  <Mail className="h-5 w-5 text-purple-600" />
-                  <span className="text-sm">Universal compatibility</span>
+                  <Zap className="h-5 w-5 text-indigo-600" />
+                  <span className="text-sm">No port 25 required</span>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <Settings className="h-5 w-5 text-purple-600" />
-                  <span className="text-sm">Custom server support</span>
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <span className="text-sm">100 emails/day free</span>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <Shield className="h-5 w-5 text-purple-600" />
-                  <span className="text-sm">Encrypted storage</span>
+                  <Shield className="h-5 w-5 text-indigo-600" />
+                  <span className="text-sm">Pre-warmed IPs</span>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <TestTube className="h-5 w-5 text-purple-600" />
-                  <span className="text-sm">Connection testing</span>
+                  <Mail className="h-5 w-5 text-indigo-600" />
+                  <span className="text-sm">Better deliverability</span>
                 </div>
               </div>
               <Button variant="outline" className="w-full mt-6" size="lg">
-                Configure SMTP
+                Configure SendGrid
+                <ChevronRight className="h-4 w-4 ml-2" />
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Mailgun Option */}
+          <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-red-500"
+                onClick={() => handleProviderSelect('mailgun')}>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Mail className="h-6 w-6 mr-3 text-red-600" />
+                Mailgun
+              </CardTitle>
+              <CardDescription>
+                Powerful email API by Mailgun (5,000 emails/month free for 3 months)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-center space-x-3">
+                  <Zap className="h-5 w-5 text-red-600" />
+                  <span className="text-sm">No port 25 required</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <span className="text-sm">5,000 emails/month free</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <Shield className="h-5 w-5 text-red-600" />
+                  <span className="text-sm">Enterprise-grade reliability</span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <Mail className="h-5 w-5 text-red-600" />
+                  <span className="text-sm">Great for developers</span>
+                </div>
+              </div>
+              <Button variant="outline" className="w-full mt-6" size="lg">
+                Configure Mailgun
                 <ChevronRight className="h-4 w-4 ml-2" />
               </Button>
             </CardContent>
@@ -590,7 +634,7 @@ function AddEmailAccountContent() {
       <div className="p-6 max-w-2xl mx-auto">
         {/* Header */}
         <div className="flex items-center mb-8">
-          <Button variant="outline" size="sm" className="mr-4" 
+          <Button variant="outline" size="sm" className="mr-4"
                   onClick={() => setCurrentStep('provider-selection')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Provider Selection
@@ -655,7 +699,7 @@ function AddEmailAccountContent() {
       <div className="p-6 max-w-2xl mx-auto">
         {/* Header */}
         <div className="flex items-center mb-8">
-          <Button variant="outline" size="sm" className="mr-4" 
+          <Button variant="outline" size="sm" className="mr-4"
                   onClick={() => setCurrentStep('provider-selection')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Provider Selection
@@ -714,179 +758,137 @@ function AddEmailAccountContent() {
     )
   }
 
-  // SMTP Setup Step
-  if (currentStep === 'smtp-setup') {
+  // SendGrid Setup Step
+  if (currentStep === 'sendgrid-setup') {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         {/* Header */}
         <div className="flex items-center mb-8">
-          <Button variant="outline" size="sm" className="mr-4" 
+          <Button variant="outline" size="sm" className="mr-4"
                   onClick={() => setCurrentStep('provider-selection')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Provider Selection
           </Button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">SMTP Configuration</h1>
-            <p className="text-gray-600">Configure your SMTP email account</p>
+            <h1 className="text-2xl font-bold text-gray-900">SendGrid Configuration</h1>
+            <p className="text-gray-600">Configure your SendGrid API key</p>
           </div>
         </div>
 
-        {/* SMTP Configuration Card */}
+        {/* SendGrid Configuration Card */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center">
-              <Server className="h-5 w-5 mr-2 text-purple-600" />
-              SMTP Account Setup
+              <Send className="h-5 w-5 mr-2 text-indigo-600" />
+              SendGrid Account Setup
             </CardTitle>
             <CardDescription>
-              Configure your SMTP settings to send emails
+              Enter your SendGrid API key to start sending emails
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Email Address */}
+            {/* Provider Name */}
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address *</Label>
+              <Label htmlFor="provider_name">Account Name *</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="your.email@gmail.com"
-                value={smtpConfig.email}
-                onChange={(e) => setSMTPConfig(prev => ({ ...prev, email: e.target.value }))}
+                id="provider_name"
+                placeholder="My SendGrid Account"
+                value={relayConfig.provider_name}
+                onChange={(e) => setRelayConfig(prev => ({ ...prev, provider_name: e.target.value }))}
                 className="w-full"
               />
+              <p className="text-xs text-gray-500">Friendly name to identify this account</p>
             </div>
 
-            {/* Password */}
+            {/* API Key */}
             <div className="space-y-2">
-              <Label htmlFor="password">Password / App Password *</Label>
+              <Label htmlFor="api_key">SendGrid API Key *</Label>
               <div className="relative">
                 <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter your app password"
-                  value={smtpConfig.password}
-                  onChange={(e) => setSMTPConfig(prev => ({ ...prev, password: e.target.value }))}
+                  id="api_key"
+                  type={showApiKey ? "text" : "password"}
+                  placeholder="SG.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  value={relayConfig.api_key}
+                  onChange={(e) => setRelayConfig(prev => ({ ...prev, api_key: e.target.value }))}
                   className="w-full pr-10"
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => setShowApiKey(!showApiKey)}
                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                 >
-                  {showPassword ? (
+                  {showApiKey ? (
                     <EyeOff className="h-4 w-4 text-gray-400" />
                   ) : (
                     <Eye className="h-4 w-4 text-gray-400" />
                   )}
                 </Button>
               </div>
-            </div>
-
-            {/* SMTP Settings (Outgoing) */}
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Mail className="h-4 w-4 text-purple-600" />
-                <Label className="text-sm font-semibold">SMTP Settings (Sending Emails)</Label>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="host">SMTP Host *</Label>
-                  <Input
-                    id="host"
-                    placeholder="smtp.gmail.com"
-                    value={smtpConfig.host}
-                    onChange={(e) => setSMTPConfig(prev => ({ ...prev, host: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="port">SMTP Port *</Label>
-                  <Input
-                    id="port"
-                    placeholder="587 or 465"
-                    value={smtpConfig.port}
-                    onChange={(e) => {
-                      const port = e.target.value;
-                      // Auto-detect SSL based on port: 465 = SSL, 587 = STARTTLS
-                      const secure = port === '465';
-                      setSMTPConfig(prev => ({ ...prev, port, secure }))
-                    }}
-                  />
-                  <p className="text-xs text-gray-500">
-                    Port 465 (SSL) or 587 (STARTTLS)
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* IMAP Settings (Incoming) */}
-            <div className="space-y-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <Server className="h-4 w-4 text-blue-600" />
-                <Label className="text-sm font-semibold">IMAP Settings (Receiving Emails)</Label>
-              </div>
-              <p className="text-xs text-blue-700">
-                IMAP enables inbox sync, reply detection, and conversation threading - just like OAuth2 accounts.
+              <p className="text-xs text-gray-500">
+                Get your API key from <a href="https://app.sendgrid.com/settings/api_keys" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">SendGrid Settings</a>
               </p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="imapHost">IMAP Host *</Label>
-                  <Input
-                    id="imapHost"
-                    placeholder="imap.gmail.com"
-                    value={smtpConfig.imapHost}
-                    onChange={(e) => setSMTPConfig(prev => ({ ...prev, imapHost: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="imapPort">IMAP Port *</Label>
-                  <Input
-                    id="imapPort"
-                    placeholder="993 or 143"
-                    value={smtpConfig.imapPort}
-                    onChange={(e) => {
-                      const port = e.target.value;
-                      // Auto-detect SSL based on port: 993 = SSL, 143 = STARTTLS
-                      const imapSecure = port === '993';
-                      setSMTPConfig(prev => ({ ...prev, imapPort: port, imapSecure }))
-                    }}
-                  />
-                  <p className="text-xs text-gray-500">
-                    Port 993 (SSL) or 143 (STARTTLS)
-                  </p>
-                </div>
-              </div>
             </div>
 
-            {/* Display Name */}
+            {/* From Email */}
             <div className="space-y-2">
-              <Label htmlFor="displayName">Display Name (Optional)</Label>
+              <Label htmlFor="from_email">From Email Address *</Label>
               <Input
-                id="displayName"
-                placeholder="Your Name"
-                value={smtpConfig.displayName}
-                onChange={(e) => setSMTPConfig(prev => ({ ...prev, displayName: e.target.value }))}
+                id="from_email"
+                type="email"
+                placeholder="noreply@yourdomain.com"
+                value={relayConfig.from_email}
+                onChange={(e) => setRelayConfig(prev => ({ ...prev, from_email: e.target.value }))}
+                className="w-full"
               />
+              <p className="text-xs text-gray-500">Must be a verified sender in SendGrid</p>
+            </div>
+
+            {/* From Name */}
+            <div className="space-y-2">
+              <Label htmlFor="from_name">From Name (Optional)</Label>
+              <Input
+                id="from_name"
+                placeholder="Your Company"
+                value={relayConfig.from_name}
+                onChange={(e) => setRelayConfig(prev => ({ ...prev, from_name: e.target.value }))}
+                className="w-full"
+              />
+            </div>
+
+            {/* Daily Limit */}
+            <div className="space-y-2">
+              <Label htmlFor="daily_limit">Daily Email Limit</Label>
+              <Input
+                id="daily_limit"
+                type="number"
+                min="1"
+                max="100"
+                value={relayConfig.daily_limit}
+                onChange={(e) => setRelayConfig(prev => ({ ...prev, daily_limit: parseInt(e.target.value) || 100 }))}
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500">SendGrid free tier: 100 emails/day</p>
             </div>
 
             {/* Connection Test */}
             <div className="space-y-3">
               <Button
-                onClick={handleSMTPTest}
-                disabled={isTestingConnection || !smtpConfig.email || !smtpConfig.password || !smtpConfig.host || !smtpConfig.port}
+                onClick={handleRelayTest}
+                disabled={isTestingConnection || !relayConfig.api_key || !relayConfig.from_email}
                 variant="outline"
                 className="w-full"
               >
                 {isTestingConnection ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Testing Connection...
+                    Validating API Key...
                   </>
                 ) : (
                   <>
                     <TestTube className="h-4 w-4 mr-2" />
-                    Test Connection
+                    Validate API Key
                   </>
                 )}
               </Button>
@@ -894,14 +896,14 @@ function AddEmailAccountContent() {
               {connectionTestPassed && (
                 <div className="flex items-center space-x-2 text-green-600 text-sm">
                   <CheckCircle className="h-4 w-4" />
-                  <span>Connection test passed! Ready to save.</span>
+                  <span>API key validated! Ready to save.</span>
                 </div>
               )}
             </div>
 
             {/* Save Button */}
             <Button
-              onClick={handleSMTPSave}
+              onClick={handleRelaySave}
               disabled={isLoading || !connectionTestPassed}
               className="w-full"
               size="lg"
@@ -913,23 +915,210 @@ function AddEmailAccountContent() {
                 </>
               ) : (
                 <>
-                  <Mail className="h-4 w-4 mr-2" />
-                  Save SMTP Account
+                  <Send className="h-4 w-4 mr-2" />
+                  Save SendGrid Account
                 </>
               )}
             </Button>
           </CardContent>
         </Card>
 
-        {/* Security Notice */}
-        <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+        {/* Info Box */}
+        <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
           <div className="flex items-start space-x-3">
-            <Shield className="h-5 w-5 text-purple-600 mt-0.5" />
+            <Shield className="h-5 w-5 text-indigo-600 mt-0.5" />
             <div>
-              <h4 className="font-medium text-purple-900">Your credentials are secure</h4>
-              <p className="text-sm text-purple-700">
-                All SMTP credentials are encrypted using AES-256 encryption before storage. 
-                We recommend using app passwords instead of your main account password.
+              <h4 className="font-medium text-indigo-900">Your API key is secure</h4>
+              <p className="text-sm text-indigo-700 mt-1">
+                All API keys are encrypted using AES-256 encryption before storage. SendGrid's free tier includes 100 emails per day forever.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Mailgun Setup Step
+  if (currentStep === 'mailgun-setup') {
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center mb-8">
+          <Button variant="outline" size="sm" className="mr-4"
+                  onClick={() => setCurrentStep('provider-selection')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Provider Selection
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Mailgun Configuration</h1>
+            <p className="text-gray-600">Configure your Mailgun API key and domain</p>
+          </div>
+        </div>
+
+        {/* Mailgun Configuration Card */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Mail className="h-5 w-5 mr-2 text-red-600" />
+              Mailgun Account Setup
+            </CardTitle>
+            <CardDescription>
+              Enter your Mailgun API key and domain to start sending emails
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Provider Name */}
+            <div className="space-y-2">
+              <Label htmlFor="provider_name">Account Name *</Label>
+              <Input
+                id="provider_name"
+                placeholder="My Mailgun Account"
+                value={relayConfig.provider_name}
+                onChange={(e) => setRelayConfig(prev => ({ ...prev, provider_name: e.target.value }))}
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500">Friendly name to identify this account</p>
+            </div>
+
+            {/* API Key */}
+            <div className="space-y-2">
+              <Label htmlFor="api_key">Mailgun API Key *</Label>
+              <div className="relative">
+                <Input
+                  id="api_key"
+                  type={showApiKey ? "text" : "password"}
+                  placeholder="key-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  value={relayConfig.api_key}
+                  onChange={(e) => setRelayConfig(prev => ({ ...prev, api_key: e.target.value }))}
+                  className="w-full pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                >
+                  {showApiKey ? (
+                    <EyeOff className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-gray-400" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500">
+                Get your API key from <a href="https://app.mailgun.com/settings/api_security" target="_blank" rel="noopener noreferrer" className="text-red-600 hover:underline">Mailgun Settings</a>
+              </p>
+            </div>
+
+            {/* Domain */}
+            <div className="space-y-2">
+              <Label htmlFor="domain">Mailgun Domain *</Label>
+              <Input
+                id="domain"
+                placeholder="mg.yourdomain.com"
+                value={relayConfig.domain}
+                onChange={(e) => setRelayConfig(prev => ({ ...prev, domain: e.target.value }))}
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500">
+                Your verified domain from <a href="https://app.mailgun.com/sending/domains" target="_blank" rel="noopener noreferrer" className="text-red-600 hover:underline">Mailgun Domains</a>
+              </p>
+            </div>
+
+            {/* Region */}
+            <div className="space-y-2">
+              <Label htmlFor="region">Region</Label>
+              <Select
+                value={relayConfig.region}
+                onValueChange={(value: 'us' | 'eu') => setRelayConfig(prev => ({ ...prev, region: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select region" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="us">United States (US)</SelectItem>
+                  <SelectItem value="eu">Europe (EU)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">Select your Mailgun region</p>
+            </div>
+
+            {/* Daily Limit */}
+            <div className="space-y-2">
+              <Label htmlFor="daily_limit">Daily Email Limit</Label>
+              <Input
+                id="daily_limit"
+                type="number"
+                min="1"
+                max="300"
+                value={relayConfig.daily_limit}
+                onChange={(e) => setRelayConfig(prev => ({ ...prev, daily_limit: parseInt(e.target.value) || 100 }))}
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500">Mailgun free trial: 5,000 emails/month (first 3 months)</p>
+            </div>
+
+            {/* Connection Test Button */}
+            <div className="space-y-3">
+              <Button
+                onClick={handleRelayTest}
+                disabled={isTestingConnection || !relayConfig.api_key || !relayConfig.domain}
+                variant="outline"
+                className="w-full"
+              >
+                {isTestingConnection ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Validating API Key...
+                  </>
+                ) : (
+                  <>
+                    <TestTube className="h-4 w-4 mr-2" />
+                    Validate API Key
+                  </>
+                )}
+              </Button>
+
+              {connectionTestPassed && (
+                <div className="flex items-center space-x-2 text-green-600 text-sm">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>API key validated successfully!</span>
+                </div>
+              )}
+            </div>
+
+            {/* Next Button */}
+            <Button
+              onClick={handleRelaySave}
+              disabled={isLoading || !connectionTestPassed}
+              className="w-full bg-red-600 hover:bg-red-700"
+              size="lg"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <ArrowRight className="h-4 w-4 mr-2" />
+                  Next: Link Email Accounts
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Info Box */}
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-start space-x-3">
+            <Shield className="h-5 w-5 text-red-600 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-red-900">Your API key is secure</h4>
+              <p className="text-sm text-red-700 mt-1">
+                All API keys are encrypted using AES-256 encryption before storage. Mailgun requires domain verification - make sure to add DNS records.
               </p>
             </div>
           </div>

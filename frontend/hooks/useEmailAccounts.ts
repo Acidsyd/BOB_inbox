@@ -4,6 +4,23 @@ import { useState, useEffect, useCallback } from 'react'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth/context'
 
+// Analytics interface
+export interface EmailAccountAnalytics {
+  totalEmailsSent: number
+  totalReplies: number
+  totalOpens: number
+  totalClicks: number
+  totalBounces: number
+  openRate: number
+  clickRate: number
+  replyRate: number
+  bounceRate: number
+  bounceBreakdown: {
+    hard: number
+    soft: number
+  }
+}
+
 // Enhanced interface for API responses
 interface EmailAccountResponse {
   id: string
@@ -39,12 +56,14 @@ interface EmailAccountResponse {
   created_at: string
   updated_at: string
   display_name: string
+  analytics?: EmailAccountAnalytics
+  relay_provider?: any
 }
 
 export interface EmailAccount {
   id: string
   email: string
-  provider: 'gmail' | 'outlook' | 'smtp' | 'gmail-oauth2' | 'outlook-oauth2'
+  provider: 'gmail' | 'outlook' | 'smtp' | 'gmail-oauth2' | 'outlook-oauth2' | 'mailgun'
   status: 'active' | 'warming' | 'paused' | 'error'
   health: number
   health_score: number
@@ -73,6 +92,8 @@ export interface EmailAccount {
   createdAt: string
   warmup_status: 'pending' | 'in_progress' | 'completed' | 'active' | 'warming'
   display_name: string
+  analytics?: EmailAccountAnalytics
+  relay_provider?: any
 }
 
 // Usage statistics interface
@@ -133,6 +154,7 @@ interface UseEmailAccountsReturn {
   getRotationPreview: (strategy?: string) => Promise<RotationPreview[]>
   bulkUpdateLimits: (updates: Array<{ id: string } & AccountSettings>) => Promise<any>
   testConnection: (accountId: string) => Promise<any>
+  deleteAccount: (accountId: string) => Promise<boolean>
   isUpdating: boolean
 }
 
@@ -143,7 +165,7 @@ function mapApiResponseToUI(row: EmailAccountResponse): EmailAccount {
   return {
     id: row.id,
     email: row.email,
-    provider: row.provider as 'gmail' | 'outlook' | 'smtp' | 'gmail-oauth2' | 'outlook-oauth2',
+    provider: row.provider as 'gmail' | 'outlook' | 'smtp' | 'gmail-oauth2' | 'outlook-oauth2' | 'mailgun',
     status,
     health: row.health || row.health_score,
     health_score: row.health_score,
@@ -171,16 +193,20 @@ function mapApiResponseToUI(row: EmailAccountResponse): EmailAccount {
       error_message: null
     },
     createdAt: row.created_at,
-    display_name: row.display_name || row.email
+    display_name: row.display_name || row.email,
+    analytics: row.analytics,
+    relay_provider: row.relay_provider
   }
 }
 
-export function useEmailAccounts(): UseEmailAccountsReturn {
+export function useEmailAccounts(options?: { includeAnalytics?: boolean }): UseEmailAccountsReturn {
   const [accounts, setAccounts] = useState<EmailAccount[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { user, isAuthenticated, isLoading: authLoading } = useAuth()
+
+  const includeAnalytics = options?.includeAnalytics ?? false
 
   const fetchAccounts = useCallback(async () => {
     // Wait for auth to finish loading before making API calls
@@ -197,13 +223,18 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
 
     try {
       setError(null)
-      console.log('📊 useEmailAccounts: Fetching accounts for org:', user.organizationId)
-      const response = await api.get('/email-accounts')
+      console.log('📊 useEmailAccounts: Fetching accounts for org:', user.organizationId, includeAnalytics ? 'with analytics' : '')
+
+      const url = includeAnalytics ? '/email-accounts?include=analytics' : '/email-accounts'
+      const response = await api.get(url)
       const { accounts } = response.data
+
+      console.log('📊 useEmailAccounts: Raw API response:', JSON.stringify(accounts, null, 2))
 
       const mappedAccounts = (accounts || []).map(mapApiResponseToUI)
       setAccounts(mappedAccounts)
       console.log('📊 useEmailAccounts: Successfully fetched', mappedAccounts.length, 'accounts')
+      console.log('📊 useEmailAccounts: Mapped accounts:', JSON.stringify(mappedAccounts, null, 2))
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || err.message || 'Failed to load email accounts'
       setError(errorMessage)
@@ -211,7 +242,7 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
     } finally {
       setIsLoading(false)
     }
-  }, [user?.organizationId, isAuthenticated, authLoading])
+  }, [user?.organizationId, isAuthenticated, authLoading, includeAnalytics])
 
   const refetch = useCallback(async () => {
     setIsLoading(true)
@@ -403,6 +434,34 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
     }
   }, [user?.organizationId, isAuthenticated, fetchAccounts])
 
+  const deleteAccount = useCallback(async (accountId: string): Promise<boolean> => {
+    if (!isAuthenticated || !user?.organizationId) {
+      console.log('📊 useEmailAccounts: Cannot delete account - not authenticated')
+      return false
+    }
+
+    setIsUpdating(true)
+    try {
+      const response = await api.delete(`/email-accounts/${accountId}`)
+
+      if (response.data.success) {
+        // Optimistically remove from local state
+        setAccounts(prev => prev.filter(account => account.id !== accountId))
+        console.log('✅ useEmailAccounts: Account deleted successfully')
+        return true
+      } else {
+        throw new Error('Failed to delete account')
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to delete account'
+      setError(errorMessage)
+      console.error('❌ useEmailAccounts: Error deleting account:', err)
+      return false
+    } finally {
+      setIsUpdating(false)
+    }
+  }, [user?.organizationId, isAuthenticated])
+
   // Note: Real-time updates removed - using API polling instead
 
   // Initial fetch
@@ -422,6 +481,7 @@ export function useEmailAccounts(): UseEmailAccountsReturn {
     getRotationPreview,
     bulkUpdateLimits,
     testConnection,
+    deleteAccount,
     isUpdating
   }
 }

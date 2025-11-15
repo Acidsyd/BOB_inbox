@@ -560,28 +560,40 @@ router.post('/send', authenticateToken, async (req, res) => {
 
     // Get the sender email account details (check both email_accounts and oauth2_tokens)
     let emailAccount = null;
-    
-    // Try email_accounts first (SMTP)
-    const { data: smtpAccount } = await supabase
+
+    // Try email_accounts first (SMTP/Relay)
+    const { data: smtpAccount, error: smtpError } = await supabase
       .from('email_accounts')
-      .select('email, display_name')
+      .select('email, relay_provider_id, provider')
       .eq('id', fromAccountId)
       .eq('organization_id', organizationId)
       .single();
-    
+
+    if (smtpError) {
+      console.log('⚠️  Email account query error:', smtpError.message);
+    }
+
     if (smtpAccount) {
       emailAccount = smtpAccount;
-      console.log(`📤 Using SMTP account: ${emailAccount.email}`);
+      if (smtpAccount.relay_provider_id) {
+        console.log(`📤 Using Relay account: ${emailAccount.email} (via ${smtpAccount.provider})`);
+      } else {
+        console.log(`📤 Using SMTP account: ${emailAccount.email}`);
+      }
     } else {
       // Try oauth2_tokens (Gmail/OAuth2)
-      const { data: oauthAccount } = await supabase
+      const { data: oauthAccount, error: oauthError } = await supabase
         .from('oauth2_tokens')
         .select('email, id')
         .eq('id', fromAccountId)
         .eq('organization_id', organizationId)
         .eq('status', 'linked_to_account')
         .single();
-      
+
+      if (oauthError) {
+        console.log('⚠️  OAuth2 account query error:', oauthError.message);
+      }
+
       if (oauthAccount) {
         emailAccount = {
           email: oauthAccount.email,
@@ -593,7 +605,12 @@ router.post('/send', authenticateToken, async (req, res) => {
 
     if (!emailAccount) {
       console.error('❌ Email account not found for ID:', fromAccountId);
-      return res.status(400).json({ error: 'Email account not found' });
+      console.error('   Organization ID:', organizationId);
+      console.error('   Searched in: email_accounts and oauth2_tokens tables');
+      return res.status(400).json({
+        error: 'Email account not found',
+        details: 'The selected email account does not exist or has been deleted. Please refresh and select a valid account.'
+      });
     }
 
     // Send the email using EmailService
@@ -771,28 +788,40 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
 
     // Get the sender email account details (check both email_accounts and oauth2_tokens)
     let emailAccount = null;
-    
-    // Try email_accounts first
-    const { data: smtpAccount } = await supabase
+
+    // Try email_accounts first (SMTP/Relay)
+    const { data: smtpAccount, error: smtpError } = await supabase
       .from('email_accounts')
-      .select('email, display_name')
+      .select('email, relay_provider_id, provider')
       .eq('id', fromAccountId)
       .eq('organization_id', organizationId)
       .single();
-    
+
+    if (smtpError) {
+      console.log('⚠️  Email account query error:', smtpError.message);
+    }
+
     if (smtpAccount) {
       emailAccount = smtpAccount;
-      console.log(`📬 Found SMTP account: ${emailAccount.email}`);
+      if (smtpAccount.relay_provider_id) {
+        console.log(`📬 Found Relay account: ${emailAccount.email} (via ${smtpAccount.provider})`);
+      } else {
+        console.log(`📬 Found SMTP account: ${emailAccount.email}`);
+      }
     } else {
       // Try oauth2_tokens
-      const { data: oauthAccount } = await supabase
+      const { data: oauthAccount, error: oauthError } = await supabase
         .from('oauth2_tokens')
         .select('email, id')
         .eq('id', fromAccountId)
         .eq('organization_id', organizationId)
         .eq('status', 'linked_to_account')
         .single();
-      
+
+      if (oauthError) {
+        console.log('⚠️  OAuth2 account query error:', oauthError.message);
+      }
+
       if (oauthAccount) {
         emailAccount = {
           email: oauthAccount.email,
@@ -804,7 +833,12 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
 
     if (!emailAccount) {
       console.error('❌ Email account not found for ID:', fromAccountId);
-      return res.status(400).json({ error: 'Email account not found' });
+      console.error('   Organization ID:', organizationId);
+      console.error('   Searched in: email_accounts and oauth2_tokens tables');
+      return res.status(400).json({
+        error: 'Email account not found',
+        details: 'The selected email account does not exist or has been deleted. Please refresh and select a valid account.'
+      });
     }
 
     console.log(`📬 Using sender email: ${emailAccount.email}`);

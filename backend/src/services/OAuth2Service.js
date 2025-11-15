@@ -233,6 +233,7 @@ class OAuth2Service {
    */
   async sendEmail({
     fromEmail,
+    fromName = null,  // Accept display name from database
     toEmail,
     cc = null,
     bcc = null,
@@ -298,7 +299,8 @@ class OAuth2Service {
       }
 
       // Create email message with threading headers and proper sender name
-      const senderName = this.createProperName(fromEmail);
+      // Use provided fromName (from database), fallback to createProperName for backward compatibility
+      const senderName = fromName || this.createProperName(fromEmail);
       const emailMessage = this.createEmailMessage(fromEmail, toEmail, cc, bcc, subject, finalHtmlBody, finalTextBody, inReplyTo, references, senderName, attachments);
       
       // Send email via Gmail API with proper threading

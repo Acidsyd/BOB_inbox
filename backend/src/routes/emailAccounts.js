@@ -30,12 +30,140 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Helper function to aggregate analytics for a specific account
+async function getAccountAnalytics(accountId, organizationId) {
+  try {
+    // Get total emails sent (all-time)
+    const { count: totalSent } = await supabase
+      .from('scheduled_emails')
+      .select('id', { count: 'exact', head: true })
+      .eq('email_account_id', accountId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'sent');
+
+    // Get total replies received
+    // Replies are conversation_messages with direction='received' that are associated with emails we sent
+    const { data: sentEmails } = await supabase
+      .from('scheduled_emails')
+      .select('to_email')
+      .eq('email_account_id', accountId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'sent');
+
+    const recipientEmails = [...new Set((sentEmails || []).map(e => e.to_email))];
+
+    let totalReplies = 0;
+    if (recipientEmails.length > 0) {
+      const { count: replyCount } = await supabase
+        .from('conversation_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .eq('direction', 'received')
+        .in('from_email', recipientEmails);
+
+      totalReplies = replyCount || 0;
+    }
+
+    // Get total opens
+    const { count: totalOpens } = await supabase
+      .from('email_tracking_events')
+      .select('scheduled_email_id', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+      .eq('event_type', 'open')
+      .not('scheduled_email_id', 'is', null);
+
+    // Get unique opens per email
+    const { data: uniqueOpens } = await supabase
+      .from('email_tracking_events')
+      .select('scheduled_email_id')
+      .eq('organization_id', organizationId)
+      .eq('event_type', 'open')
+      .not('scheduled_email_id', 'is', null);
+
+    const uniqueOpenCount = new Set((uniqueOpens || []).map(e => e.scheduled_email_id)).size;
+
+    // Get total clicks
+    const { count: totalClicks } = await supabase
+      .from('email_tracking_events')
+      .select('scheduled_email_id', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+      .eq('event_type', 'click')
+      .not('scheduled_email_id', 'is', null);
+
+    // Get unique clicks per email
+    const { data: uniqueClicks } = await supabase
+      .from('email_tracking_events')
+      .select('scheduled_email_id')
+      .eq('organization_id', organizationId)
+      .eq('event_type', 'click')
+      .not('scheduled_email_id', 'is', null);
+
+    const uniqueClickCount = new Set((uniqueClicks || []).map(e => e.scheduled_email_id)).size;
+
+    // Get total bounces
+    const { count: totalBounces } = await supabase
+      .from('scheduled_emails')
+      .select('id', { count: 'exact', head: true })
+      .eq('email_account_id', accountId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'bounced');
+
+    // Get bounce breakdown
+    const { data: bounceDetails } = await supabase
+      .from('email_bounces')
+      .select('bounce_type')
+      .eq('organization_id', organizationId);
+
+    const hardBounces = (bounceDetails || []).filter(b => b.bounce_type === 'hard').length;
+    const softBounces = (bounceDetails || []).filter(b => b.bounce_type === 'soft').length;
+
+    // Calculate rates (avoid division by zero)
+    const sentCount = totalSent || 0;
+    const openRate = sentCount > 0 ? ((uniqueOpenCount / sentCount) * 100).toFixed(2) : 0;
+    const clickRate = sentCount > 0 ? ((uniqueClickCount / sentCount) * 100).toFixed(2) : 0;
+    const replyRate = sentCount > 0 ? ((totalReplies / sentCount) * 100).toFixed(2) : 0;
+    const bounceRate = sentCount > 0 ? (((totalBounces || 0) / sentCount) * 100).toFixed(2) : 0;
+
+    return {
+      totalEmailsSent: sentCount,
+      totalReplies,
+      totalOpens: uniqueOpenCount,
+      totalClicks: uniqueClickCount,
+      totalBounces: totalBounces || 0,
+      openRate: parseFloat(openRate),
+      clickRate: parseFloat(clickRate),
+      replyRate: parseFloat(replyRate),
+      bounceRate: parseFloat(bounceRate),
+      bounceBreakdown: {
+        hard: hardBounces,
+        soft: softBounces
+      }
+    };
+  } catch (error) {
+    console.error(`❌ Error aggregating analytics for account ${accountId}:`, error);
+    return {
+      totalEmailsSent: 0,
+      totalReplies: 0,
+      totalOpens: 0,
+      totalClicks: 0,
+      totalBounces: 0,
+      openRate: 0,
+      clickRate: 0,
+      replyRate: 0,
+      bounceRate: 0,
+      bounceBreakdown: { hard: 0, soft: 0 }
+    };
+  }
+}
+
 // GET /api/email-accounts - List all email accounts with real usage data
 router.get('/', authenticateToken, async (req, res) => {
   try {
     console.log('📧 GET /api/email-accounts called');
     console.log('👤 User:', req.user);
-    
+
+    const includeAnalytics = req.query.include === 'analytics';
+
     // Query enhanced account usage summary with real data
     const { data: accountsData, error: accountsError } = await supabase
       .from('account_usage_summary')
@@ -43,16 +171,23 @@ router.get('/', authenticateToken, async (req, res) => {
       .eq('organization_id', req.user.organizationId);
 
     // Query email_accounts table (for accounts that have been migrated)
+    // Include relay provider information
     const { data: emailAccounts, error: emailAccountsError } = await supabase
       .from('email_accounts')
-      .select('id, email, provider, is_active, health_score, daily_limit, last_sync_at, connection_health, created_at, updated_at')
+      .select(`
+        id, email, provider, is_active, health_score, daily_limit, display_name,
+        warmup_enabled, warmup_progress, last_health_check, created_at, updated_at, relay_provider_id,
+        relay_providers:relay_provider_id (
+          id, provider_type, provider_name, from_email
+        )
+      `)
       .eq('organization_id', req.user.organizationId)
       .eq('is_active', true);
 
     // Also query OAuth2 tokens for linked accounts (legacy/non-migrated accounts)
     const { data: oauth2Accounts, error: oauth2Error } = await supabase
       .from('oauth2_tokens')
-      .select('id, email, provider, created_at, updated_at, metadata, last_sync_at')
+      .select('id, email, provider, created_at, updated_at, metadata, last_sync_at, display_name')
       .eq('organization_id', req.user.organizationId)
       .eq('status', 'linked_to_account');
 
@@ -68,8 +203,6 @@ router.get('/', authenticateToken, async (req, res) => {
       console.error('❌ Error fetching OAuth2 accounts:', oauth2Error);
       // Don't fail completely, just log and continue with empty oauth2 accounts
     }
-
-    const accounts = accountsData || [];
 
     // Get today's sent count for each account
     const today = new Date();
@@ -105,16 +238,20 @@ router.get('/', authenticateToken, async (req, res) => {
         availability_status: dailySent >= dailyLimit ? 'daily_limit_reached' : 'available',
         rotation_priority: 1,
         rotation_weight: 1.0,
-        last_sync_at: account.last_sync_at,
-        connection_health: account.connection_health || {
-          status: 'unknown',
-          last_check_at: null,
-          last_successful_check: null,
+        last_health_check: account.last_health_check || new Date().toISOString(),
+        connection_health: {
+          status: 'healthy',
+          last_check_at: account.last_health_check || new Date().toISOString(),
+          last_successful_check: account.last_health_check || new Date().toISOString(),
           consecutive_failures: 0,
           error_message: null
         },
         created_at: account.created_at,
-        updated_at: account.updated_at
+        updated_at: account.updated_at,
+        display_name: account.display_name,
+        // Relay provider information
+        relay_provider_id: account.relay_provider_id || null,
+        relay_provider: account.relay_providers || null
       };
     }));
 
@@ -160,19 +297,36 @@ router.get('/', authenticateToken, async (req, res) => {
         last_sync_at: account.last_sync_at,
         connection_health: connectionHealth,
         created_at: account.created_at,
-        updated_at: account.updated_at
+        updated_at: account.updated_at,
+        display_name: account.display_name
       };
     }));
 
-    const allAccounts = [...accounts, ...emailAccountsEnhanced, ...oauth2AccountsEnhanced];
+    const allAccounts = [...emailAccountsEnhanced, ...oauth2AccountsEnhanced];
+
+    // Fetch analytics if requested
+    let analyticsMap = {};
+    if (includeAnalytics) {
+      console.log('📊 Fetching analytics for all accounts...');
+      const analyticsPromises = allAccounts.map(account =>
+        getAccountAnalytics(account.id, req.user.organizationId)
+          .then(analytics => ({ id: account.id, analytics }))
+      );
+
+      const analyticsResults = await Promise.all(analyticsPromises);
+      analyticsMap = analyticsResults.reduce((map, result) => {
+        map[result.id] = result.analytics;
+        return map;
+      }, {});
+    }
 
     // Transform to frontend format
     const transformedAccounts = allAccounts.map(account => {
-      const warmupStatus = account.warmup_enabled ? 
-        (account.warmup_progress >= 100 ? 'completed' : 'warming') : 
+      const warmupStatus = account.warmup_enabled ?
+        (account.warmup_progress >= 100 ? 'completed' : 'warming') :
         'active';
 
-      return {
+      const baseAccount = {
         id: account.id,
         email: account.email,
         provider: account.provider || 'gmail',
@@ -211,8 +365,16 @@ router.get('/', authenticateToken, async (req, res) => {
         },
         created_at: account.created_at,
         updated_at: account.updated_at,
-        display_name: account.email
+        display_name: account.display_name || account.email,
+        relay_provider: account.relay_provider || null
       };
+
+      // Include analytics if requested
+      if (includeAnalytics && analyticsMap[account.id]) {
+        baseAccount.analytics = analyticsMap[account.id];
+      }
+
+      return baseAccount;
     });
 
     console.log(`📊 Found ${transformedAccounts.length} email accounts for organization ${req.user.organizationId}`);
@@ -376,36 +538,87 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 // POST /api/email-accounts - Create new email account
-router.post('/', authenticateToken, (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { email, provider, settings } = req.body;
-    
+    const { email, provider, relay_provider_id, settings } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email is required'
+      });
+    }
+
+    if (!provider) {
+      return res.status(400).json({
+        success: false,
+        error: 'Provider is required'
+      });
+    }
+
+    // Check if email already exists for this organization
+    const { data: existingAccount, error: checkError } = await supabase
+      .from('email_accounts')
+      .select('id')
+      .eq('organization_id', req.user.organizationId)
+      .eq('email', email)
+      .single();
+
+    if (existingAccount) {
+      return res.status(409).json({
+        success: false,
+        error: 'Email account already exists'
+      });
+    }
+
+    // For relay accounts, we need to provide dummy credentials since the actual
+    // credentials (API key) are stored in the relay_providers table
+    const dummyCredentials = relay_provider_id ? 'relay-account-no-credentials-needed' : null;
+
+    // Create new email account
     const newAccount = {
-      id: `acc-${Date.now()}`,
+      organization_id: req.user.organizationId,
+      user_id: req.user.userId,
       email,
       provider,
-      status: 'pending',
-      health_score: 0,
-      daily_limit: 20,
-      emails_sent_today: 0,
-      warmup_status: 'pending',
-      reputation: 'unknown',
-      last_activity: null,
+      relay_provider_id: relay_provider_id || null,
+      credentials_encrypted: dummyCredentials,
+      is_active: true,
+      health_score: 100,
+      daily_limit: settings?.daily_limit || 50,
+      current_sent_today: 0,
+      warmup_status: 'active',
       settings: settings || {},
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    
+
+    const { data: createdAccount, error: insertError } = await supabase
+      .from('email_accounts')
+      .insert([newAccount])
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Error inserting email account:', insertError);
+      return res.status(500).json({
+        success: false,
+        error: insertError.message || 'Failed to create email account'
+      });
+    }
+
+    console.log('✅ Email account created:', email, 'for organization:', req.user.organizationId);
+
     res.status(201).json({
       success: true,
-      account: newAccount,
+      account: createdAccount,
       message: 'Email account created successfully'
     });
   } catch (error) {
     console.error('Error creating email account:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: 'Failed to create email account' 
+      error: 'Failed to create email account'
     });
   }
 });
@@ -447,19 +660,56 @@ router.put('/:id', authenticateToken, (req, res) => {
 });
 
 // DELETE /api/email-accounts/:id - Delete email account
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    
-    res.json({
-      success: true,
-      message: 'Email account deleted successfully'
-    });
+    const organizationId = req.user.organizationId;
+
+    console.log(`🗑️  Attempting to delete email account: ${id} for org: ${organizationId}`);
+
+    // Try deleting from email_accounts table (SMTP/Relay accounts)
+    const { data: emailAccount, error: emailError } = await supabase
+      .from('email_accounts')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', organizationId)
+      .select()
+      .single();
+
+    // Try deleting from oauth2_tokens table (OAuth2 accounts)
+    const { data: oauthAccount, error: oauthError } = await supabase
+      .from('oauth2_tokens')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', organizationId)
+      .select()
+      .single();
+
+    // Check if either deletion was successful
+    if (emailAccount) {
+      console.log(`✅ Successfully deleted email account: ${emailAccount.email}`);
+      res.json({
+        success: true,
+        message: `Email account ${emailAccount.email} deleted successfully`
+      });
+    } else if (oauthAccount) {
+      console.log(`✅ Successfully deleted OAuth2 account: ${oauthAccount.email}`);
+      res.json({
+        success: true,
+        message: `Email account ${oauthAccount.email} deleted successfully`
+      });
+    } else {
+      console.error('❌ Account not found or already deleted:', { emailError, oauthError });
+      res.status(404).json({
+        success: false,
+        error: 'Account not found or does not belong to your organization'
+      });
+    }
   } catch (error) {
-    console.error('Error deleting email account:', error);
-    res.status(500).json({ 
+    console.error('❌ Error deleting email account:', error);
+    res.status(500).json({
       success: false,
-      error: 'Failed to delete email account' 
+      error: 'Failed to delete email account'
     });
   }
 });
@@ -554,12 +804,13 @@ router.patch('/:id/tracking-settings', authenticateToken, (req, res) => {
 router.put('/:id/settings', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { 
-      daily_limit, 
-      hourly_limit, 
-      rotation_priority, 
-      rotation_weight, 
-      status 
+    const {
+      daily_limit,
+      hourly_limit,
+      rotation_priority,
+      rotation_weight,
+      status,
+      display_name
     } = req.body;
 
     console.log(`⚙️ Updating settings for account ${id}`);
@@ -600,6 +851,7 @@ router.put('/:id/settings', authenticateToken, async (req, res) => {
     if (rotation_priority !== undefined) updateData.rotation_priority = rotation_priority;
     if (rotation_weight !== undefined) updateData.rotation_weight = rotation_weight;
     if (status !== undefined) updateData.status = status;
+    if (display_name !== undefined) updateData.display_name = display_name;
     updateData.updated_at = new Date().toISOString();
 
     const { error } = await supabase

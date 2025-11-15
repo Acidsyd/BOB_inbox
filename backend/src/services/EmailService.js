@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
 const OAuth2Service = require('./OAuth2Service');
+const RelayProviderService = require('./RelayProviderService');
 const BounceTrackingService = require('./BounceTrackingService');
 const EmailTrackingService = require('./EmailTrackingService');
 const { generateUnsubscribeToken } = require('../routes/unsubscribe');
@@ -18,6 +19,7 @@ const ENCRYPTION_KEY = process.env.EMAIL_ENCRYPTION_KEY || 'your-32-char-encrypt
 class EmailService {
   constructor() {
     this.oauth2Service = new OAuth2Service();
+    this.relayProviderService = new RelayProviderService();
     this.trackingService = new EmailTrackingService();
     // Initialize EmailSyncService lazily to avoid circular dependency
     this.emailSyncService = null;
@@ -52,29 +54,44 @@ class EmailService {
 
   /**
    * Get email account credentials from database
+   * @param {string} accountId - Can be either UUID or email address
+   * @param {string} organizationId - Organization UUID
    */
   static async getEmailAccount(accountId, organizationId) {
     try {
       console.log('📧 Getting email account:', accountId, 'for org:', organizationId);
 
+      // Determine if accountId is a UUID or email address
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(accountId);
+      const searchField = isUUID ? 'id' : 'email';
+
+      console.log(`🔍 Searching by ${searchField}:`, accountId);
+
       // Try email_accounts table first
-      const { data: emailAccount, error: emailError } = await supabase
+      const { data: emailAccount, error: emailError} = await supabase
         .from('email_accounts')
-        .select('id, email, provider, created_at, updated_at')
-        .eq('id', accountId)
+        .select('id, email, provider, relay_provider_id, display_name, created_at, updated_at')
+        .eq(searchField, accountId)
         .eq('organization_id', organizationId)
         .single();
 
       if (emailAccount) {
         console.log('✅ Found email account:', emailAccount.email, '- Provider:', emailAccount.provider);
+
+        // Check if this account uses a relay provider
+        if (emailAccount.relay_provider_id) {
+          console.log('🔌 Account uses relay provider:', emailAccount.relay_provider_id);
+          return { ...emailAccount, type: 'relay' };
+        }
+
         return { ...emailAccount, type: 'smtp' };
       }
 
       // Try oauth2_tokens table if not found in email_accounts
       const { data: oauthAccount, error: oauthError } = await supabase
         .from('oauth2_tokens')
-        .select('id, email, provider, encrypted_tokens, created_at, updated_at, status')
-        .eq('id', accountId)
+        .select('id, email, provider, encrypted_tokens, created_at, updated_at, status, display_name')
+        .eq(searchField, accountId)
         .eq('organization_id', organizationId)
         .eq('status', 'linked_to_account')
         .single();
@@ -366,7 +383,7 @@ class EmailService {
 
       // Get email account
       const account = await EmailService.getEmailAccount(accountId, organizationId);
-      
+
       // Add tracking to email HTML if enabled
       let trackedHtml = html;
       if ((trackOpens || trackClicks) && trackingToken) {
@@ -379,46 +396,73 @@ class EmailService {
         );
         console.log('✅ Tracking added to email content');
       }
-      
-      // Check if OAuth2 is available
-      const useOAuth2 = await EmailService.shouldUseOAuth2(account, organizationId);
-      
+
       let result;
-      if (useOAuth2) {
-        console.log('🔐 Using OAuth2 Gmail API for sending');
-        result = await this.oauth2Service.sendEmail({
-          fromEmail: account.email,
-          toEmail: to,
-          cc: cc,
-          bcc: bcc,
-          subject: subject,
-          htmlBody: trackedHtml,  // Use tracked HTML
-          textBody: text,
-          organizationId: organizationId,
-          attachments,
-          campaignId,
-          includeUnsubscribe,
-          inReplyTo,
-          references,
-          threadId
-        });
-      } else {
-        console.log('📨 Using SMTP for sending');
-        result = await this.sendViaSmtp({
-          account,
-          to,
-          cc,
-          bcc,
-          subject,
-          html: trackedHtml,  // Use tracked HTML
-          text,
-          campaignId,
-          includeUnsubscribe,
+
+      // Priority 1: Check if account uses a relay provider (SendGrid/Mailgun)
+      if (account.type === 'relay' && account.relay_provider_id) {
+        console.log('🔌 Using Relay Provider for sending');
+        result = await this.relayProviderService.sendEmail(
+          account.relay_provider_id,
           organizationId,
-          inReplyTo,
-          references,
-          threadId
-        });
+          {
+            from: account.email,
+            fromName: account.display_name,  // Pass display name
+            to,
+            cc,
+            bcc,
+            subject,
+            html: trackedHtml,
+            text,
+            trackOpens,
+            trackClicks,
+            inReplyTo,
+            references,
+            attachments
+          }
+        );
+      }
+      // Priority 2: Check if OAuth2 is available
+      else {
+        const useOAuth2 = await EmailService.shouldUseOAuth2(account, organizationId);
+
+        if (useOAuth2) {
+          console.log('🔐 Using OAuth2 Gmail API for sending');
+          result = await this.oauth2Service.sendEmail({
+            fromEmail: account.email,
+            fromName: account.display_name,  // Pass display name
+            toEmail: to,
+            cc: cc,
+            bcc: bcc,
+            subject: subject,
+            htmlBody: trackedHtml,  // Use tracked HTML
+            textBody: text,
+            organizationId: organizationId,
+            attachments,
+            campaignId,
+            includeUnsubscribe,
+            inReplyTo,
+            references,
+            threadId
+          });
+        } else {
+          console.log('📨 Using SMTP for sending');
+          result = await this.sendViaSmtp({
+            account,
+            to,
+            cc,
+            bcc,
+            subject,
+            html: trackedHtml,  // Use tracked HTML
+            text,
+            campaignId,
+            includeUnsubscribe,
+            organizationId,
+            inReplyTo,
+            references,
+            threadId
+          });
+        }
       }
 
       // Note: Auto-sync removed - BackgroundSyncService handles all email syncing at 15-min intervals

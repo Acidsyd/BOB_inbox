@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Button } from '../../../../components/ui/button'
 import { Badge } from '../../../../components/ui/badge'
 import { Skeleton } from '../../../../components/ui/skeleton'
+import { Input } from '../../../../components/ui/input'
 import { useToast } from '../../../../components/ui/toast'
 
 // Dynamic import to prevent SSR issues
@@ -52,6 +53,7 @@ interface EmailAccount {
   status: string
   health_score: number
   settings: any
+  display_name?: string
   created_at: string
   updated_at: string
 }
@@ -132,6 +134,9 @@ function AccountConfigurationContent() {
   const [assignedWebhookIds, setAssignedWebhookIds] = useState<string[]>([])
   const [loadingWebhooks, setLoadingWebhooks] = useState(false)
   const [signatureContent, setSignatureContent] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [isEditingDisplayName, setIsEditingDisplayName] = useState(false)
+  const [savingDisplayName, setSavingDisplayName] = useState(false)
 
   // Find the account from the loaded accounts
   const account = accounts.find(acc => acc.id === accountId)
@@ -143,6 +148,13 @@ function AccountConfigurationContent() {
       setSignatureContent(settings.signature || '')
     }
   }, [account, signatureContent])
+
+  // Initialize display name when account loads
+  useEffect(() => {
+    if (account && !displayName) {
+      setDisplayName(account.display_name || '')
+    }
+  }, [account, displayName])
   
   console.log('📧 Looking for account ID:', accountId)
   console.log('📧 Available accounts:', accounts.map(a => ({ id: a.id, email: a.email })))
@@ -303,15 +315,47 @@ function AccountConfigurationContent() {
     }
   }
 
+  // Save display name
+  const saveDisplayName = async () => {
+    if (!account) return
+
+    try {
+      setSavingDisplayName(true)
+
+      await api.put(`/email-accounts/${account.id}/settings`, {
+        display_name: displayName
+      })
+
+      addToast({
+        title: 'Display name updated',
+        description: 'Display name saved successfully',
+        type: 'success'
+      })
+
+      setIsEditingDisplayName(false)
+
+      // Refresh accounts to update the list
+      window.location.reload()
+    } catch (error) {
+      addToast({
+        title: 'Save failed',
+        description: 'Failed to update display name',
+        type: 'error'
+      })
+    } finally {
+      setSavingDisplayName(false)
+    }
+  }
+
   // Test connection
   const testConnection = async () => {
     if (!account) return
-    
+
     try {
       setTesting(true)
-      
+
       const response = await api.post(`/email-accounts/${account.id}/test-connection`)
-      
+
       const testResults = response.data
       addToast({
         title: testResults.success ? 'Connection successful' : 'Connection issues detected',
@@ -866,6 +910,53 @@ function AccountConfigurationContent() {
                 <span className="font-medium capitalize">{account.provider}</span>
                 <Badge variant="outline">{account.status}</Badge>
               </div>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-500 mb-1">Display Name</label>
+              {isEditingDisplayName ? (
+                <div className="flex items-center space-x-2">
+                  <Input
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="Enter display name"
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={saveDisplayName}
+                    disabled={savingDisplayName}
+                  >
+                    {savingDisplayName ? 'Saving...' : 'Save'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setDisplayName(account.display_name || '')
+                      setIsEditingDisplayName(false)
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <div className="font-medium flex-1">
+                    {account.display_name || <span className="text-gray-400 italic">Not set</span>}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsEditingDisplayName(true)}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm text-gray-500">Account ID</label>
+              <div className="font-mono text-xs text-gray-600">{account.id}</div>
             </div>
             <div>
               <label className="block text-sm text-gray-500">Created</label>

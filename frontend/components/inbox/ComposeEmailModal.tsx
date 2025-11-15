@@ -504,11 +504,16 @@ export function ComposeEmailModal({
                 <SelectContent>
                   {activeAccounts.map((account) => (
                     <SelectItem key={account.id} value={account.id}>
-                      <div className="flex items-center space-x-2">
-                        <span>{account.email}</span>
-                        <Badge variant="secondary" className="text-xs">
-                          {account.provider.toUpperCase()}
-                        </Badge>
+                      <div className="flex flex-col">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-medium">{account.display_name}</span>
+                          <Badge variant="secondary" className="text-xs">
+                            {account.provider.toUpperCase()}
+                          </Badge>
+                        </div>
+                        {account.display_name !== account.email && (
+                          <span className="text-xs text-gray-500">{account.email}</span>
+                        )}
                       </div>
                     </SelectItem>
                   ))}
