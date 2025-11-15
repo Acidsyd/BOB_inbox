@@ -617,13 +617,13 @@ router.post('/:id/import-duplicates', authenticateToken, async (req, res) => {
           created_by: req.user.userId
         };
 
-        // Add custom_fields if provided (stored as JSONB in database)
-        if (lead.custom_fields && typeof lead.custom_fields === 'object') {
+        // Add custom_fields if provided (accepts any type - string, number, object, array)
+        if (lead.custom_fields !== undefined && lead.custom_fields !== null) {
           leadData.custom_fields = lead.custom_fields;
         }
 
         // Also support data.custom_fields format (for compatibility)
-        if (lead.data?.custom_fields && typeof lead.data.custom_fields === 'object') {
+        if (lead.data?.custom_fields !== undefined && lead.data?.custom_fields !== null) {
           leadData.custom_fields = lead.data.custom_fields;
         }
 
