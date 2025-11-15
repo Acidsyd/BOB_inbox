@@ -350,13 +350,26 @@ export default function SimpleLeadTable({
                     <div className="space-y-1">
                       {getCustomFields(lead).map(([key, value]) => (
                         <div key={key} className="text-xs">
-                          <span className="font-medium text-gray-700">{key}:</span>{' '}
-                          <span className="text-gray-600">
-                            {String(value).length > 20 
-                              ? `${String(value).substring(0, 20)}...` 
-                              : String(value)
-                            }
-                          </span>
+                          {key === 'custom_fields' ? (
+                            // For primitive values, show only the value without the key
+                            <span className="text-gray-600">
+                              {String(value).length > 20
+                                ? `${String(value).substring(0, 20)}...`
+                                : String(value)
+                              }
+                            </span>
+                          ) : (
+                            // For object properties, show key: value
+                            <>
+                              <span className="font-medium text-gray-700">{key}:</span>{' '}
+                              <span className="text-gray-600">
+                                {String(value).length > 20
+                                  ? `${String(value).substring(0, 20)}...`
+                                  : String(value)
+                                }
+                              </span>
+                            </>
+                          )}
                         </div>
                       ))}
                       {getCustomFields(lead).length === 0 && (
