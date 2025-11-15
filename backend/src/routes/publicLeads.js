@@ -33,7 +33,7 @@ function isValidEmail(email) {
 router.post('/lists/:id/add', addLeadLimiter, async (req, res) => {
   try {
     const { id: leadListId } = req.params;
-    const { email, first_name, last_name, company } = req.body;
+    const { email, first_name, last_name, company, custom_fields } = req.body;
 
     // Validate email
     if (!email || typeof email !== 'string' || !isValidEmail(email)) {
@@ -68,11 +68,16 @@ router.post('/lists/:id/add', addLeadLimiter, async (req, res) => {
       status: 'active'
     };
 
+    // Add custom_fields if provided (accepts any type - string, number, object, array)
+    if (custom_fields !== undefined && custom_fields !== null) {
+      leadData.custom_fields = custom_fields;
+    }
+
     // Insert the lead
     const { data: newLead, error: insertError } = await supabase
       .from('leads')
       .insert(leadData)
-      .select('id, email, first_name, last_name, company, created_at')
+      .select('id, email, first_name, last_name, company, custom_fields, created_at')
       .single();
 
     if (insertError) {
