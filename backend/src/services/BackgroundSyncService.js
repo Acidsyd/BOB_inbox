@@ -72,7 +72,7 @@ class BackgroundSyncService {
   }
 
   /**
-   * Sync all email accounts (OAuth2 + SMTP/IMAP) across all organizations
+   * Sync all email accounts (OAuth2 + SMTP/IMAP + Mailgun/SendGrid with IMAP) across all organizations
    */
   async syncAllAccounts() {
     if (this.isSyncing) {
@@ -107,15 +107,28 @@ class BackgroundSyncService {
         console.error('❌ Failed to fetch SMTP/IMAP accounts:', smtpError.message);
       }
 
+      // Get all Mailgun/SendGrid accounts with IMAP receiving enabled
+      const { data: relayImapAccounts, error: relayError } = await supabase
+        .from('email_accounts')
+        .select('id, email, organization_id, provider')
+        .eq('enable_receiving', true)
+        .eq('is_active', true)
+        .in('provider', ['mailgun', 'sendgrid']);
+
+      if (relayError) {
+        console.error('❌ Failed to fetch relay IMAP accounts:', relayError.message);
+      }
+
       const totalOAuth2 = oauth2Accounts?.length || 0;
       const totalSmtp = smtpAccounts?.length || 0;
+      const totalRelayImap = relayImapAccounts?.length || 0;
 
-      if (totalOAuth2 === 0 && totalSmtp === 0) {
+      if (totalOAuth2 === 0 && totalSmtp === 0 && totalRelayImap === 0) {
         console.log('📭 No email accounts found to sync');
         return;
       }
 
-      console.log(`📧 Found ${totalOAuth2} OAuth2 account(s) and ${totalSmtp} SMTP/IMAP account(s) to sync`);
+      console.log(`📧 Found ${totalOAuth2} OAuth2, ${totalSmtp} SMTP/IMAP, and ${totalRelayImap} relay IMAP account(s) to sync`);
 
       let successCount = 0;
       let errorCount = 0;
@@ -177,8 +190,37 @@ class BackgroundSyncService {
         }
       }
 
+      // Sync Mailgun/SendGrid accounts with IMAP receiving
+      if (relayImapAccounts && relayImapAccounts.length > 0) {
+        for (const account of relayImapAccounts) {
+          try {
+            console.log(`🔄 Syncing ${account.provider} IMAP account: ${account.email}`);
+
+            // Use EmailSyncService which will route to ImapSyncProvider via ProviderFactory
+            const result = await this.emailSyncService.syncAccount(
+              account.id,
+              account.organization_id
+            );
+
+            if (result.success) {
+              successCount++;
+              console.log(`✅ ${account.email} (${account.provider} IMAP) - ${result.newMessages || 0} new, ${result.updatedMessages || 0} updated`);
+            } else {
+              errorCount++;
+              errors.push(`${account.email} (${account.provider} IMAP): ${result.error || 'Unknown error'}`);
+              console.error(`❌ ${account.email} (${account.provider} IMAP) - Sync failed`);
+            }
+
+          } catch (accountError) {
+            errorCount++;
+            errors.push(`${account.email} (${account.provider} IMAP): ${accountError.message}`);
+            console.error(`❌ ${account.email} (${account.provider} IMAP) - Sync error:`, accountError.message);
+          }
+        }
+      }
+
       const duration = Date.now() - syncStart;
-      const totalAccounts = totalOAuth2 + totalSmtp;
+      const totalAccounts = totalOAuth2 + totalSmtp + totalRelayImap;
       console.log(`✅ Background sync completed in ${duration}ms`);
       console.log(`📊 Results: ${successCount}/${totalAccounts} success, ${errorCount} errors`);
 

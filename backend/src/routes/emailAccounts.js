@@ -1,10 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const AccountRateLimitService = require('../services/AccountRateLimitService');
+const ImapService = require('../services/ImapService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const ENCRYPTION_KEY = Buffer.from(process.env.EMAIL_ENCRYPTION_KEY || '', 'hex');
 
 // Initialize Supabase client and services
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -29,6 +32,40 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+// Helper function to encrypt IMAP credentials
+function encryptImapCredentials(password) {
+  const algorithm = 'aes-256-cbc';
+  const iv = crypto.randomBytes(16);
+
+  const cipher = crypto.createCipheriv(algorithm, ENCRYPTION_KEY, iv);
+  const credentials = JSON.stringify({ password });
+
+  let encrypted = cipher.update(credentials, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+
+  return {
+    encrypted,
+    iv: iv.toString('hex')
+  };
+}
+
+// Helper function to decrypt IMAP credentials
+function decryptImapCredentials(encryptedData, ivHex) {
+  try {
+    const algorithm = 'aes-256-cbc';
+    const iv = Buffer.from(ivHex, 'hex');
+
+    const decipher = crypto.createDecipheriv(algorithm, ENCRYPTION_KEY, iv);
+    let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return JSON.parse(decrypted);
+  } catch (error) {
+    console.error('❌ Error decrypting IMAP credentials:', error);
+    throw new Error('Failed to decrypt IMAP credentials');
+  }
+}
 
 // Helper function to aggregate analytics for a specific account
 async function getAccountAnalytics(accountId, organizationId) {
@@ -540,7 +577,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // POST /api/email-accounts - Create new email account
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { email, provider, relay_provider_id, settings } = req.body;
+    const { email, provider, relay_provider_id, settings, imap_config } = req.body;
 
     if (!email) {
       return res.status(400).json({
@@ -554,6 +591,17 @@ router.post('/', authenticateToken, async (req, res) => {
         success: false,
         error: 'Provider is required'
       });
+    }
+
+    // Validate IMAP configuration for Mailgun/SendGrid providers
+    const requiresImap = ['mailgun', 'sendgrid'].includes(provider.toLowerCase());
+    if (requiresImap) {
+      if (!imap_config || !imap_config.host || !imap_config.port || !imap_config.user || !imap_config.password) {
+        return res.status(400).json({
+          success: false,
+          error: 'IMAP configuration is required for Mailgun/SendGrid accounts (host, port, user, password)'
+        });
+      }
     }
 
     // Check if email already exists for this organization
@@ -575,6 +623,30 @@ router.post('/', authenticateToken, async (req, res) => {
     // credentials (API key) are stored in the relay_providers table
     const dummyCredentials = relay_provider_id ? 'relay-account-no-credentials-needed' : null;
 
+    // Prepare IMAP data if provided
+    let imapCredentialsEncrypted = null;
+    let imapCredentialsIv = null;
+    let imapConfigToStore = null;
+    let enableReceiving = false;
+
+    if (imap_config) {
+      // Encrypt IMAP password
+      const { encrypted, iv } = encryptImapCredentials(imap_config.password);
+      imapCredentialsEncrypted = encrypted;
+      imapCredentialsIv = iv;
+
+      // Store IMAP config (without password)
+      imapConfigToStore = {
+        host: imap_config.host,
+        port: imap_config.port,
+        user: imap_config.user,
+        secure: imap_config.secure !== false, // Default to true
+        tls: imap_config.tls !== false // Default to true
+      };
+
+      enableReceiving = true; // Enable receiving for accounts with IMAP
+    }
+
     // Create new email account
     const newAccount = {
       organization_id: req.user.organizationId,
@@ -589,6 +661,12 @@ router.post('/', authenticateToken, async (req, res) => {
       current_sent_today: 0,
       warmup_status: 'active',
       settings: settings || {},
+      // IMAP fields
+      imap_credentials_encrypted: imapCredentialsEncrypted,
+      imap_credentials_iv: imapCredentialsIv,
+      imap_config: imapConfigToStore,
+      enable_receiving: enableReceiving,
+      last_sync_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -608,6 +686,9 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     console.log('✅ Email account created:', email, 'for organization:', req.user.organizationId);
+    if (enableReceiving) {
+      console.log('📧 IMAP receiving enabled for account:', email);
+    }
 
     res.status(201).json({
       success: true,
@@ -810,7 +891,8 @@ router.put('/:id/settings', authenticateToken, async (req, res) => {
       rotation_priority,
       rotation_weight,
       status,
-      display_name
+      display_name,
+      imap_config // NEW: Allow updating IMAP configuration
     } = req.body;
 
     console.log(`⚙️ Updating settings for account ${id}`);
@@ -844,6 +926,16 @@ router.put('/:id/settings', authenticateToken, async (req, res) => {
       });
     }
 
+    // Validate IMAP config if provided
+    if (imap_config) {
+      if (!imap_config.host || !imap_config.port || !imap_config.user) {
+        return res.status(400).json({
+          success: false,
+          error: 'IMAP configuration must include host, port, and user'
+        });
+      }
+    }
+
     // Update account settings
     const updateData = {};
     if (daily_limit !== undefined) updateData.daily_limit = daily_limit;
@@ -852,6 +944,31 @@ router.put('/:id/settings', authenticateToken, async (req, res) => {
     if (rotation_weight !== undefined) updateData.rotation_weight = rotation_weight;
     if (status !== undefined) updateData.status = status;
     if (display_name !== undefined) updateData.display_name = display_name;
+
+    // Handle IMAP config update
+    if (imap_config) {
+      // If password is provided, encrypt it
+      if (imap_config.password) {
+        const { encrypted, iv } = encryptImapCredentials(imap_config.password);
+        updateData.imap_credentials_encrypted = encrypted;
+        updateData.imap_credentials_iv = iv;
+      }
+
+      // Update IMAP config (without password)
+      updateData.imap_config = {
+        host: imap_config.host,
+        port: imap_config.port,
+        user: imap_config.user,
+        secure: imap_config.secure !== false,
+        tls: imap_config.tls !== false
+      };
+
+      // Enable receiving if IMAP is configured
+      updateData.enable_receiving = true;
+
+      console.log(`📧 Updating IMAP configuration for account ${id}`);
+    }
+
     updateData.updated_at = new Date().toISOString();
 
     const { error } = await supabase
@@ -1235,6 +1352,76 @@ router.get('/health/run-checks', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to run health checks'
+    });
+  }
+});
+
+// POST /api/email-accounts/test-imap - Test IMAP configuration before saving
+router.post('/test-imap', authenticateToken, async (req, res) => {
+  try {
+    const { host, port, user, password, secure, tls } = req.body;
+
+    console.log(`🧪 Testing IMAP connection for ${user}@${host}:${port}`);
+
+    // Validate required fields
+    if (!host || !port || !user || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required IMAP fields (host, port, user, password)'
+      });
+    }
+
+    // Create IMAP config for testing
+    const imapConfig = {
+      host,
+      port: parseInt(port),
+      user,
+      pass: password,
+      secure: secure !== false, // Default to true
+      tls: tls !== false // Default to true
+    };
+
+    // Test connection using ImapService
+    const imapService = new ImapService();
+
+    try {
+      // Attempt to fetch 1 email to verify connection
+      await imapService._fetchImapEmails(imapConfig, 1);
+
+      console.log(`✅ IMAP connection test successful for ${user}@${host}`);
+
+      res.json({
+        success: true,
+        message: 'IMAP connection test successful',
+        config: {
+          host,
+          port,
+          user,
+          secure: imapConfig.secure,
+          tls: imapConfig.tls
+        }
+      });
+
+    } catch (imapError) {
+      console.error(`❌ IMAP connection test failed for ${user}@${host}:`, imapError.message);
+
+      return res.status(400).json({
+        success: false,
+        error: `IMAP connection failed: ${imapError.message}`,
+        details: {
+          host,
+          port,
+          user,
+          error: imapError.message
+        }
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Error testing IMAP connection:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to test IMAP connection'
     });
   }
 });

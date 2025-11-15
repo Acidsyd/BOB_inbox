@@ -7,7 +7,7 @@ import AppLayout from '../../../../../../components/layout/AppLayout'
 import { Button } from '../../../../../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../../../../components/ui/card'
 import { Alert, AlertDescription } from '../../../../../../components/ui/alert'
-import { ArrowLeft, Loader2, CheckCircle2, Mail, Link as LinkIcon, Unlink, Plus, Edit, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, CheckCircle2, Mail, Link as LinkIcon, Unlink, Plus, Edit, Trash2, Server, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { useEmailAccounts } from '../../../../../../hooks/useEmailAccounts'
 import { Checkbox } from '../../../../../../components/ui/checkbox'
@@ -44,6 +44,15 @@ function LinkAccountsContent() {
   const [newEmail, setNewEmail] = useState('')
   const [newDisplayName, setNewDisplayName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+
+  // IMAP configuration state
+  const [imapHost, setImapHost] = useState('')
+  const [imapPort, setImapPort] = useState('993')
+  const [imapUser, setImapUser] = useState('')
+  const [imapPassword, setImapPassword] = useState('')
+  const [imapSecure, setImapSecure] = useState(true)
+  const [isTesting, setIsTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
   const { accounts: availableAccounts, isLoading: accountsLoading } = useEmailAccounts()
 
@@ -177,6 +186,61 @@ function LinkAccountsContent() {
     }
   }
 
+  const handleTestImapConnection = async () => {
+    if (!imapHost || !imapPort || !imapUser || !imapPassword) {
+      setError('Please fill in all IMAP fields before testing')
+      return
+    }
+
+    setIsTesting(true)
+    setError(null)
+    setTestResult(null)
+
+    try {
+      const token = localStorage.getItem('token')
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+
+      const testResponse = await fetch(`${apiUrl}/api/email-accounts/test-imap`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          host: imapHost,
+          port: parseInt(imapPort),
+          user: imapUser,
+          password: imapPassword,
+          secure: imapSecure,
+          tls: imapSecure
+        })
+      })
+
+      const testData = await testResponse.json()
+
+      if (testData.success) {
+        setTestResult({
+          success: true,
+          message: 'IMAP connection successful! You can now create the account.'
+        })
+      } else {
+        setTestResult({
+          success: false,
+          message: testData.error || 'IMAP connection failed'
+        })
+        setError(testData.error || 'IMAP connection test failed')
+      }
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        message: err.message || 'Failed to test IMAP connection'
+      })
+      setError(err.message || 'Failed to test IMAP connection')
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
   const handleCreateAndLinkAccount = async () => {
     if (!newEmail || !newDisplayName) {
       setError('Please provide both email address and display name')
@@ -190,6 +254,18 @@ function LinkAccountsContent() {
       return
     }
 
+    // Validate IMAP configuration (required for Mailgun accounts)
+    if (!imapHost || !imapPort || !imapUser || !imapPassword) {
+      setError('Please fill in all IMAP configuration fields (required for Mailgun accounts)')
+      return
+    }
+
+    // Recommend testing IMAP connection first
+    if (!testResult || !testResult.success) {
+      setError('Please test the IMAP connection before creating the account')
+      return
+    }
+
     setIsCreating(true)
     setError(null)
     setSuccess(null)
@@ -198,7 +274,7 @@ function LinkAccountsContent() {
       const token = localStorage.getItem('token')
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
 
-      // Create the email account with Mailgun provider type and link to relay provider
+      // Create the email account with Mailgun provider type, relay provider link, and IMAP config
       const createResponse = await fetch(`${apiUrl}/api/email-accounts`, {
         method: 'POST',
         headers: {
@@ -209,13 +285,21 @@ function LinkAccountsContent() {
           provider: 'mailgun',
           email: newEmail,
           display_name: newDisplayName,
-          relay_provider_id: providerId
+          relay_provider_id: providerId,
+          imap_config: {
+            host: imapHost,
+            port: parseInt(imapPort),
+            user: imapUser,
+            password: imapPassword,
+            secure: imapSecure,
+            tls: imapSecure
+          }
         })
       })
 
       if (!createResponse.ok) {
         const errorData = await createResponse.json()
-        throw new Error(errorData.message || 'Failed to create email account')
+        throw new Error(errorData.error || errorData.message || 'Failed to create email account')
       }
 
       const createData = await createResponse.json()
@@ -224,9 +308,15 @@ function LinkAccountsContent() {
         throw new Error('Email account creation failed')
       }
 
-      setSuccess(`Email account ${newEmail} created and linked to Mailgun successfully`)
+      setSuccess(`Email account ${newEmail} created and linked to Mailgun successfully with IMAP receiving enabled`)
       setNewEmail('')
       setNewDisplayName('')
+      setImapHost('')
+      setImapPort('993')
+      setImapUser('')
+      setImapPassword('')
+      setImapSecure(true)
+      setTestResult(null)
       await fetchProviderDetails()
     } catch (err: any) {
       setError(err.message || 'Failed to create and link email account')
@@ -393,10 +483,128 @@ function LinkAccountsContent() {
                   </p>
                 </div>
               </div>
+
+              {/* IMAP Configuration Section */}
+              <div className="border-t pt-4 mt-4">
+                <div className="flex items-center mb-3">
+                  <Server className="h-4 w-4 mr-2 text-blue-600" />
+                  <h4 className="font-medium">IMAP Configuration (Required for Receiving Emails)</h4>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Configure IMAP settings to receive emails. Mailgun handles sending via API, while IMAP enables inbox functionality.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="imap-host">IMAP Host *</Label>
+                    <Input
+                      id="imap-host"
+                      type="text"
+                      placeholder="imap.gmail.com"
+                      value={imapHost}
+                      onChange={(e) => setImapHost(e.target.value)}
+                      disabled={isCreating || isTesting}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      IMAP server hostname
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="imap-port">IMAP Port *</Label>
+                    <Input
+                      id="imap-port"
+                      type="number"
+                      placeholder="993"
+                      value={imapPort}
+                      onChange={(e) => setImapPort(e.target.value)}
+                      disabled={isCreating || isTesting}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Usually 993 (SSL) or 143
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="imap-user">IMAP Username *</Label>
+                    <Input
+                      id="imap-user"
+                      type="text"
+                      placeholder="user@domain.com"
+                      value={imapUser}
+                      onChange={(e) => setImapUser(e.target.value)}
+                      disabled={isCreating || isTesting}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      IMAP login username (usually email)
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="imap-password">IMAP Password *</Label>
+                    <Input
+                      id="imap-password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={imapPassword}
+                      onChange={(e) => setImapPassword(e.target.value)}
+                      disabled={isCreating || isTesting}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      IMAP account password or app password
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2 mt-4">
+                  <Checkbox
+                    id="imap-secure"
+                    checked={imapSecure}
+                    onCheckedChange={(checked) => setImapSecure(checked as boolean)}
+                    disabled={isCreating || isTesting}
+                  />
+                  <div className="flex items-center">
+                    <Shield className="h-4 w-4 mr-1 text-green-600" />
+                    <Label htmlFor="imap-secure" className="cursor-pointer">
+                      Use secure connection (SSL/TLS)
+                    </Label>
+                  </div>
+                </div>
+
+                {/* Test Result Alert */}
+                {testResult && (
+                  <Alert className={testResult.success ? "bg-green-50 text-green-900 border-green-200 mt-4" : "bg-red-50 text-red-900 border-red-200 mt-4"}>
+                    {testResult.success ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      <Mail className="h-4 w-4" />
+                    )}
+                    <AlertDescription>{testResult.message}</AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Test Connection Button */}
+                <div className="flex justify-end mt-4">
+                  <Button
+                    variant="outline"
+                    onClick={handleTestImapConnection}
+                    disabled={isTesting || isCreating || !imapHost || !imapPort || !imapUser || !imapPassword}
+                  >
+                    {isTesting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Testing Connection...
+                      </>
+                    ) : (
+                      <>
+                        <Server className="mr-2 h-4 w-4" />
+                        Test IMAP Connection
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
               <div className="flex justify-end">
                 <Button
                   onClick={handleCreateAndLinkAccount}
-                  disabled={isCreating || !newEmail || !newDisplayName}
+                  disabled={isCreating || !newEmail || !newDisplayName || !imapHost || !imapPort || !imapUser || !imapPassword || !testResult?.success}
                 >
                   {isCreating ? (
                     <>

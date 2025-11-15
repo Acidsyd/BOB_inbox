@@ -1,6 +1,6 @@
 const GmailSyncProvider = require('./GmailSyncProvider');
+const ImapSyncProvider = require('./ImapSyncProvider');
 // const MicrosoftSyncProvider = require('./MicrosoftSyncProvider'); // Future implementation
-// const SmtpSyncProvider = require('./SmtpSyncProvider'); // Future implementation
 
 /**
  * ProviderFactory - Creates appropriate sync provider instances
@@ -51,6 +51,28 @@ class ProviderFactory {
       supports_read_status: false, // Cannot mark read in provider
       supports_labels: false, // IMAP folders, not labels
       rate_limit_per_minute: 60 // Conservative IMAP limit
+    },
+
+    mailgun: {
+      // Mailgun with IMAP: Hybrid account (send via API, receive via IMAP)
+      bidirectional_sync: false, // Receive-only via IMAP
+      real_time_updates: false, // No push notifications
+      incremental_sync: 'timestamp', // IMAP timestamp-based sync
+      max_batch_size: 50, // Higher than SMTP due to Mailgun infrastructure
+      supports_read_status: false, // Cannot mark read in provider
+      supports_labels: false, // IMAP folders, not labels
+      rate_limit_per_minute: 60 // IMAP limit
+    },
+
+    sendgrid: {
+      // SendGrid with IMAP: Same hybrid architecture as Mailgun
+      bidirectional_sync: false,
+      real_time_updates: false,
+      incremental_sync: 'timestamp',
+      max_batch_size: 50,
+      supports_read_status: false,
+      supports_labels: false,
+      rate_limit_per_minute: 60
     }
   };
 
@@ -78,6 +100,11 @@ class ProviderFactory {
         case 'gmail':
           return new GmailSyncProvider(capabilities);
 
+        case 'mailgun':
+        case 'sendgrid':
+          // Relay providers with IMAP receiving
+          return new ImapSyncProvider(capabilities);
+
         case 'microsoft':
         case 'outlook':
           // Future implementation
@@ -89,7 +116,7 @@ class ProviderFactory {
         default:
           // Future implementation
           throw new Error(`SMTP provider not yet implemented. Coming soon!`);
-          // return new SmtpSyncProvider(capabilities);
+          // return new ImapSyncProvider(capabilities);
       }
     } catch (error) {
       console.error(`❌ Failed to create provider for type: ${providerType}`, error);
@@ -102,8 +129,8 @@ class ProviderFactory {
    * @returns {Array} Array of supported provider types
    */
   static getSupportedProviders() {
-    return ['gmail']; // Currently only Gmail is implemented
-    // Future: return ['gmail', 'microsoft', 'outlook', 'smtp'];
+    return ['gmail', 'mailgun', 'sendgrid']; // Gmail OAuth2 + Mailgun/SendGrid with IMAP
+    // Future: return ['gmail', 'mailgun', 'sendgrid', 'microsoft', 'outlook', 'smtp'];
   }
 
   /**
@@ -158,6 +185,22 @@ class ProviderFactory {
         if (!account.encrypted_tokens) {
           validation.success = false;
           validation.errors.push('Gmail account missing OAuth2 tokens');
+        }
+        break;
+
+      case 'mailgun':
+      case 'sendgrid':
+        // Validate IMAP configuration for relay providers
+        if (!account.imap_config || !account.imap_credentials_encrypted) {
+          validation.success = false;
+          validation.errors.push(`${normalizedType} account missing IMAP configuration`);
+        } else {
+          // Validate IMAP config structure
+          const { host, port, user } = account.imap_config;
+          if (!host || !port || !user) {
+            validation.success = false;
+            validation.errors.push('IMAP configuration incomplete (missing host, port, or user)');
+          }
         }
         break;
 
