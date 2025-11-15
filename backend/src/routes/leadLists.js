@@ -65,20 +65,275 @@ const upload = multer({
   }
 });
 
+// Helper function to get analytics for a lead list
+async function getLeadListAnalytics(leadListId, organizationId) {
+  try {
+    // Get lead status counts
+    const { count: totalLeads } = await supabase
+      .from('leads')
+      .select('*', { count: 'exact', head: true })
+      .eq('lead_list_id', leadListId)
+      .eq('organization_id', organizationId);
+
+    const { count: activeLeads } = await supabase
+      .from('leads')
+      .select('*', { count: 'exact', head: true })
+      .eq('lead_list_id', leadListId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'active');
+
+    const { count: sentLeads } = await supabase
+      .from('leads')
+      .select('*', { count: 'exact', head: true })
+      .eq('lead_list_id', leadListId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'sent');
+
+    const { count: repliedLeads } = await supabase
+      .from('leads')
+      .select('*', { count: 'exact', head: true })
+      .eq('lead_list_id', leadListId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'replied');
+
+    const { count: bouncedLeads } = await supabase
+      .from('leads')
+      .select('*', { count: 'exact', head: true })
+      .eq('lead_list_id', leadListId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'bounced');
+
+    const { count: unsubscribedLeads } = await supabase
+      .from('leads')
+      .select('*', { count: 'exact', head: true })
+      .eq('lead_list_id', leadListId)
+      .eq('organization_id', organizationId)
+      .eq('status', 'unsubscribed');
+
+    // Get campaigns using this lead list
+    const { data: allCampaigns } = await supabase
+      .from('campaigns')
+      .select('id, name, config, status, updated_at')
+      .eq('organization_id', organizationId);
+
+    const campaignsUsing = (allCampaigns || []).filter(
+      campaign => campaign.config?.leadListId === leadListId
+    );
+
+    const campaignsCount = campaignsUsing.length;
+    const activeCampaignsCount = campaignsUsing.filter(c => c.status === 'active').length;
+
+    // Get email performance metrics - find all leads from this list
+    const { data: leadsData } = await supabase
+      .from('leads')
+      .select('email')
+      .eq('lead_list_id', leadListId)
+      .eq('organization_id', organizationId);
+
+    const leadEmails = (leadsData || []).map(l => l.email);
+
+    let totalEmailsSent = 0;
+    let totalDelivered = 0;
+    let totalBounces = 0;
+    let totalOpens = 0;
+    let totalClicks = 0;
+    let totalReplies = 0;
+
+    if (leadEmails.length > 0) {
+      // Get emails sent to leads in this list
+      const { count: sentCount } = await supabase
+        .from('scheduled_emails')
+        .select('*', { count: 'exact', head: true })
+        .in('to_email', leadEmails)
+        .eq('organization_id', organizationId)
+        .eq('status', 'sent');
+
+      totalEmailsSent = sentCount || 0;
+
+      // Get bounces
+      const { count: bounceCount } = await supabase
+        .from('scheduled_emails')
+        .select('*', { count: 'exact', head: true })
+        .in('to_email', leadEmails)
+        .eq('organization_id', organizationId)
+        .eq('status', 'bounced');
+
+      totalBounces = bounceCount || 0;
+      totalDelivered = totalEmailsSent - totalBounces;
+
+      // Get opens and clicks from tracking events
+      if (totalEmailsSent > 0) {
+        // Get scheduled email IDs for this lead list
+        const { data: scheduledEmails } = await supabase
+          .from('scheduled_emails')
+          .select('id')
+          .in('to_email', leadEmails)
+          .eq('organization_id', organizationId)
+          .eq('status', 'sent');
+
+        const scheduledEmailIds = (scheduledEmails || []).map(e => e.id);
+
+        if (scheduledEmailIds.length > 0) {
+          // Get unique opens
+          const { data: openEvents } = await supabase
+            .from('email_tracking_events')
+            .select('scheduled_email_id')
+            .in('scheduled_email_id', scheduledEmailIds)
+            .eq('event_type', 'open');
+
+          const uniqueOpens = new Set((openEvents || []).map(e => e.scheduled_email_id));
+          totalOpens = uniqueOpens.size;
+
+          // Get unique clicks
+          const { data: clickEvents } = await supabase
+            .from('email_tracking_events')
+            .select('scheduled_email_id')
+            .in('scheduled_email_id', scheduledEmailIds)
+            .eq('event_type', 'click');
+
+          const uniqueClicks = new Set((clickEvents || []).map(e => e.scheduled_email_id));
+          totalClicks = uniqueClicks.size;
+        }
+      }
+
+      // Get replies from conversation_messages
+      const { count: replyCount } = await supabase
+        .from('conversation_messages')
+        .select('*', { count: 'exact', head: true })
+        .in('from_email', leadEmails)
+        .eq('organization_id', organizationId)
+        .eq('direction', 'received');
+
+      totalReplies = replyCount || 0;
+    }
+
+    // Calculate rates
+    const deliveryRate = totalEmailsSent > 0
+      ? ((totalDelivered / totalEmailsSent) * 100).toFixed(2)
+      : '0.00';
+
+    const openRate = totalDelivered > 0
+      ? ((totalOpens / totalDelivered) * 100).toFixed(2)
+      : '0.00';
+
+    const clickRate = totalDelivered > 0
+      ? ((totalClicks / totalDelivered) * 100).toFixed(2)
+      : '0.00';
+
+    const replyRate = totalEmailsSent > 0
+      ? ((totalReplies / totalEmailsSent) * 100).toFixed(2)
+      : '0.00';
+
+    const bounceRate = totalEmailsSent > 0
+      ? ((totalBounces / totalEmailsSent) * 100).toFixed(2)
+      : '0.00';
+
+    // Get last campaign usage timestamp
+    const lastCampaignUsed = campaignsUsing.length > 0
+      ? campaignsUsing.sort((a, b) =>
+          new Date(b.updated_at) - new Date(a.updated_at)
+        )[0].updated_at
+      : null;
+
+    return {
+      // Lead counts
+      totalLeads: totalLeads || 0,
+      activeLeads: activeLeads || 0,
+      sentLeads: sentLeads || 0,
+      repliedLeads: repliedLeads || 0,
+      bouncedLeads: bouncedLeads || 0,
+      unsubscribedLeads: unsubscribedLeads || 0,
+
+      // Campaign usage
+      campaignsUsing: campaignsCount,
+      activeCampaigns: activeCampaignsCount,
+
+      // Email performance
+      totalEmailsSent,
+      totalDelivered,
+      totalOpens,
+      totalClicks,
+      totalReplies,
+      totalBounces,
+
+      // Rates (as numbers)
+      deliveryRate: parseFloat(deliveryRate),
+      openRate: parseFloat(openRate),
+      clickRate: parseFloat(clickRate),
+      replyRate: parseFloat(replyRate),
+      bounceRate: parseFloat(bounceRate),
+
+      // Timestamps
+      lastCampaignUsed
+    };
+  } catch (error) {
+    console.error(`Error getting analytics for lead list ${leadListId}:`, error);
+    return {
+      totalLeads: 0,
+      activeLeads: 0,
+      sentLeads: 0,
+      repliedLeads: 0,
+      bouncedLeads: 0,
+      unsubscribedLeads: 0,
+      campaignsUsing: 0,
+      activeCampaigns: 0,
+      totalEmailsSent: 0,
+      totalDelivered: 0,
+      totalOpens: 0,
+      totalClicks: 0,
+      totalReplies: 0,
+      totalBounces: 0,
+      deliveryRate: 0,
+      openRate: 0,
+      clickRate: 0,
+      replyRate: 0,
+      bounceRate: 0,
+      lastCampaignUsed: null
+    };
+  }
+}
+
 // Get all lead lists for organization
 router.get('/', authenticateToken, async (req, res) => {
   try {
     console.log('📋 GET /api/leads/lists called');
     console.log('👤 User:', req.user);
-    
+
+    const includeAnalytics = req.query.include === 'analytics';
+    console.log('📊 Include analytics:', includeAnalytics);
+
     const { data: lists, error } = await supabase
       .from('lead_lists')
       .select('*')
       .eq('organization_id', req.user.organizationId)
       .order('created_at', { ascending: false });
-      
+
     if (error) throw error;
-    
+
+    // Fetch analytics if requested
+    let analyticsMap = {};
+    if (includeAnalytics) {
+      console.log('📊 Fetching analytics for', lists?.length || 0, 'lead lists');
+      const analyticsPromises = (lists || []).map(list =>
+        getLeadListAnalytics(list.id, req.user.organizationId)
+          .then(analytics => ({ id: list.id, analytics }))
+          .catch(error => {
+            console.error(`Error fetching analytics for list ${list.id}:`, error);
+            return { id: list.id, analytics: null };
+          })
+      );
+
+      const analyticsResults = await Promise.all(analyticsPromises);
+      analyticsMap = analyticsResults.reduce((map, result) => {
+        if (result.analytics) {
+          map[result.id] = result.analytics;
+        }
+        return map;
+      }, {});
+
+      console.log('📊 Analytics fetched for', Object.keys(analyticsMap).length, 'lists');
+    }
+
     // Get lead counts for each list using proper count queries
     const enhancedLists = await Promise.all(
       (lists || []).map(async (list) => {
@@ -87,18 +342,18 @@ router.get('/', authenticateToken, async (req, res) => {
           .from('leads')
           .select('*', { count: 'exact', head: true })
           .eq('lead_list_id', list.id);
-        
-        // Get active count using count query (not limited to 1000)  
+
+        // Get active count using count query (not limited to 1000)
         const { count: activeLeads, error: activeError } = await supabase
           .from('leads')
           .select('*', { count: 'exact', head: true })
           .eq('lead_list_id', list.id)
           .eq('status', 'active');
-          
+
         if (totalError || activeError) {
           console.error(`Error counting leads for list ${list.id}:`, totalError || activeError);
         }
-        
+
         // Get last lead added date
         const { data: lastLead } = await supabase
           .from('leads')
@@ -106,10 +361,10 @@ router.get('/', authenticateToken, async (req, res) => {
           .eq('lead_list_id', list.id)
           .order('created_at', { ascending: false })
           .limit(1);
-        
+
         console.log(`📊 List "${list.name}": ${totalLeads} total leads, ${activeLeads} active leads`);
-        
-        return {
+
+        const baseList = {
           id: list.id,
           name: list.name,
           description: list.description || '',
@@ -119,6 +374,13 @@ router.get('/', authenticateToken, async (req, res) => {
           updatedAt: list.updated_at,
           lastLeadAdded: lastLead?.[0]?.created_at || null
         };
+
+        // Include analytics if available
+        if (includeAnalytics && analyticsMap[list.id]) {
+          baseList.analytics = analyticsMap[list.id];
+        }
+
+        return baseList;
       })
     );
 
@@ -344,17 +606,30 @@ router.post('/:id/import-duplicates', authenticateToken, async (req, res) => {
     // Insert each duplicate lead
     for (const lead of duplicateLeads) {
       try {
+        // Prepare the lead data object
+        const leadData = {
+          email: lead.email,
+          first_name: lead.first_name || '',
+          last_name: lead.last_name || '',
+          company: lead.company || '',
+          lead_list_id: leadListId,
+          organization_id: req.user.organizationId,
+          created_by: req.user.userId
+        };
+
+        // Add custom_fields if provided (stored as JSONB in database)
+        if (lead.custom_fields && typeof lead.custom_fields === 'object') {
+          leadData.custom_fields = lead.custom_fields;
+        }
+
+        // Also support data.custom_fields format (for compatibility)
+        if (lead.data?.custom_fields && typeof lead.data.custom_fields === 'object') {
+          leadData.custom_fields = lead.data.custom_fields;
+        }
+
         const { data, error } = await supabase
           .from('leads')
-          .insert({
-            email: lead.email,
-            first_name: lead.first_name || '',
-            last_name: lead.last_name || '',
-            company: lead.company || '',
-            lead_list_id: leadListId,
-            organization_id: req.user.organizationId,
-            created_by: req.user.userId
-          })
+          .insert(leadData)
           .select()
           .single();
 
