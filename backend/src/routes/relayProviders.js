@@ -50,12 +50,28 @@ router.get('/', authenticateToken, async (req, res) => {
       });
     }
 
-    console.log(`✅ Found ${providers.length} relay providers`);
+    // Add linked accounts count for each provider
+    const providersWithCount = await Promise.all(providers.map(async (provider) => {
+      const { count, error: countError } = await supabase
+        .from('email_accounts')
+        .select('id', { count: 'exact', head: true })
+        .eq('relay_provider_id', provider.id)
+        .eq('organization_id', req.user.organizationId);
+
+      if (countError) {
+        console.error(`❌ Error counting linked accounts for provider ${provider.id}:`, countError);
+        return { ...provider, linked_accounts_count: 0 };
+      }
+
+      return { ...provider, linked_accounts_count: count || 0 };
+    }));
+
+    console.log(`✅ Found ${providersWithCount.length} relay providers`);
 
     res.json({
       success: true,
-      providers,
-      total: providers.length
+      providers: providersWithCount,
+      total: providersWithCount.length
     });
 
   } catch (error) {

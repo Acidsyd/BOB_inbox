@@ -26,6 +26,10 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useWorkflowNavigation } from '../../../../lib/navigation/context'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../../components/ui/select'
+import { useRelayProviders } from '../../../../hooks/useRelayProviders'
+import { RelayProvidersTable } from '../../../../components/email-accounts/RelayProvidersTable'
+import { MailgunConfigModal } from '../../../../components/email-accounts/MailgunConfigModal'
+import { SendGridConfigModal } from '../../../../components/email-accounts/SendGridConfigModal'
 
 type SetupStep = 'provider-selection' | 'gmail-oauth2-setup' | 'microsoft-oauth2-setup' | 'sendgrid-setup' | 'mailgun-setup'
 type Provider = 'gmail-oauth2' | 'microsoft-oauth2' | 'sendgrid' | 'mailgun'
@@ -55,6 +59,13 @@ function AddEmailAccountContent() {
   const [showApiKey, setShowApiKey] = useState(false)
   const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [connectionTestPassed, setConnectionTestPassed] = useState(false)
+
+  // Modal states for new configuration modals
+  const [showMailgunModal, setShowMailgunModal] = useState(false)
+  const [showSendGridModal, setShowSendGridModal] = useState(false)
+
+  // Relay providers hook
+  const { providers, refetch: refetchProviders, deleteProvider } = useRelayProviders()
 
   // Relay Provider Configuration
   const [relayConfig, setRelayConfig] = useState<RelayProviderConfig>({
@@ -455,20 +466,112 @@ function AddEmailAccountContent() {
   // Provider Selection Step
   if (currentStep === 'provider-selection') {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="p-6 max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center mb-8">
-          <Link href="/settings/email-accounts">
-            <Button variant="outline" size="sm" className="mr-4">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Email Accounts
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center">
+            <Link href="/settings/email-accounts">
+              <Button variant="outline" size="sm" className="mr-4">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Email Accounts
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Add Email Account</h1>
+              <p className="text-gray-600">Choose how you want to connect your email account</p>
+            </div>
+          </div>
+
+          {/* Quick Action Buttons */}
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={handleGmailOAuth2Setup}
+              disabled={isLoading}
+              variant="outline"
+              size="sm"
+            >
+              <Shield className="h-4 w-4 mr-2" />
+              Add Gmail
             </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Add Email Account</h1>
-            <p className="text-gray-600">Choose how you want to connect your email account</p>
+            <Button
+              onClick={handleMicrosoftOAuth2Setup}
+              disabled={isLoading}
+              variant="outline"
+              size="sm"
+            >
+              <Shield className="h-4 w-4 mr-2" />
+              Add Microsoft
+            </Button>
+            <Button
+              onClick={() => setShowMailgunModal(true)}
+              variant="outline"
+              size="sm"
+            >
+              <Mail className="h-4 w-4 mr-2" />
+              Add Mailgun
+            </Button>
+            <Button
+              onClick={() => setShowSendGridModal(true)}
+              variant="outline"
+              size="sm"
+            >
+              <Send className="h-4 w-4 mr-2" />
+              Add SendGrid
+            </Button>
           </div>
         </div>
+
+        {/* Relay Providers Table */}
+        {providers.length > 0 && (
+          <div className="mb-8">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Relay Provider Configurations</h2>
+              <p className="text-sm text-gray-600">Manage your Mailgun and SendGrid configurations</p>
+            </div>
+            <RelayProvidersTable
+              providers={providers}
+              onEdit={(provider) => {
+                // Navigate to the link-accounts page which is step 2 of configuration
+                // This page allows viewing/editing provider details and managing linked accounts
+                router.push(`/settings/email-accounts/mailgun/${provider.id}/link-accounts`)
+              }}
+              onViewLinked={(provider) => {
+                router.push(`/settings/email-accounts/mailgun/${provider.id}/link-accounts`)
+              }}
+              onDelete={async (provider) => {
+                if (confirm(`Are you sure you want to delete "${provider.provider_name}"? This will unlink all associated email accounts.`)) {
+                  try {
+                    await deleteProvider(provider.id)
+                    addToast({
+                      title: 'Provider Deleted',
+                      description: `Successfully deleted ${provider.provider_name}`,
+                      type: 'success'
+                    })
+                    refetchProviders()
+                  } catch (error: any) {
+                    addToast({
+                      title: 'Delete Failed',
+                      description: error.message || 'Failed to delete provider',
+                      type: 'error'
+                    })
+                  }
+                }
+              }}
+            />
+          </div>
+        )}
+
+        {/* Divider */}
+        {providers.length > 0 && (
+          <div className="relative my-8">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-white text-gray-500">Or choose a provider below</span>
+            </div>
+          </div>
+        )}
 
         {/* Provider Options */}
         <div className="grid lg:grid-cols-2 md:grid-cols-2 gap-6">
@@ -1123,6 +1226,24 @@ function AddEmailAccountContent() {
             </div>
           </div>
         </div>
+
+        {/* Configuration Modals */}
+        <MailgunConfigModal
+          open={showMailgunModal}
+          onOpenChange={setShowMailgunModal}
+          onSuccess={(providerId) => {
+            refetchProviders()
+            router.push(`/settings/email-accounts/mailgun/${providerId}/link-accounts`)
+          }}
+        />
+        <SendGridConfigModal
+          open={showSendGridModal}
+          onOpenChange={setShowSendGridModal}
+          onSuccess={() => {
+            refetchProviders()
+            router.push('/settings/email-accounts')
+          }}
+        />
       </div>
     )
   }
