@@ -192,7 +192,7 @@ function SettingsContent() {
           <CardDescription>Common configuration tasks</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Link href="/settings/email-accounts/new">
               <Button variant="outline" className="w-full justify-start">
                 <Mail className="h-4 w-4 mr-2" />
@@ -209,6 +209,12 @@ function SettingsContent() {
               <Button variant="outline" className="w-full justify-start">
                 <Globe className="h-4 w-4 mr-2" />
                 Connect Integration
+              </Button>
+            </Link>
+            <Link href="/settings/api">
+              <Button variant="outline" className="w-full justify-start">
+                <Code className="h-4 w-4 mr-2" />
+                View API Docs
               </Button>
             </Link>
           </div>
