@@ -48,6 +48,7 @@ const navigation = [
       { name: 'Integrations', href: '/settings/integrations' },
       { name: 'Billing', href: '/settings/billing' },
       { name: 'Timezone', href: '/settings/timezone' },
+      { name: 'API Documentation', href: '/settings/api' },
     ]
   },
 ]
