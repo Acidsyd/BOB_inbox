@@ -648,7 +648,7 @@ export function InboxMessageView({
           </div>
         ) : (
           <div className="space-y-3 pb-4">
-            {messages?.map((message, index) => {
+            {messages?.slice().reverse().map((message, index) => {
               // Determine if this is the most recent received message
               const receivedMessages = messages.filter(m => m.direction === 'received')
               const mostRecentReceivedMessage = receivedMessages.length > 0

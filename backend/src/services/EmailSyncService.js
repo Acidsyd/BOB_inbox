@@ -79,7 +79,7 @@ class EmailSyncService {
         try {
           // Check if message already exists
           const existingMessage = await this.findExistingMessage(
-            messageData.message_id_header, 
+            messageData.message_id_header,
             organizationId
           );
 
@@ -87,17 +87,24 @@ class EmailSyncService {
             // Update existing message if read status changed
             if (existingMessage.is_read !== messageData.is_read) {
               await this.updateMessageReadStatus(
-                existingMessage.id, 
+                existingMessage.id,
                 messageData.is_read
               );
               updatedMessages++;
               console.log(`📖 Updated read status: ${messageData.subject}`);
             }
           } else {
+            // CRITICAL FIX: Add email_account_id to messageData before ingestion
+            const enrichedMessageData = {
+              ...messageData,
+              email_account_id: account.id,
+              organization_id: organizationId
+            };
+
             // Ingest new message via unified inbox service
-            await this.unifiedInboxService.ingestEmail(messageData, messageData.direction, organizationId);
+            await this.unifiedInboxService.ingestEmail(enrichedMessageData, messageData.direction, organizationId);
             newMessages++;
-            console.log(`📧 New message ingested: ${messageData.subject}`);
+            console.log(`📧 New message ingested: ${messageData.subject} (account: ${account.email})`);
           }
 
         } catch (error) {
@@ -754,11 +761,12 @@ class EmailSyncService {
         };
       }
 
-      // Try SMTP accounts
+      // Try SMTP/relay accounts (Mailgun/SendGrid with IMAP)
       const { data: smtpAccount } = await supabase
         .from('email_accounts')
         .select(`
-          id, email, provider, credentials,
+          id, email, provider, credentials_encrypted,
+          imap_config, imap_credentials_encrypted, imap_credentials_iv,
           last_sync_at, provider_capabilities
         `)
         .eq('id', accountId)
@@ -768,8 +776,8 @@ class EmailSyncService {
       if (smtpAccount) {
         return {
           ...smtpAccount,
-          type: 'smtp',
-          syncCapable: false // SMTP is read-only from provider perspective
+          type: smtpAccount.provider === 'smtp' ? 'smtp' : 'relay', // relay for Mailgun/SendGrid
+          syncCapable: smtpAccount.imap_config ? true : false // Can sync if IMAP configured
         };
       }
 
