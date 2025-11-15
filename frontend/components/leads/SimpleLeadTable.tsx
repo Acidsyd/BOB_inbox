@@ -55,7 +55,8 @@ interface Lead {
   phone?: string
   status: 'active' | 'inactive' | 'bounced' | 'unsubscribed' | 'responded'
   created_at: string
-  data?: any // Custom fields stored as JSON
+  custom_fields?: any // Custom fields stored as JSONB
+  data?: any // Legacy field for backward compatibility
   added_at: string
   source: string
 }
@@ -195,11 +196,21 @@ export default function SimpleLeadTable({
   }
 
   const getCustomFields = (lead: Lead) => {
-    if (!lead.data?.custom_fields) return []
-    
-    return Object.entries(lead.data.custom_fields)
-      .filter(([key, value]) => value && key !== 'imported_from')
-      .slice(0, 3) // Show max 3 custom fields
+    // Try new custom_fields format first, fallback to legacy data.custom_fields
+    const customFields = lead.custom_fields || lead.data?.custom_fields
+
+    if (!customFields) return []
+
+    // Handle different types of custom_fields
+    if (typeof customFields === 'object' && !Array.isArray(customFields)) {
+      // Object format: { key1: value1, key2: value2 }
+      return Object.entries(customFields)
+        .filter(([key, value]) => value && key !== 'imported_from')
+        .slice(0, 3) // Show max 3 custom fields
+    } else {
+      // Primitive value (string, number) or array - show as single field
+      return [['custom_fields', customFields]]
+    }
   }
 
   // Loading skeleton
