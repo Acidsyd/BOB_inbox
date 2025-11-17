@@ -767,17 +767,67 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       .single();
 
     // Check if either deletion was successful
-    if (emailAccount) {
-      console.log(`✅ Successfully deleted email account: ${emailAccount.email}`);
+    if (emailAccount || oauthAccount) {
+      const deletedEmail = emailAccount?.email || oauthAccount?.email;
+
+      console.log(`✅ Successfully deleted email account: ${deletedEmail}`);
+
+      // CASCADE: Remove account from all campaign configurations
+      try {
+        console.log(`🔄 Cleaning up campaigns that reference deleted account: ${id}`);
+
+        // Get all campaigns for this organization
+        const { data: campaigns, error: fetchError } = await supabase
+          .from('campaigns')
+          .select('id, name, config')
+          .eq('organization_id', organizationId);
+
+        if (fetchError) {
+          console.error('⚠️  Warning: Failed to fetch campaigns for cleanup:', fetchError);
+        } else if (campaigns && campaigns.length > 0) {
+          // Filter campaigns that have this account in their emailAccounts array
+          const campaignsToUpdate = campaigns.filter(campaign =>
+            campaign.config?.emailAccounts?.includes(id)
+          );
+
+          console.log(`📋 Found ${campaignsToUpdate.length} campaign(s) using this account`);
+
+          // Update each campaign to remove the deleted account
+          for (const campaign of campaignsToUpdate) {
+            const updatedEmailAccounts = campaign.config.emailAccounts.filter(
+              accountId => accountId !== id
+            );
+
+            const { error: updateError } = await supabase
+              .from('campaigns')
+              .update({
+                config: {
+                  ...campaign.config,
+                  emailAccounts: updatedEmailAccounts
+                },
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', campaign.id);
+
+            if (updateError) {
+              console.error(`⚠️  Warning: Failed to update campaign ${campaign.name}:`, updateError);
+            } else {
+              console.log(`✅ Removed account from campaign: ${campaign.name} (${updatedEmailAccounts.length} accounts remaining)`);
+            }
+          }
+
+          if (campaignsToUpdate.length > 0) {
+            console.log(`✅ Campaign cleanup complete: Updated ${campaignsToUpdate.length} campaign(s)`);
+          }
+        }
+      } catch (cleanupError) {
+        console.error('⚠️  Warning: Campaign cleanup failed (non-fatal):', cleanupError);
+        // Don't fail the delete operation if cleanup fails
+      }
+
       res.json({
         success: true,
-        message: `Email account ${emailAccount.email} deleted successfully`
-      });
-    } else if (oauthAccount) {
-      console.log(`✅ Successfully deleted OAuth2 account: ${oauthAccount.email}`);
-      res.json({
-        success: true,
-        message: `Email account ${oauthAccount.email} deleted successfully`
+        message: `Email account ${deletedEmail} deleted successfully`
       });
     } else {
       console.error('❌ Account not found or already deleted:', { emailError, oauthError });
