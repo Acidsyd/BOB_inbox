@@ -59,6 +59,17 @@ class RelayProviderService {
   }
 
   /**
+   * Generate RFC-compliant Message-ID header
+   * Format: <uuid@domain>
+   */
+  generateMessageId(fromEmail) {
+    const uuid = crypto.randomUUID();
+    // Extract domain from email address
+    const domain = fromEmail.includes('@') ? fromEmail.split('@')[1] : 'localhost';
+    return `<${uuid}@${domain}>`;
+  }
+
+  /**
    * Get relay provider by ID
    */
   async getProvider(providerId, organizationId) {
@@ -98,10 +109,14 @@ class RelayProviderService {
       // Set API key
       sgMail.setApiKey(provider.api_key);
 
+      // Generate custom Message-ID for threading
+      const fromEmail = emailData.from || provider.from_email;
+      const customMessageId = this.generateMessageId(fromEmail);
+
       // Prepare email
       const message = {
         from: {
-          email: emailData.from || provider.from_email,
+          email: fromEmail,
           name: emailData.fromName || provider.from_name || ''
         },
         to: emailData.to,
@@ -112,12 +127,13 @@ class RelayProviderService {
         ...(emailData.bcc && { bcc: emailData.bcc }),
         ...(emailData.replyTo && { replyTo: emailData.replyTo }),
         // Threading headers for replies
-        ...(emailData.inReplyTo && {
-          headers: {
+        headers: {
+          'Message-ID': customMessageId, // Custom Message-ID for threading
+          ...(emailData.inReplyTo && {
             'In-Reply-To': emailData.inReplyTo,
             'References': emailData.references || emailData.inReplyTo
-          }
-        }),
+          })
+        },
         // Tracking settings (SendGrid-specific)
         trackingSettings: {
           clickTracking: { enable: emailData.trackClicks || false },
@@ -141,6 +157,7 @@ class RelayProviderService {
       console.log('✅ SendGrid email sent successfully');
       console.log('📬 Status:', response.statusCode);
       console.log('📬 Message ID:', response.headers['x-message-id']);
+      console.log('📬 Custom Message-ID:', customMessageId);
 
       // Update usage stats
       await this.updateProviderUsage(provider.id);
@@ -148,6 +165,7 @@ class RelayProviderService {
       return {
         success: true,
         messageId: response.headers['x-message-id'],
+        actualMessageId: customMessageId, // RFC Message-ID for threading
         provider: 'sendgrid',
         from: message.from.email,
         to: emailData.to,
@@ -193,11 +211,15 @@ class RelayProviderService {
         url: provider.config?.region === 'eu' ? 'https://api.eu.mailgun.net' : 'https://api.mailgun.net'
       });
 
+      // Generate custom Message-ID for threading
+      const fromEmail = emailData.from || provider.from_email;
+      const customMessageId = this.generateMessageId(fromEmail);
+
       // Prepare email data
       const messageData = {
         from: emailData.fromName
-          ? `${emailData.fromName} <${emailData.from || provider.from_email}>`
-          : emailData.from || provider.from_email,
+          ? `${emailData.fromName} <${fromEmail}>`
+          : fromEmail,
         to: emailData.to,
         subject: emailData.subject,
         html: emailData.html,
@@ -205,7 +227,9 @@ class RelayProviderService {
         ...(emailData.cc && { cc: emailData.cc }),
         ...(emailData.bcc && { bcc: emailData.bcc }),
         ...(emailData.replyTo && { 'h:Reply-To': emailData.replyTo }),
-        // Threading headers
+        // Custom Message-ID for threading
+        'h:Message-ID': customMessageId,
+        // Threading headers for replies
         ...(emailData.inReplyTo && { 'h:In-Reply-To': emailData.inReplyTo }),
         ...(emailData.references && { 'h:References': emailData.references }),
         // Mailgun tracking
@@ -227,6 +251,7 @@ class RelayProviderService {
 
       console.log('✅ Mailgun email sent successfully');
       console.log('📬 Message ID:', response.id);
+      console.log('📬 Custom Message-ID:', customMessageId);
 
       // Update usage stats
       await this.updateProviderUsage(provider.id);
@@ -234,8 +259,9 @@ class RelayProviderService {
       return {
         success: true,
         messageId: response.id,
+        actualMessageId: customMessageId, // RFC Message-ID for threading
         provider: 'mailgun',
-        from: emailData.from || provider.from_email,
+        from: fromEmail,
         to: emailData.to,
         subject: emailData.subject,
         timestamp: new Date().toISOString()
