@@ -867,6 +867,7 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
       // Gmail API will return "Requested entity was not found" if we pass an invalid thread ID
       // The In-Reply-To and References headers will handle threading correctly
       threadId: null,
+      conversationId, // Pass conversationId so sent reply is ingested into correct conversation
       attachments // Pass attachments to EmailService
     };
 

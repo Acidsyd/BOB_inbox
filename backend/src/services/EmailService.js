@@ -341,9 +341,12 @@ class EmailService {
       if (conversationId && result.messageId) {
         const UnifiedInboxService = require('./UnifiedInboxService');
         const unifiedInboxService = new UnifiedInboxService();
-        
+
+        // Use actualMessageId (RFC-compliant) if available, fallback to messageId (provider ID)
+        const rfc822MessageId = result.actualMessageId || result.messageId;
+
         await unifiedInboxService.ingestEmail({
-          message_id_header: result.messageId,
+          message_id_header: rfc822MessageId,
           in_reply_to: inReplyTo,
           message_references: references,
           subject,
@@ -351,8 +354,10 @@ class EmailService {
           to_email: to,
           content_html: html,
           content_plain: text,
+          sent_at: new Date().toISOString(), // Add sent timestamp
           organization_id: organizationId,
-          email_account_id: accountId
+          email_account_id: accountId,
+          conversation_id: conversationId // Pass conversationId directly for exact conversation placement
         }, 'sent');
       }
 
