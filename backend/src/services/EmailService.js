@@ -283,36 +283,58 @@ class EmailService {
 
       // Get email account
       const account = await EmailService.getEmailAccount(accountId, organizationId);
-      
-      // Check if OAuth2 is available
-      const useOAuth2 = await EmailService.shouldUseOAuth2(account, organizationId);
-      
+
       let result;
-      if (useOAuth2) {
-        console.log('📧 Using OAuth2 for reply');
-        result = await this.oauth2Service.sendEmail({
-          fromEmail: account.email,
-          toEmail: to,
-          subject,
-          htmlBody: html,
-          textBody: text,
-          inReplyTo,
-          references,
-          threadId,
+
+      // Priority 1: Check if account uses a relay provider (SendGrid/Mailgun)
+      if (account.type === 'relay' && account.relay_provider_id) {
+        console.log('🔌 Using Relay Provider for reply');
+        result = await this.relayProviderService.sendEmail(
+          account.relay_provider_id,
           organizationId,
-          attachments
-        });
-      } else {
-        console.log('📧 Using SMTP for reply');
-        result = await this.sendReplyViaSmtp({
-          account,
-          to,
-          subject,
-          html,
-          text,
-          inReplyTo,
-          references
-        });
+          {
+            from: account.email,
+            fromName: account.display_name,
+            to,
+            subject,
+            html,
+            text,
+            inReplyTo,
+            references,
+            attachments
+          }
+        );
+      }
+      // Priority 2: Check if OAuth2 is available
+      else {
+        const useOAuth2 = await EmailService.shouldUseOAuth2(account, organizationId);
+
+        if (useOAuth2) {
+          console.log('📧 Using OAuth2 for reply');
+          result = await this.oauth2Service.sendEmail({
+            fromEmail: account.email,
+            toEmail: to,
+            subject,
+            htmlBody: html,
+            textBody: text,
+            inReplyTo,
+            references,
+            threadId,
+            organizationId,
+            attachments
+          });
+        } else {
+          console.log('📧 Using SMTP for reply');
+          result = await this.sendReplyViaSmtp({
+            account,
+            to,
+            subject,
+            html,
+            text,
+            inReplyTo,
+            references
+          });
+        }
       }
 
       // Ingest the sent reply into the unified inbox
