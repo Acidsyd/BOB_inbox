@@ -1472,13 +1472,17 @@ router.post('/:id/stop', authenticateToken, async (req, res) => {
     }
 
     // Cancel pending scheduled emails - use count query to handle large datasets
-    // First, count how many emails will be cancelled
+    // 🔥 CRITICAL: Only cancel initial emails (sequence_step = 0), NOT follow-ups
+    // Follow-ups are dynamically created when initials are sent and should be preserved
+
+    // First, count how many initial emails will be cancelled
     const { count: cancelCount } = await supabase
       .from('scheduled_emails')
       .select('*', { count: 'exact', head: true })
       .eq('campaign_id', campaignId)
       .eq('organization_id', organizationId)
-      .eq('status', 'scheduled');
+      .eq('status', 'scheduled')
+      .eq('sequence_step', 0);  // Only initial emails
 
     // Then update them without returning rows (more efficient)
     const { error: cancelError } = await supabase
@@ -1489,7 +1493,8 @@ router.post('/:id/stop', authenticateToken, async (req, res) => {
       })
       .eq('campaign_id', campaignId)
       .eq('organization_id', organizationId)
-      .eq('status', 'scheduled');
+      .eq('status', 'scheduled')
+      .eq('sequence_step', 0);  // Only initial emails
 
     if (cancelError) {
       console.error('⚠️ Error cancelling scheduled emails:', cancelError);
@@ -1506,7 +1511,7 @@ router.post('/:id/stop', authenticateToken, async (req, res) => {
       status: 'completed',
       message: 'Campaign stopped successfully',
       stoppedAt: new Date().toISOString(),
-      cancelledEmails: cancelledEmails?.length || 0
+      cancelledEmails: cancelCount || 0
     });
 
   } catch (error) {
@@ -1545,7 +1550,7 @@ router.get('/:id/activity', authenticateToken, async (req, res) => {
       .in('status', ['sent', 'failed', 'bounced'])
       .order('sent_at', { ascending: false })
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(100);
 
     if (error) {
       console.error('❌ Error fetching campaign activity:', error);
@@ -1917,13 +1922,14 @@ router.get('/:id/scheduled-activity', authenticateToken, async (req, res) => {
         send_at,
         created_at,
         error_message,
-        email_account_id
+        email_account_id,
+        sequence_step
       `)
       .eq('campaign_id', campaignId)
       .eq('organization_id', organizationId)
       .eq('status', 'scheduled')
       .order('send_at', { ascending: true })
-      .limit(20);
+      .limit(100);
 
     if (error) {
       console.error('❌ Error fetching scheduled activity:', error);
@@ -1977,6 +1983,7 @@ router.get('/:id/scheduled-activity', authenticateToken, async (req, res) => {
 
       // CRITICAL FIX: Format timestamp using TimezoneService with campaign timezone
       // This ensures the 'Z' suffix fix is applied before sending to frontend
+      // NOW includes seconds to show sub-minute randomization
       const formattedTime = TimezoneService.convertToUserTimezone(
         email.send_at,
         campaignTimezone,
@@ -1986,6 +1993,7 @@ router.get('/:id/scheduled-activity', authenticateToken, async (req, res) => {
           day: 'numeric',
           hour: 'numeric',
           minute: '2-digit',
+          second: '2-digit',
           hour12: true
         }
       );
@@ -2004,7 +2012,8 @@ router.get('/:id/scheduled-activity', authenticateToken, async (req, res) => {
         to: email.to_email || 'Unknown',
         subject: email.subject || 'No subject',
         status: email.status,
-        error: email.error_message
+        error: email.error_message,
+        sequence_step: email.sequence_step || 0
       };
     });
 
@@ -2327,7 +2336,8 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
         const sendAt = schedule.sendAt;
         const emailAccountId = schedule.emailAccountId;
 
-        // Create main email
+        // Create main email only
+        // Follow-ups will be scheduled dynamically when initial email is sent
         const mainEmail = createScheduledEmailRecord(
           campaignId,
           lead,
@@ -2339,24 +2349,9 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
         );
         scheduledEmails.push(mainEmail);
 
-        // Create follow-up emails if configured
-        const emailSequence = campaign.config?.emailSequence || [];
-        emailSequence.forEach((email, emailIndex) => {
-          const followUpDelay = email.delay * 24 * 60 * 60 * 1000; // Convert days to milliseconds
-          const followUpSendAt = new Date(sendAt.getTime() + followUpDelay);
-
-          const followUpEmail = createScheduledEmailRecord(
-            campaignId,
-            lead,
-            emailAccountId,
-            campaign,
-            followUpSendAt,
-            organizationId,
-            emailIndex + 1, // sequence_step starts from 1 for follow-ups
-            email
-          );
-          scheduledEmails.push(followUpEmail);
-        });
+        // 🔥 CRITICAL FIX: Do NOT create follow-ups during reschedule
+        // Follow-ups are scheduled by CronEmailProcessor after initial emails are SENT
+        // Creating them here would schedule them based on scheduled time, not sent time
       });
 
       // Insert batch

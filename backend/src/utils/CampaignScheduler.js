@@ -26,13 +26,26 @@ class CampaignScheduler {
     // 🔥 DEPRECATED: emailsPerHour is no longer used (kept for backwards compatibility)
     this.emailsPerHour = config.emailsPerHour || 10; // Deprecated - not used in calculations
     this.sendingInterval = Math.max(5, config.sendingInterval || 15); // Enforce minimum 5 minutes
-    
+
     // Validate and fix sending hours to prevent 00:00-00:00 bug
     const rawSendingHours = config.sendingHours || { start: 9, end: 17 };
     this.sendingHours = this.validateSendingHours(rawSendingHours);
-    
+
+    // NEW: Volume variation settings (±20% daily variation)
+    // Default to TRUE to reduce predictability for all campaigns
+    this.enableVolumeVariation = config.enableVolumeVariation !== undefined
+      ? config.enableVolumeVariation
+      : true; // Default enabled
+
+    // NEW: Window variation settings (±30 minutes on start/end times)
+    // Default to TRUE to reduce predictability for all campaigns
+    this.enableWindowVariation = config.enableWindowVariation !== undefined
+      ? config.enableWindowVariation
+      : true; // Default enabled
+    this.windowVariationMinutes = config.windowVariationMinutes || 30; // Default ±30 minutes
+
     this.activeDays = config.activeDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
-    
+
     // Human-like timing jitter settings
     this.enableJitter = config.enableJitter !== undefined ? config.enableJitter : true;
     this.jitterMinutes = Math.min(3, Math.max(1, config.jitterMinutes || 3)); // 1-3 minutes
@@ -45,6 +58,100 @@ class CampaignScheduler {
       };
       return dayMap[day.toLowerCase()];
     });
+  }
+
+  /**
+   * Calculate daily volume target with optional randomization
+   * Adds ±20% variation to make sending patterns less predictable
+   * Also applies day-of-week bonuses (Monday +10%, Friday -10%)
+   *
+   * @param {Date} date - The date to calculate volume for
+   * @param {number} baseTarget - Base daily email target
+   * @param {boolean} enabled - Whether volume variation is enabled (default: true)
+   * @returns {number} Adjusted daily target (capped between 10 and 150% of base)
+   */
+  getDailyVolumeTarget(date, baseTarget, enabled = true) {
+    if (!enabled) {
+      return baseTarget; // No variation when disabled
+    }
+
+    // Generate random factor between 0.8 and 1.2 (±20%)
+    const randomFactor = 0.8 + (Math.random() * 0.4);
+    let adjusted = Math.floor(baseTarget * randomFactor);
+
+    // Apply day-of-week patterns for more natural behavior
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek === 1) {
+      // Monday: +10% (start of week boost)
+      adjusted = Math.floor(adjusted * 1.1);
+    } else if (dayOfWeek === 5) {
+      // Friday: -10% (end of week slowdown)
+      adjusted = Math.floor(adjusted * 0.9);
+    }
+
+    // Cap to reasonable bounds (10 minimum, 150% of base maximum)
+    const minTarget = 10;
+    const maxTarget = Math.floor(baseTarget * 1.5);
+
+    return Math.max(minTarget, Math.min(adjusted, maxTarget));
+  }
+
+  /**
+   * Get varied sending hours for a specific date
+   * Uses seeded random to ensure same hours throughout the day
+   * @param {Date} date - The date to get varied hours for
+   * @returns {Object} Varied sending hours { start, end }
+   */
+  getVariedSendingHours(date) {
+    if (!this.enableWindowVariation) {
+      return this.sendingHours; // No variation when disabled
+    }
+
+    // Create seed from date string (YYYY-MM-DD) for daily consistency
+    const dateStr = date.toISOString().split('T')[0];
+    const seed = this.hashString(dateStr);
+
+    // Generate seeded random value between -1 and +1
+    const seededRandom = this.seededRandom(seed);
+
+    // Calculate variation in minutes (±windowVariationMinutes)
+    const variationMinutes = Math.floor(seededRandom * this.windowVariationMinutes);
+
+    // Apply variation to start and end hours
+    const variedStart = this.sendingHours.start + (variationMinutes / 60);
+    const variedEnd = this.sendingHours.end + (variationMinutes / 60);
+
+    // Ensure variation doesn't create invalid windows
+    const clampedStart = Math.max(0, Math.min(23, variedStart));
+    const clampedEnd = Math.max(clampedStart + 1, Math.min(23, variedEnd));
+
+    return {
+      start: Math.floor(clampedStart),
+      end: Math.floor(clampedEnd)
+    };
+  }
+
+  /**
+   * Simple string hash for seeding random generator
+   * @private
+   */
+  hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash);
+  }
+
+  /**
+   * Seeded random number generator
+   * @private
+   */
+  seededRandom(seed) {
+    const x = Math.sin(seed) * 10000;
+    return (x - Math.floor(x)) * 2 - 1; // Returns -1 to +1
   }
 
   /**
@@ -120,13 +227,20 @@ class CampaignScheduler {
     let currentDay = this.getDateInTimezone(currentTime);
     let currentHour = this.getHourInTimezone(currentTime);
 
+    // NEW: Get daily volume target with optional variation
+    // This will be recalculated when we move to a new day
+    let dailyVolumeTarget = this.getDailyVolumeTarget(currentTime, this.emailsPerDay, this.enableVolumeVariation);
+
     // 🔥 DEPRECATED: emailsPerHour no longer used in calculations
     // Using sendingInterval directly to avoid override issues
     const actualIntervalMinutes = this.sendingInterval;
 
     console.log(`📅 Starting scheduling from: ${currentTime.toISOString()}`);
     console.log(`   Timezone: ${this.timezone}`);
-    console.log(`   Daily limit: ${this.emailsPerDay}/day`);
+    console.log(`   Daily limit: ${this.emailsPerDay}/day (base)`);
+    if (this.enableVolumeVariation) {
+      console.log(`   Daily target (varied): ${dailyVolumeTarget}/day`);
+    }
     console.log(`   Sending interval: ${this.sendingInterval} minutes (emailsPerHour deprecated)`);
     console.log(`   Actual interval used: ${actualIntervalMinutes} minutes`);
     console.log(`   Jitter: ${this.enableJitter ? `±${this.jitterMinutes} minutes` : 'disabled'}`);
@@ -177,7 +291,16 @@ class CampaignScheduler {
         emailsSentToday = 0;
         emailsSentThisHour = 0;
         currentHour = this.getHourInTimezone(currentTime);
-        console.log(`📅 Moved to new day: ${newDay} - Reset counters`);
+
+        // NEW: Recalculate daily volume target for the new day
+        const previousTarget = dailyVolumeTarget;
+        dailyVolumeTarget = this.getDailyVolumeTarget(currentTime, this.emailsPerDay, this.enableVolumeVariation);
+
+        if (this.enableVolumeVariation) {
+          console.log(`📅 Moved to new day: ${newDay} - Reset counters, new daily target: ${dailyVolumeTarget} (was ${previousTarget})`);
+        } else {
+          console.log(`📅 Moved to new day: ${newDay} - Reset counters`);
+        }
       } else {
         const newHour = this.getHourInTimezone(currentTime);
         if (newHour !== currentHour) {
@@ -267,11 +390,12 @@ class CampaignScheduler {
           // Advance time if not the first email
           if (emailCount > 0) {
             currentTime = new Date(currentTime.getTime() + (actualIntervalMinutes * 60 * 1000));
-            currentTime = this.moveToNextValidSendingWindow(currentTime);
           }
 
-          // Apply jitter
+          // Apply jitter BEFORE moving to valid window (ensures first email also gets jitter)
           let jitteredTime = this.applyJitter(currentTime, lead.email);
+
+          // Now move to valid sending window (this preserves the jitter variation)
           jitteredTime = this.moveToNextValidSendingWindow(jitteredTime);
 
           // Ensure not in the past
@@ -352,10 +476,10 @@ class CampaignScheduler {
     let current = new Date(date);
     let attempts = 0;
     const maxAttempts = 30; // Prevent infinite loops
-    
+
     while (attempts < maxAttempts) {
       attempts++;
-      
+
       // Check if current day is active
       const dayOfWeek = this.getDayOfWeekInTimezone(current);
       if (!this.activeDayNumbers.includes(dayOfWeek)) {
@@ -363,22 +487,25 @@ class CampaignScheduler {
         current = this.moveToNextDay(current);
         continue;
       }
-      
+
+      // Get sending hours for current date (may be varied)
+      const effectiveHours = this.getVariedSendingHours(current);
+
       // Check if current hour is within sending hours
       const hour = this.getHourInTimezone(current);
-      if (hour < this.sendingHours.start) {
+      if (hour < effectiveHours.start) {
         // Move to start hour of same day
-        current = this.setHourInTimezone(current, this.sendingHours.start, 0, 0);
-      } else if (hour >= this.sendingHours.end) {
+        current = this.setHourInTimezone(current, effectiveHours.start, 0, 0);
+      } else if (hour >= effectiveHours.end) {
         // Move to next day at start hour
         current = this.moveToNextDay(current);
         continue;
       }
-      
+
       // We're in a valid window
       break;
     }
-    
+
     return current;
   }
   
@@ -416,8 +543,11 @@ class CampaignScheduler {
   moveToNextDay(date) {
     let current = new Date(date);
     current.setDate(current.getDate() + 1);
-    current = this.setHourInTimezone(current, this.sendingHours.start, 0, 0);
-    
+
+    // Get varied hours for the new day
+    const effectiveHours = this.getVariedSendingHours(current);
+    current = this.setHourInTimezone(current, effectiveHours.start, 0, 0);
+
     // Find next active day
     let attempts = 0;
     while (attempts < 7) {
@@ -428,7 +558,7 @@ class CampaignScheduler {
       }
       current.setDate(current.getDate() + 1);
     }
-    
+
     return current;
   }
   
@@ -585,7 +715,8 @@ class CampaignScheduler {
 
   /**
    * Apply human-like jitter to email send time to avoid robotic patterns
-   * Uses email address as seed for consistent but varied timing per lead
+   * Uses Gaussian (bell-curve) distribution for more natural timing variation
+   * Most variations cluster around the base time (±1 min), with occasional larger shifts
    */
   applyJitter(baseTime, emailSeed = '') {
     // Validate input date
@@ -599,16 +730,26 @@ class CampaignScheduler {
     }
 
     try {
-      // FIXED: Use true random jitter for better distribution
-      // Previous approach used email-seeded hash which created biased distribution
-      // skewed towards negative values (73% negative, 0% positive in testing)
-      const randomValue = Math.random(); // Uniform distribution 0-1
+      // Box-Muller transform to generate Gaussian (normal) distribution
+      // This creates a bell curve centered at 0 with standard deviation = 1
+      const u1 = Math.random();
+      const u2 = Math.random();
 
-      // Generate offset between -jitterMinutes and +jitterMinutes
-      const offsetMinutes = (randomValue - 0.5) * 2 * this.jitterMinutes;
-      const offsetMs = offsetMinutes * 60 * 1000;
+      // Generate standard normal distribution (mean=0, stddev=1)
+      const gaussian = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
 
-      const jitteredTime = new Date(baseTime.getTime() + offsetMs);
+      // Scale by jitterMinutes to get desired range
+      // Standard deviation = jitterMinutes means:
+      // - 68% of variations within ±jitterMinutes (±3 min)
+      // - 95% of variations within ±2*jitterMinutes (±6 min)
+      // - 99.7% of variations within ±3*jitterMinutes (±9 min)
+      const jitterMs = gaussian * this.jitterMinutes * 60 * 1000;
+
+      // Cap extreme outliers at ±10 minutes to prevent excessive deviation
+      const maxJitter = 10 * 60 * 1000;
+      const cappedJitter = Math.max(-maxJitter, Math.min(maxJitter, jitterMs));
+
+      const jitteredTime = new Date(baseTime.getTime() + cappedJitter);
 
       // Validate the result
       if (isNaN(jitteredTime.getTime())) {
@@ -616,8 +757,6 @@ class CampaignScheduler {
         return new Date(baseTime); // Return original time as fallback
       }
 
-      // Ensure jittered time doesn't go below minimum 5-minute spacing from previous
-      // This is a simplified check - in practice, you'd validate against previous scheduled times
       return jitteredTime;
     } catch (error) {
       console.error('🚨 Error in applyJitter:', error);

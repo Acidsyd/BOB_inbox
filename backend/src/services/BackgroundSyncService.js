@@ -191,6 +191,9 @@ class BackgroundSyncService {
       }
 
       // Sync Mailgun/SendGrid accounts with IMAP receiving
+      console.log(`🐛 DEBUG: About to sync relay IMAP accounts. Array length: ${relayImapAccounts?.length || 0}`);
+      console.log(`🐛 DEBUG: Relay accounts array:`, JSON.stringify(relayImapAccounts, null, 2));
+
       if (relayImapAccounts && relayImapAccounts.length > 0) {
         for (const account of relayImapAccounts) {
           try {

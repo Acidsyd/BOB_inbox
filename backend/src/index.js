@@ -11,6 +11,11 @@ const envValidation = validateEnvironmentVariables();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Trust proxy - CRITICAL for proper IP address extraction
+// This allows Express to extract real client IPs from X-Forwarded-For headers
+// when behind reverse proxies (nginx, Cloudflare, load balancers, etc.)
+app.set('trust proxy', true);
+
 // Middleware
 app.use(helmet());
 app.use(cors({

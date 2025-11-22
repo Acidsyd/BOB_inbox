@@ -857,7 +857,7 @@ class CronEmailProcessor {
       // Update email with correct account info
       email.email_account_id = accountId;
       email.from_email = fromEmail;
-      
+
       // 🔥 NEW: Check if we should stop sending due to replies (stopOnReply)
       if (await this.shouldStopOnReply(email, campaignConfig, organizationId)) {
         console.log(`🛑 Skipping email ${email.id} to ${email.to_email} - lead has replied (stopOnReply enabled)`);
@@ -878,7 +878,15 @@ class CronEmailProcessor {
         await this.updateEmailStatus(email.id, 'skipped', null, 'Lead has unsubscribed');
         continue;
       }
-      
+
+      // 🎲 SUB-MINUTE RANDOMIZATION: Add random delay within the current minute
+      // This prevents all emails from being sent at exactly :00 seconds
+      const randomDelaySeconds = Math.floor(Math.random() * 45); // 0-44 seconds (leaving 15s buffer for processing)
+      if (randomDelaySeconds > 0) {
+        console.log(`⏳ Adding ${randomDelaySeconds}s sub-minute delay to avoid :00 second pattern`);
+        await new Promise(resolve => setTimeout(resolve, randomDelaySeconds * 1000));
+      }
+
       const success = await this.sendSingleEmail(email, organizationId);
 
       // Record usage only if email was successfully sent

@@ -650,7 +650,7 @@ function CampaignDetailContent() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm">
-                        <span className="font-medium">{formatDate(activity.time, 'MMM d, yyyy h:mm a')}</span>
+                        <span className="font-medium">{formatDate(activity.time, 'MMM d, yyyy h:mm:ss a')}</span>
                         <span className={`ml-2 text-xs px-2 py-1 rounded-full ${
                           activity.status === 'sent' ? 'bg-green-100 text-green-800' :
                           activity.status === 'failed' || activity.status === 'bounced' ? 'bg-red-100 text-red-800' :
@@ -705,9 +705,14 @@ function CampaignDetailContent() {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm">
                         <span className="font-medium">{activity.time}</span>
-                        <span className="text-gray-500 ml-2">
-                          From <span className="text-gray-700">{activity.from}</span> → <span className="text-gray-700">{activity.to}</span>
-                        </span>
+                        {activity.sequence_step !== undefined && activity.sequence_step > 0 && (
+                          <span className="ml-2 text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800">
+                            Follow-up #{activity.sequence_step}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        From <span className="text-gray-700">{activity.from}</span> → <span className="text-gray-700">{activity.to}</span>
                       </div>
                     </div>
                   </div>

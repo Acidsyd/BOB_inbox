@@ -334,9 +334,11 @@ class EmailTrackingService {
    * @returns {boolean} True if likely a bot
    */
   isBotUserAgent(userAgent) {
-    if (!userAgent) return false;
-    
+    if (!userAgent) return true; // No user agent = likely bot
+
+    // Email security scanner patterns (the most common culprits)
     const botPatterns = [
+      // Social media crawlers
       'GoogleImageProxy',
       'LinkedInBot',
       'Slackbot',
@@ -344,17 +346,54 @@ class EmailTrackingService {
       'WhatsApp',
       'TelegramBot',
       'Twitterbot',
+
+      // Email client prefetch/security scanners
       'Outlook-iOS',
       'Outlook-Android',
+      'SafeLinks',           // Microsoft Defender SmartScreen
+      'McAfee',              // McAfee email scanner
+      'Symantec',            // Symantec email scanner
+      'Proofpoint',          // Proofpoint email security
+      'Mimecast',            // Mimecast email security
+      'Barracuda',           // Barracuda email security
+
+      // Google bots
       'GoogleDocs',
       'AdsBot-Google',
       'Mediapartners-Google',
+      'Googlebot',
+
+      // Other email security systems
+      'Cisco',               // Cisco email security
+      'Trustwave',           // Trustwave email security
+      'Forcepoint',          // Forcepoint email security
+
+      // Known bot edge cases
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246'
     ];
-    
-    return botPatterns.some(pattern => 
-      userAgent.includes(pattern)
-    );
+
+    // Check for known bot patterns
+    if (botPatterns.some(pattern => userAgent.includes(pattern))) {
+      return true;
+    }
+
+    // Security scanners often use very old Chrome versions (109 and older)
+    // Real users rarely use browsers >2 years old
+    const oldChromeMatch = userAgent.match(/Chrome\/(\d+)\./);
+    if (oldChromeMatch) {
+      const chromeVersion = parseInt(oldChromeMatch[1], 10);
+      if (chromeVersion < 115) { // Chrome 115 was released July 2023
+        return true; // Likely security scanner using old Chrome
+      }
+    }
+
+    // Incomplete user agent (just "Mozilla/5.0" with nothing else meaningful)
+    // Real browsers always include more details
+    if (userAgent === 'Mozilla/5.0' || userAgent.length < 20) {
+      return true;
+    }
+
+    return false;
   }
 
   /**

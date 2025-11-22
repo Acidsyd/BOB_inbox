@@ -5,16 +5,46 @@ const EmailTrackingService = require('../services/EmailTrackingService');
 const trackingService = new EmailTrackingService();
 
 /**
+ * Extract real client IP from request (handles proxies/load balancers)
+ * @param {object} req - Express request object
+ * @returns {string} Client IP address
+ */
+function getClientIP(req) {
+  // Check common proxy headers in order of reliability
+  const xForwardedFor = req.headers['x-forwarded-for'];
+  if (xForwardedFor) {
+    // X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
+    // The first one is the real client IP
+    return xForwardedFor.split(',')[0].trim();
+  }
+
+  // Check other proxy headers
+  const xRealIP = req.headers['x-real-ip'];
+  if (xRealIP) {
+    return xRealIP;
+  }
+
+  // Cloudflare specific header
+  const cfConnectingIP = req.headers['cf-connecting-ip'];
+  if (cfConnectingIP) {
+    return cfConnectingIP;
+  }
+
+  // Fallback to direct connection IP
+  return req.ip || req.connection.remoteAddress || 'unknown';
+}
+
+/**
  * GET /api/track/open/:token.png
  * Tracking pixel endpoint for email opens
  */
 router.get('/open/:token.png', async (req, res) => {
   try {
     const { token } = req.params;
-    
+
     // Extract metadata from request
     const metadata = {
-      ip: req.ip || req.connection.remoteAddress,
+      ip: getClientIP(req),
       userAgent: req.headers['user-agent'],
       referer: req.headers['referer'],
       country: req.headers['cf-ipcountry'] || null, // Cloudflare header
@@ -58,10 +88,10 @@ router.get('/open/:token.png', async (req, res) => {
 router.get('/click/:token/:linkIndex/:encodedUrl', async (req, res) => {
   try {
     const { token, linkIndex, encodedUrl } = req.params;
-    
+
     // Extract metadata from request
     const metadata = {
-      ip: req.ip || req.connection.remoteAddress,
+      ip: getClientIP(req),
       userAgent: req.headers['user-agent'],
       referer: req.headers['referer'],
       country: req.headers['cf-ipcountry'] || null,

@@ -285,12 +285,12 @@ class ImapService {
         from_email: email.from,
         to_email: email.to,
         subject: email.subject,
-        body_text: email.text,
-        body_html: email.html,
+        content_plain: email.text,
+        content_html: email.html,
         sent_at: email.date,
         received_at: email.date,
         direction: direction,
-        status: 'received'
+        processing_status: 'processed'
       });
   }
 }

@@ -113,10 +113,11 @@ class ProviderFactory {
 
         case 'smtp':
         case 'imap':
+          // SMTP/IMAP accounts use IMAP for receiving
+          return new ImapSyncProvider(capabilities);
+
         default:
-          // Future implementation
-          throw new Error(`SMTP provider not yet implemented. Coming soon!`);
-          // return new ImapSyncProvider(capabilities);
+          throw new Error(`Unknown provider type: ${normalizedType}`);
       }
     } catch (error) {
       console.error(`❌ Failed to create provider for type: ${providerType}`, error);
@@ -129,8 +130,8 @@ class ProviderFactory {
    * @returns {Array} Array of supported provider types
    */
   static getSupportedProviders() {
-    return ['gmail', 'mailgun', 'sendgrid']; // Gmail OAuth2 + Mailgun/SendGrid with IMAP
-    // Future: return ['gmail', 'mailgun', 'sendgrid', 'microsoft', 'outlook', 'smtp'];
+    return ['gmail', 'mailgun', 'sendgrid', 'smtp', 'imap']; // Gmail OAuth2 + Mailgun/SendGrid/SMTP with IMAP
+    // Future: return ['gmail', 'mailgun', 'sendgrid', 'microsoft', 'outlook', 'smtp', 'imap'];
   }
 
   /**
@@ -204,15 +205,26 @@ class ProviderFactory {
         }
         break;
 
+      case 'smtp':
+      case 'imap':
+        // Validate IMAP configuration for SMTP/IMAP accounts
+        if (!account.imap_config || !account.imap_credentials_encrypted) {
+          validation.success = false;
+          validation.errors.push(`${normalizedType} account missing IMAP configuration`);
+        } else {
+          // Validate IMAP config structure
+          const { host, port, user } = account.imap_config;
+          if (!host || !port || !user) {
+            validation.success = false;
+            validation.errors.push('IMAP configuration incomplete (missing host, port, or user)');
+          }
+        }
+        break;
+
       case 'microsoft':
       case 'outlook':
         validation.success = false;
         validation.errors.push('Microsoft/Outlook provider not yet implemented');
-        break;
-
-      case 'smtp':
-        validation.success = false;
-        validation.errors.push('SMTP provider not yet implemented');
         break;
     }
 
