@@ -2692,20 +2692,22 @@ router.put('/:id', authenticateToken, async (req, res) => {
       });
     }
 
-    // CRITICAL FIX: Only clear PENDING/SCHEDULED emails, preserve sent/failed/skipped history
+    // CRITICAL FIX: Only clear PENDING/SCHEDULED INITIAL emails (sequence_step = 0)
+    // NEVER delete follow-ups - they are dynamically created when initials are sent
     // This prevents data loss when updating campaign settings
-    console.log('🧹 Clearing pending scheduled emails (preserving sent/failed history)');
+    console.log('🧹 Clearing pending initial emails only (preserving follow-ups and sent history)');
     const { error: deleteError } = await supabase
       .from('scheduled_emails')
       .delete()
       .eq('campaign_id', campaignId)
       .eq('organization_id', organizationId)
+      .eq('sequence_step', 0) // 🔥 CRITICAL: Only delete initial emails, NOT follow-ups
       .in('status', ['scheduled', 'pending']);
 
     if (deleteError) {
-      console.warn('⚠️ Error clearing scheduled emails:', deleteError);
+      console.warn('⚠️ Error clearing initial emails:', deleteError);
     } else {
-      console.log('✅ Cleared pending scheduled emails (sent/failed/skipped history preserved)');
+      console.log('✅ Cleared pending initial emails (follow-ups and sent history preserved)');
     }
 
     // Return updated campaign with expanded config
