@@ -361,6 +361,13 @@ class CampaignScheduler {
 
     currentTime = this.moveToNextValidSendingWindow(currentTime);
 
+    // 🎲 Add random start offset (0-59 seconds) to prevent exact hour starts
+    // This ensures campaigns don't all start at :00:00 and look robotic
+    const randomSeconds = Math.floor(Math.random() * 60);
+    currentTime = new Date(currentTime.getTime() + (randomSeconds * 1000));
+
+    console.log(`🎲 Applied random start offset: +${randomSeconds} seconds`);
+
     // 🔥 DEPRECATED: emailsPerHour no longer used - use sendingInterval directly
     const actualIntervalMinutes = this.sendingInterval;
 
