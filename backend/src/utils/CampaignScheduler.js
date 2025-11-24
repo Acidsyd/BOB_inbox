@@ -577,7 +577,12 @@ class CampaignScheduler {
       second: 'numeric'
     })) || 0;
 
+    console.log(`[moveToNextDay DEBUG] Input date: ${date.toISOString()}, Minutes: ${currentMinute}, Seconds: ${currentSecond}, Target hour: ${effectiveHours.start}`);
+
     current = this.setHourInTimezone(current, effectiveHours.start, currentMinute, currentSecond);
+
+    console.log(`[moveToNextDay DEBUG] Result: ${current.toISOString()} (Rome: ${current.toLocaleString('en-US', {timeZone: this.timezone, hour12: false})})`);
+
 
     // Find next active day
     let attempts = 0;
