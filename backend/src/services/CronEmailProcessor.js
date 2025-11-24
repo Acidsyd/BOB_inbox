@@ -445,7 +445,7 @@ class CronEmailProcessor {
 
     // Get unique campaign IDs
     const campaignIds = [...new Set(emails.map(e => e.campaign_id).filter(Boolean))];
-    
+
     if (campaignIds.length === 0) {
       // No campaigns, allow all emails (might be one-off emails)
       return emails;
@@ -474,7 +474,11 @@ class CronEmailProcessor {
       campaignTimezoneMap[campaign.id] = campaign.config?.timezone || 'UTC';
       campaignActiveDaysMap[campaign.id] = campaign.config?.activeDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
     });
-    const filteredEmails = emails.filter(email => {
+
+    // 🔥 NEW: Validate follow-up emails have sent parent emails before allowing them to be sent
+    const validatedEmails = await this.validateFollowUpParents(emails);
+
+    const filteredEmails = validatedEmails.filter(email => {
       // If no campaign_id, allow the email
       if (!email.campaign_id) return true;
 
@@ -543,6 +547,168 @@ class CronEmailProcessor {
     }
 
     return filteredEmails;
+  }
+
+  /**
+   * Validate that follow-up emails have sent parent emails before allowing them to be sent
+   * CRITICAL: Prevents follow-ups from being sent before their initial email
+   * CRITICAL: Ensures at least 24 hours gap between initial and follow-up emails
+   */
+  async validateFollowUpParents(emails) {
+    if (!emails || emails.length === 0) return [];
+
+    // Filter out follow-ups that need validation
+    const followUps = emails.filter(e => e.is_follow_up && e.reply_to_same_thread);
+
+    if (followUps.length === 0) {
+      // No follow-ups to validate, return all emails
+      return emails;
+    }
+
+    console.log(`🔍 Validating ${followUps.length} follow-up email(s) have sent parent emails with 24h gap...`);
+
+    // Get unique parent_email_ids
+    const parentIds = [...new Set(followUps.map(e => e.parent_email_id).filter(Boolean))];
+
+    if (parentIds.length === 0) {
+      // No parent IDs found - try to find parents by campaign + lead + sequence_step
+      console.log(`⚠️  Follow-ups have no parent_email_id set - will attempt to find parents by campaign + lead`);
+
+      // For each follow-up, try to find its parent (sequence_step = 0, same campaign, same lead)
+      const followUpsWithoutParents = [];
+      for (const followUp of followUps) {
+        if (followUp.parent_email_id) continue; // Skip if already has parent
+
+        // Look for the initial email (sequence_step = 0)
+        const { data: parent, error } = await supabase
+          .from('scheduled_emails')
+          .select('id, status, message_id_header, sent_at')
+          .eq('campaign_id', followUp.campaign_id)
+          .eq('lead_id', followUp.lead_id)
+          .eq('sequence_step', 0)
+          .single();
+
+        if (error || !parent) {
+          console.log(`❌ Follow-up ${followUp.id} (step ${followUp.sequence_step}) has no parent found!`);
+          followUpsWithoutParents.push(followUp);
+          continue;
+        }
+
+        // Check if parent has been sent
+        if (parent.status !== 'sent') {
+          console.log(`⏸️  Blocking follow-up ${followUp.id} (step ${followUp.sequence_step}) - parent ${parent.id} not sent yet (status: ${parent.status})`);
+          followUpsWithoutParents.push(followUp);
+          continue;
+        }
+
+        // 🔥 NEW: Check if at least 24 hours have passed since parent was sent
+        if (parent.sent_at) {
+          const parentSentTime = new Date(parent.sent_at);
+          const now = new Date();
+          const hoursSinceParentSent = (now - parentSentTime) / (1000 * 60 * 60);
+
+          if (hoursSinceParentSent < 24) {
+            const hoursRemaining = Math.ceil(24 - hoursSinceParentSent);
+            console.log(`⏸️  Blocking follow-up ${followUp.id} (step ${followUp.sequence_step}) - only ${hoursSinceParentSent.toFixed(1)}h since parent sent (need 24h, ${hoursRemaining}h remaining)`);
+            followUpsWithoutParents.push(followUp);
+            continue;
+          }
+        }
+
+        // Check if parent has message_id_header for threading
+        if (!parent.message_id_header) {
+          console.log(`⚠️  Parent ${parent.id} for follow-up ${followUp.id} has no message_id_header! Threading will fail.`);
+          // Don't block the follow-up, but log the issue
+        } else {
+          console.log(`✅ Follow-up ${followUp.id} has valid sent parent ${parent.id} with Message-ID (${hoursSinceParentSent.toFixed(1)}h gap)`);
+        }
+      }
+
+      // Filter out follow-ups without sent parents
+      return emails.filter(e => {
+        if (!e.is_follow_up || !e.reply_to_same_thread) return true;
+        return !followUpsWithoutParents.some(f => f.id === e.id);
+      });
+    }
+
+    // Fetch parent emails by IDs
+    const { data: parents, error } = await supabase
+      .from('scheduled_emails')
+      .select('id, status, message_id_header, sent_at')
+      .in('id', parentIds);
+
+    if (error) {
+      console.error('❌ Error fetching parent emails:', error);
+      // On error, allow all emails to avoid blocking
+      return emails;
+    }
+
+    // Create a map of parent_id to parent status
+    const parentStatusMap = new Map();
+    parents?.forEach(parent => {
+      parentStatusMap.set(parent.id, {
+        status: parent.status,
+        messageId: parent.message_id_header,
+        sentAt: parent.sent_at
+      });
+    });
+
+    // Filter out follow-ups whose parents haven't been sent
+    const validEmails = [];
+    const blockedFollowUps = [];
+
+    for (const email of emails) {
+      // Non-follow-ups or follow-ups that don't reply to same thread always pass
+      if (!email.is_follow_up || !email.reply_to_same_thread) {
+        validEmails.push(email);
+        continue;
+      }
+
+      // Check if parent exists and has been sent
+      const parent = parentStatusMap.get(email.parent_email_id);
+
+      if (!parent) {
+        console.log(`❌ Follow-up ${email.id} (step ${email.sequence_step}) has no parent found! Blocking.`);
+        blockedFollowUps.push(email);
+        continue;
+      }
+
+      if (parent.status !== 'sent') {
+        console.log(`⏸️  Blocking follow-up ${email.id} (step ${email.sequence_step}) - parent not sent yet (status: ${parent.status})`);
+        blockedFollowUps.push(email);
+        continue;
+      }
+
+      // 🔥 NEW: Check if at least 24 hours have passed since parent was sent
+      if (parent.sentAt) {
+        const parentSentTime = new Date(parent.sentAt);
+        const now = new Date();
+        const hoursSinceParentSent = (now - parentSentTime) / (1000 * 60 * 60);
+
+        if (hoursSinceParentSent < 24) {
+          const hoursRemaining = Math.ceil(24 - hoursSinceParentSent);
+          console.log(`⏸️  Blocking follow-up ${email.id} (step ${email.sequence_step}) - only ${hoursSinceParentSent.toFixed(1)}h since parent sent (need 24h, ${hoursRemaining}h remaining)`);
+          blockedFollowUps.push(email);
+          continue;
+        }
+
+        console.log(`✅ Follow-up ${email.id} passed 24h validation (${hoursSinceParentSent.toFixed(1)}h since parent sent)`);
+      }
+
+      if (!parent.messageId) {
+        console.log(`⚠️  Parent for follow-up ${email.id} has no message_id_header! Threading will fail but allowing send.`);
+      }
+
+      // Parent is sent and 24h have passed, allow follow-up
+      validEmails.push(email);
+    }
+
+    if (blockedFollowUps.length > 0) {
+      console.log(`🚫 Blocked ${blockedFollowUps.length} follow-up(s) - parent not sent or 24h gap not met`);
+    }
+
+    console.log(`✅ Validated follow-ups: ${validEmails.length}/${emails.length} emails can be sent (24h gap enforced)`);
+    return validEmails;
   }
 
   /**
