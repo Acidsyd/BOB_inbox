@@ -602,11 +602,10 @@ class CronEmailProcessor {
         }
 
         // 🔥 NEW: Check if at least 24 hours have passed since parent was sent
-        let hoursSinceParentSent = null;
         if (parent.sent_at) {
           const parentSentTime = new Date(parent.sent_at);
           const now = new Date();
-          hoursSinceParentSent = (now - parentSentTime) / (1000 * 60 * 60);
+          const hoursSinceParentSent = (now - parentSentTime) / (1000 * 60 * 60);
 
           if (hoursSinceParentSent < 24) {
             const hoursRemaining = Math.ceil(24 - hoursSinceParentSent);
@@ -620,10 +619,8 @@ class CronEmailProcessor {
         if (!parent.message_id_header) {
           console.log(`⚠️  Parent ${parent.id} for follow-up ${followUp.id} has no message_id_header! Threading will fail.`);
           // Don't block the follow-up, but log the issue
-        } else if (hoursSinceParentSent !== null) {
-          console.log(`✅ Follow-up ${followUp.id} has valid sent parent ${parent.id} with Message-ID (${hoursSinceParentSent.toFixed(1)}h gap)`);
         } else {
-          console.log(`✅ Follow-up ${followUp.id} has valid sent parent ${parent.id} with Message-ID`);
+          console.log(`✅ Follow-up ${followUp.id} has valid sent parent ${parent.id} with Message-ID (${hoursSinceParentSent.toFixed(1)}h gap)`);
         }
       }
 
@@ -826,7 +823,7 @@ class CronEmailProcessor {
   async processCampaignEmails(organizationId, campaignId, campaignEmails) {
     // Group emails by their assigned email_account_id (respects campaign configuration)
     const emailsByAccount = this.groupBy(campaignEmails, 'email_account_id');
-    
+
     const accountCount = Object.keys(emailsByAccount).length;
     console.log(`📊 Campaign has ${accountCount} assigned accounts for ${campaignEmails.length} emails`);
 
@@ -845,12 +842,29 @@ class CronEmailProcessor {
 
     console.log(`⏱️ Campaign ${campaignId} SIMPLE ROTATION: Using sendingInterval ${actualIntervalMinutes} minutes (emailsPerHour deprecated)`);
 
+    // 🚨 CRITICAL FIX: Check campaign interval BEFORE processing any account
+    // This prevents multiple accounts from sending within the same interval period
+    const lastEmailSentTime = await this.getLastEmailSentTime(campaignId, organizationId);
+    const timeSinceLastEmail = lastEmailSentTime ? Date.now() - lastEmailSentTime.getTime() : Infinity;
+    const requiredIntervalMs = actualIntervalMinutes * 60 * 1000;
+
+    console.log(`🕒 Campaign ${campaignId} - Last email sent: ${lastEmailSentTime ? lastEmailSentTime.toISOString() : 'NEVER'}`);
+    console.log(`🕒 Campaign ${campaignId} - Time since last: ${timeSinceLastEmail === Infinity ? 'N/A' : Math.round(timeSinceLastEmail / 60000)} minutes`);
+    console.log(`🕒 Campaign ${campaignId} - Required interval: ${actualIntervalMinutes} minutes`);
+
+    // If interval hasn't passed, skip this campaign entirely
+    if (timeSinceLastEmail < requiredIntervalMs) {
+      const timeToWait = requiredIntervalMs - timeSinceLastEmail;
+      console.log(`⏰ Campaign ${campaignId}: Interval not reached! Skipping (need to wait ${Math.round(timeToWait / 60000)} more minutes)`);
+      return; // Don't process any account for this campaign yet
+    }
+
     const accountEntries = Object.entries(emailsByAccount);
 
     // 🔄 SIMPLE ROTATION: Get next account in rotation
     const lastAccountIndex = this.campaignAccountRotation.get(campaignId) || -1;
     const currentAccountIndex = (lastAccountIndex + 1) % accountEntries.length;
-    
+
     console.log(`🔄 Campaign ${campaignId}: Using account ${currentAccountIndex + 1}/${accountCount} (last used: ${lastAccountIndex})`);
 
     // Process ONLY the current account in rotation
@@ -958,27 +972,8 @@ class CronEmailProcessor {
 
     console.log(`⏱️ Campaign ${campaignId} config: ${sendingIntervalMinutes} min interval (emailsPerHour deprecated)`);
 
-    // 🚨 CRITICAL FIX: Check when the last email was sent for this campaign
-    const lastEmailSentTime = await this.getLastEmailSentTime(campaignId, organizationId);
-    const timeSinceLastEmail = lastEmailSentTime ? Date.now() - lastEmailSentTime.getTime() : Infinity;
-    const requiredIntervalMs = actualIntervalMinutes * 60 * 1000;
-
-    console.log(`🕒 Last email sent: ${lastEmailSentTime ? lastEmailSentTime.toISOString() : 'NEVER'}`);
-    console.log(`🕒 Time since last: ${timeSinceLastEmail === Infinity ? 'N/A' : Math.round(timeSinceLastEmail / 60000)} minutes`);
-    console.log(`🕒 Required interval: ${actualIntervalMinutes} minutes`);
-
-    // 🚨 CRITICAL: If not enough time has passed, reschedule ALL emails
-    if (timeSinceLastEmail < requiredIntervalMs) {
-      const timeToWait = requiredIntervalMs - timeSinceLastEmail;
-      const rescheduleTime = new Date(Date.now() + timeToWait);
-
-      // 🔥 FOLLOW-UP FIX: Exclude follow-ups from rescheduling - they have fixed timing
-      const emailsToReschedule = accountEmails.filter(e => !e.is_follow_up);
-      console.log(`⏰ Campaign interval not reached! Rescheduling ${emailsToReschedule.length} emails (${accountEmails.length - emailsToReschedule.length} follow-ups excluded) for ${Math.round(timeToWait / 60000)} minutes from now`);
-
-      await this.rescheduleEmailsWithInterval(emailsToReschedule, rescheduleTime, actualIntervalMinutes);
-      return; // Don't send any emails yet
-    }
+    // NOTE: Campaign interval check is now done at processCampaignEmails() level
+    // This ensures the entire campaign respects the interval, not just per-account
 
     // 🔥 CRITICAL FIX: Check rate limits for ALL account types (OAuth2 and SMTP)
     let emailsToSendNow, emailsToReschedule;
