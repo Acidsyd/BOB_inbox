@@ -2206,6 +2206,26 @@ class CronEmailProcessor {
   }
 
   /**
+   * Get timezone offset in milliseconds for a specific timezone and date
+   * @param {string} timezone - IANA timezone name (e.g., 'America/New_York')
+   * @param {Date} date - Reference date for offset calculation
+   * @returns {number} - Timezone offset in milliseconds
+   */
+  getTimezoneOffset(timezone, date) {
+    try {
+      // Get the UTC time
+      const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
+      // Get the time in target timezone
+      const tzDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
+      // Calculate offset
+      return utcDate.getTime() - tzDate.getTime();
+    } catch (error) {
+      console.error(`❌ Error calculating timezone offset for ${timezone}:`, error);
+      return 0; // Fallback to UTC
+    }
+  }
+
+  /**
    * Move a date to the next active day/time if it falls on an inactive day or outside sending hours
    * @param {Date} date - The date to check
    * @param {string} timezone - Campaign timezone
@@ -2236,11 +2256,18 @@ class CronEmailProcessor {
         if (hour >= sendingHours.start && hour < sendingHours.end) {
           return targetDate; // Found valid day/time
         } else if (hour < sendingHours.start) {
-          // Too early, move to start hour
-          targetDate = new Date(targetDate);
-          const currentDateStr = targetDate.toLocaleDateString('en-US', { timeZone: timezone });
-          const startTimeStr = `${currentDateStr} ${sendingHours.start}:00:00`;
-          targetDate = new Date(new Date(startTimeStr).toLocaleString('en-US', { timeZone: 'UTC' }));
+          // Too early, move to start hour of same day
+          // Use proper timezone-aware date manipulation
+          const year = parseInt(targetDate.toLocaleString('en-US', { timeZone: timezone, year: 'numeric' }));
+          const month = parseInt(targetDate.toLocaleString('en-US', { timeZone: timezone, month: 'numeric' })) - 1;
+          const day = parseInt(targetDate.toLocaleString('en-US', { timeZone: timezone, day: 'numeric' }));
+
+          // Create new date at start hour in campaign timezone
+          // Note: Date constructor uses local timezone, so we need to adjust
+          const tzOffsetMs = this.getTimezoneOffset(timezone, targetDate);
+          const localDate = new Date(Date.UTC(year, month, day, sendingHours.start, 0, 0));
+          targetDate = new Date(localDate.getTime() - tzOffsetMs);
+
           return targetDate;
         }
         // Too late, will move to next day below
