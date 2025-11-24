@@ -504,7 +504,16 @@ class CampaignScheduler {
       const hour = this.getHourInTimezone(current);
       if (hour < effectiveHours.start) {
         // Move to start hour of same day
-        current = this.setHourInTimezone(current, effectiveHours.start, 0, 0);
+        // CRITICAL FIX: Preserve minutes/seconds here too to prevent bunching
+        const currentMinute = parseInt(current.toLocaleString('en-US', {
+          timeZone: this.timezone,
+          minute: 'numeric'
+        })) || 0;
+        const currentSecond = parseInt(current.toLocaleString('en-US', {
+          timeZone: this.timezone,
+          second: 'numeric'
+        })) || 0;
+        current = this.setHourInTimezone(current, effectiveHours.start, currentMinute, currentSecond);
       } else if (hour >= effectiveHours.end) {
         // Move to next day at start hour
         current = this.moveToNextDay(current);
