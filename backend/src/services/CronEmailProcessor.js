@@ -602,10 +602,11 @@ class CronEmailProcessor {
         }
 
         // 🔥 NEW: Check if at least 24 hours have passed since parent was sent
+        let hoursSinceParentSent = null;
         if (parent.sent_at) {
           const parentSentTime = new Date(parent.sent_at);
           const now = new Date();
-          const hoursSinceParentSent = (now - parentSentTime) / (1000 * 60 * 60);
+          hoursSinceParentSent = (now - parentSentTime) / (1000 * 60 * 60);
 
           if (hoursSinceParentSent < 24) {
             const hoursRemaining = Math.ceil(24 - hoursSinceParentSent);
@@ -620,7 +621,8 @@ class CronEmailProcessor {
           console.log(`⚠️  Parent ${parent.id} for follow-up ${followUp.id} has no message_id_header! Threading will fail.`);
           // Don't block the follow-up, but log the issue
         } else {
-          console.log(`✅ Follow-up ${followUp.id} has valid sent parent ${parent.id} with Message-ID (${hoursSinceParentSent.toFixed(1)}h gap)`);
+          const gapInfo = hoursSinceParentSent ? ` (${hoursSinceParentSent.toFixed(1)}h gap)` : '';
+          console.log(`✅ Follow-up ${followUp.id} has valid sent parent ${parent.id} with Message-ID${gapInfo}`);
         }
       }
 
@@ -914,8 +916,8 @@ class CronEmailProcessor {
     console.log(`🔄 Campaign ${campaignId}: Saved rotation state - account ${currentAccountIndex} used`);
 
     // 🚨 CRITICAL FIX: Get the last email sent time to calculate proper reschedule time
-    const lastEmailSentTime = await this.getLastEmailSentTime(campaignId, organizationId);
-    const baseTime = lastEmailSentTime || new Date(); // Use last send time or current time if no emails sent
+    const lastSentTime = await this.getLastEmailSentTime(campaignId, organizationId);
+    const baseTime = lastSentTime || new Date(); // Use last send time or current time if no emails sent
 
     // 🔄 PERFECT ROTATION: Reschedule emails in round-robin order across all accounts
     // This ensures perfect account rotation: Acc1, Acc2, Acc3, ..., Acc8, Acc1, Acc2, ...
