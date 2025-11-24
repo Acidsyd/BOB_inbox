@@ -87,6 +87,7 @@ class AccountRateLimitService {
         .select('id')
         .eq('email_account_id', accountId)
         .eq('organization_id', organizationId)
+        .eq('is_follow_up', false) // Only count initial emails toward daily limit
         .gte('send_at', `${today}T00:00:00Z`)
         .lte('send_at', `${today}T23:59:59Z`)
         .in('status', ['sent', 'sending']);
@@ -96,6 +97,7 @@ class AccountRateLimitService {
         .select('id')
         .eq('email_account_id', accountId)
         .eq('organization_id', organizationId)
+        .eq('is_follow_up', false) // Only count initial emails toward hourly limit
         .gte('send_at', `${today}T${String(currentHour).padStart(2, '0')}:00:00Z`)
         .lte('send_at', `${today}T${String(currentHour).padStart(2, '0')}:59:59Z`)
         .in('status', ['sent', 'sending']);
