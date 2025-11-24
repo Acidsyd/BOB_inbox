@@ -2373,11 +2373,9 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
 
     console.log(`✅ Inserted ${totalInserted} new scheduled_emails`);
 
-    // 🔥 NEW: Rescue follow-ups stuck on inactive days or marked as skipped
-    console.log(`\n🔧 Checking for stuck follow-ups to rescue...`);
-    const CronEmailProcessor = require('../services/CronEmailProcessor');
-    const cronProcessor = new CronEmailProcessor();
-    await cronProcessor.rescueStuckFollowUps(organizationId, campaignId, campaign.config);
+    // 🔥 REMOVED: rescueStuckFollowUps was causing all follow-ups to bunch at 8am
+    // Follow-ups are now scheduled dynamically by CronEmailProcessor when parent emails are sent
+    // Initial emails are already properly scheduled with perfect rotation via scheduleEmailsWithPerfectRotation
 
     console.log(`🎉 Campaign restart completed successfully!`);
     console.log(`🔄 Updated: ${totalUpdated} emails`);
