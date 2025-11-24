@@ -548,6 +548,7 @@ class CampaignScheduler {
   
   /**
    * Move to next day at start hour
+   * CRITICAL: Preserves minute/second variation to prevent email bunching
    */
   moveToNextDay(date) {
     let current = new Date(date);
@@ -555,7 +556,19 @@ class CampaignScheduler {
 
     // Get varied hours for the new day
     const effectiveHours = this.getVariedSendingHours(current);
-    current = this.setHourInTimezone(current, effectiveHours.start, 0, 0);
+
+    // CRITICAL FIX: Preserve existing minutes/seconds to maintain scheduling variation
+    // This prevents all overflow emails from bunching at exactly start:00:00
+    const currentMinute = parseInt(date.toLocaleString('en-US', {
+      timeZone: this.timezone,
+      minute: 'numeric'
+    })) || 0;
+    const currentSecond = parseInt(date.toLocaleString('en-US', {
+      timeZone: this.timezone,
+      second: 'numeric'
+    })) || 0;
+
+    current = this.setHourInTimezone(current, effectiveHours.start, currentMinute, currentSecond);
 
     // Find next active day
     let attempts = 0;
