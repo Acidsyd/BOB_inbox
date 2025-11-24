@@ -345,6 +345,26 @@ class FolderService {
               .eq('organization_id', organizationId)
               .in('scheduled_email_id', sentScheduledEmailIds);
 
+            // Get campaign IDs from conversations to check tracking settings
+            const campaignIds = [...new Set(orderedConversations.map(c => c.campaign_id).filter(Boolean))];
+            const campaignTrackingMap = new Map();
+
+            if (campaignIds.length > 0) {
+              const { data: campaigns } = await supabase
+                .from('campaigns')
+                .select('id, config')
+                .in('id', campaignIds);
+
+              if (campaigns) {
+                campaigns.forEach(campaign => {
+                  campaignTrackingMap.set(campaign.id, {
+                    trackOpens: campaign.config?.trackOpens ?? false,
+                    trackClicks: campaign.config?.trackClicks ?? false
+                  });
+                });
+              }
+            }
+
             // Create maps for bounce, open, and click tracking
             const bounceMap = new Map();
             const openMap = new Map();
@@ -382,15 +402,27 @@ class FolderService {
             });
 
             // Mark conversations with bounces, opens, and clicks
+            // Only show tracking icons if campaign has tracking enabled
             orderedConversations.forEach(conv => {
               if (conversationBounceMap.has(conv.id)) {
                 conv.status = 'bounced';
               }
+
+              // Only show tracking indicators if the campaign has tracking enabled
+              const campaignTracking = conv.campaign_id ? campaignTrackingMap.get(conv.campaign_id) : null;
+
               if (conversationOpenMap.has(conv.id)) {
-                conv.was_opened = true;
+                // Only set was_opened if campaign has trackOpens enabled OR it's not a campaign email
+                if (!conv.campaign_id || campaignTracking?.trackOpens) {
+                  conv.was_opened = true;
+                }
               }
+
               if (conversationClickMap.has(conv.id)) {
-                conv.was_clicked = true;
+                // Only set was_clicked if campaign has trackClicks enabled OR it's not a campaign email
+                if (!conv.campaign_id || campaignTracking?.trackClicks) {
+                  conv.was_clicked = true;
+                }
               }
             });
 
