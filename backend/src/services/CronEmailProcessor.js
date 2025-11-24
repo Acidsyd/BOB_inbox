@@ -602,10 +602,11 @@ class CronEmailProcessor {
         }
 
         // 🔥 NEW: Check if at least 24 hours have passed since parent was sent
+        let hoursSinceParentSent = null;
         if (parent.sent_at) {
           const parentSentTime = new Date(parent.sent_at);
           const now = new Date();
-          const hoursSinceParentSent = (now - parentSentTime) / (1000 * 60 * 60);
+          hoursSinceParentSent = (now - parentSentTime) / (1000 * 60 * 60);
 
           if (hoursSinceParentSent < 24) {
             const hoursRemaining = Math.ceil(24 - hoursSinceParentSent);
@@ -619,8 +620,10 @@ class CronEmailProcessor {
         if (!parent.message_id_header) {
           console.log(`⚠️  Parent ${parent.id} for follow-up ${followUp.id} has no message_id_header! Threading will fail.`);
           // Don't block the follow-up, but log the issue
-        } else {
+        } else if (hoursSinceParentSent !== null) {
           console.log(`✅ Follow-up ${followUp.id} has valid sent parent ${parent.id} with Message-ID (${hoursSinceParentSent.toFixed(1)}h gap)`);
+        } else {
+          console.log(`✅ Follow-up ${followUp.id} has valid sent parent ${parent.id} with Message-ID`);
         }
       }
 
