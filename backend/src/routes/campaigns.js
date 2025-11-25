@@ -1064,8 +1064,9 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
           emailSubject = `Re: ${allEmails[0].subject}`;
         }
         
-        // Apply personalization tokens
+        // Apply personalization tokens (support all variable formats)
         const replacements = {
+          // Double braces camelCase: {{firstName}}
           '{{firstName}}': lead.first_name || '',
           '{{lastName}}': lead.last_name || '',
           '{{fullName}}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
@@ -1073,6 +1074,12 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
           '{{jobTitle}}': lead.job_title || '',
           '{{website}}': lead.website || '',
           '{{email}}': lead.email || '',
+          // Double braces snake_case: {{first_name}}
+          '{{first_name}}': lead.first_name || '',
+          '{{last_name}}': lead.last_name || '',
+          '{{full_name}}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+          '{{job_title}}': lead.job_title || '',
+          // Single braces camelCase: {firstName}
           '{firstName}': lead.first_name || '',
           '{lastName}': lead.last_name || '',
           '{fullName}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
@@ -1080,12 +1087,13 @@ router.post('/:id/start', authenticateToken, async (req, res) => {
           '{jobTitle}': lead.job_title || '',
           '{website}': lead.website || '',
           '{email}': lead.email || '',
+          // Single braces snake_case: {first_name}
           '{first_name}': lead.first_name || '',
           '{last_name}': lead.last_name || '',
           '{full_name}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
           '{job_title}': lead.job_title || ''
         };
-        
+
         // Apply spintax first with lead email as seed for consistency
         let personalizedSubject = SpintaxParser.spinWithSeed(emailSubject, lead.email);
         let personalizedContent = SpintaxParser.spinWithSeed(email.content, lead.email);
@@ -2266,8 +2274,9 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
         let processedSubject = SpintaxParser.spinWithSeed(rawSubject, lead.email);
         let processedContent = SpintaxParser.spinWithSeed(rawContent, lead.email);
 
-        // Define personalization tokens
+        // Define personalization tokens (support all variable formats)
         const replacements = {
+          // Double braces camelCase: {{firstName}}
           '{{firstName}}': lead.first_name || '',
           '{{lastName}}': lead.last_name || '',
           '{{fullName}}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
@@ -2275,6 +2284,12 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
           '{{jobTitle}}': lead.job_title || '',
           '{{website}}': lead.website || '',
           '{{email}}': lead.email || '',
+          // Double braces snake_case: {{first_name}}
+          '{{first_name}}': lead.first_name || '',
+          '{{last_name}}': lead.last_name || '',
+          '{{full_name}}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+          '{{job_title}}': lead.job_title || '',
+          // Single braces camelCase: {firstName}
           '{firstName}': lead.first_name || '',
           '{lastName}': lead.last_name || '',
           '{fullName}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
@@ -2282,6 +2297,7 @@ async function rescheduleExistingCampaign(campaignId, organizationId, campaign, 
           '{jobTitle}': lead.job_title || '',
           '{website}': lead.website || '',
           '{email}': lead.email || '',
+          // Single braces snake_case: {first_name}
           '{first_name}': lead.first_name || '',
           '{last_name}': lead.last_name || '',
           '{full_name}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
@@ -2421,8 +2437,9 @@ function createScheduledEmailRecord(campaignId, lead, emailAccountId, campaign, 
   // 🔥 CRITICAL FIX: Apply spintax processing and personalization
   // This was missing in campaign restarts, causing raw spintax to appear in emails
 
-  // Define personalization tokens
+  // Define personalization tokens (support all variable formats)
   const replacements = {
+    // Double braces camelCase: {{firstName}}
     '{{firstName}}': lead.first_name || '',
     '{{lastName}}': lead.last_name || '',
     '{{fullName}}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
@@ -2430,6 +2447,12 @@ function createScheduledEmailRecord(campaignId, lead, emailAccountId, campaign, 
     '{{jobTitle}}': lead.job_title || '',
     '{{website}}': lead.website || '',
     '{{email}}': lead.email || '',
+    // Double braces snake_case: {{first_name}}
+    '{{first_name}}': lead.first_name || '',
+    '{{last_name}}': lead.last_name || '',
+    '{{full_name}}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+    '{{job_title}}': lead.job_title || '',
+    // Single braces camelCase: {firstName}
     '{firstName}': lead.first_name || '',
     '{lastName}': lead.last_name || '',
     '{fullName}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
@@ -2437,6 +2460,7 @@ function createScheduledEmailRecord(campaignId, lead, emailAccountId, campaign, 
     '{jobTitle}': lead.job_title || '',
     '{website}': lead.website || '',
     '{email}': lead.email || '',
+    // Single braces snake_case: {first_name}
     '{first_name}': lead.first_name || '',
     '{last_name}': lead.last_name || '',
     '{full_name}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),

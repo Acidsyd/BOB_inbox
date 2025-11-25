@@ -1880,8 +1880,9 @@ class CronEmailProcessor {
         const rawSubject = followUpStep.subject || sentEmail.subject;
         const rawContent = followUpStep.content;
 
-        // Define personalization tokens
+        // Define personalization tokens (support all variable formats)
         const replacements = {
+          // Double braces camelCase: {{firstName}}
           '{{firstName}}': lead.first_name || '',
           '{{lastName}}': lead.last_name || '',
           '{{fullName}}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
@@ -1889,6 +1890,12 @@ class CronEmailProcessor {
           '{{jobTitle}}': lead.job_title || '',
           '{{website}}': lead.website || '',
           '{{email}}': lead.email || '',
+          // Double braces snake_case: {{first_name}}
+          '{{first_name}}': lead.first_name || '',
+          '{{last_name}}': lead.last_name || '',
+          '{{full_name}}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+          '{{job_title}}': lead.job_title || '',
+          // Single braces camelCase: {firstName}
           '{firstName}': lead.first_name || '',
           '{lastName}': lead.last_name || '',
           '{fullName}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
@@ -1896,6 +1903,7 @@ class CronEmailProcessor {
           '{jobTitle}': lead.job_title || '',
           '{website}': lead.website || '',
           '{email}': lead.email || '',
+          // Single braces snake_case: {first_name}
           '{first_name}': lead.first_name || '',
           '{last_name}': lead.last_name || '',
           '{full_name}': lead.full_name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
