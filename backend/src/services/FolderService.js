@@ -214,14 +214,60 @@ class FolderService {
         case 'inbox':
           console.log('🔍 DEBUG: ENTERED INBOX CASE');
 
-          // Inbox shows campaign conversations that have received replies (unread_count > 0)
-          // Only counts RECEIVED messages, not sent follow-ups
-          query = query
-            .eq('conversation_type', 'campaign')
-            .neq('status', 'archived')
-            .gt('unread_count', 0); // Only show campaigns with received replies
+          // Inbox shows campaign conversations that have received at least 1 reply
+          // Strategy: Join conversation_messages with conversations to filter by campaign type FIRST
+          const { data: inboxMessagesWithConv, error: inboxMsgError } = await this.retryDatabaseOperation(
+            () => supabase
+              .from('conversation_messages')
+              .select('conversation_id, conversations!inner(conversation_type, status)')
+              .eq('organization_id', organizationId)
+              .eq('direction', 'received')
+              .eq('conversations.conversation_type', 'campaign')
+              .neq('conversations.status', 'archived')
+          );
 
-          console.log(`🔍 DEBUG INBOX: Querying campaign conversations with replies`);
+          if (inboxMsgError) {
+            console.error('❌ Error finding inbox messages:', inboxMsgError);
+            throw inboxMsgError;
+          }
+
+          // Get unique campaign conversation IDs that have received messages
+          const campaignConvIdsWithReplies = [...new Set(inboxMessagesWithConv?.map(m => m.conversation_id) || [])];
+
+          console.log(`🔍 Found ${campaignConvIdsWithReplies.length} campaign conversations with received messages`);
+
+          if (campaignConvIdsWithReplies.length === 0) {
+            // No campaign conversations with replies - return empty result early
+            console.log('🔍 DEBUG INBOX: No campaign conversations with received messages, returning empty array');
+            return {
+              conversations: [],
+              hasMore: false,
+              totalCount: 0
+            };
+          }
+
+          // Now paginate the campaign conversation IDs
+          // Supabase .in() has a limit of ~1000 items, so pagination is necessary
+          const startIndex = offset;
+          const endIndex = offset + limit;
+          const paginatedInboxIds = campaignConvIdsWithReplies.slice(startIndex, endIndex);
+
+          console.log(`🔍 DEBUG INBOX: Paginating ${campaignConvIdsWithReplies.length} IDs to ${paginatedInboxIds.length} (offset: ${offset}, limit: ${limit})`);
+
+          if (paginatedInboxIds.length === 0) {
+            // Beyond available conversations
+            return {
+              conversations: [],
+              hasMore: false,
+              totalCount: campaignConvIdsWithReplies.length
+            };
+          }
+
+          // Filter for these specific campaign conversations
+          query = query
+            .in('id', paginatedInboxIds);
+
+          console.log(`🔍 DEBUG INBOX: Querying ${paginatedInboxIds.length} campaign conversations with actual replies`);
           break;
 
         case 'sent':
@@ -662,14 +708,14 @@ class FolderService {
 
       // Sent folder filtering is now handled in the switch statement above
 
-      // Apply pagination (sent folder handles its own pagination)
-      if (folderType !== 'sent') {
+      // Apply pagination (sent and inbox folders handle their own pagination)
+      if (folderType !== 'sent' && folderType !== 'inbox') {
         query = query.range(offset, offset + limit - 1);
       }
 
       console.log('🔍 DEBUG: About to execute final conversations query for folder:', folderType);
-      
-      // Special handling for sent folder since we override the query
+
+      // Special handling for sent folder since we may override the query
       let conversations, error;
       if (folderType === 'sent' && query.data !== undefined) {
         conversations = query.data;
@@ -758,19 +804,24 @@ class FolderService {
 
       switch (folderType) {
         case 'inbox':
-          // Campaign conversations with unread replies
-          const { count: inboxCount, error: inboxError } = await this.retryDatabaseOperation(
+          // Campaign conversations with at least 1 received message (actual reply)
+          // Use join to filter by campaign type directly (avoids .in() limit issues)
+          const { data: inboxMessagesForCount, error: inboxMsgCountError } = await this.retryDatabaseOperation(
             () => supabase
-              .from('conversations')
-              .select('id', { count: 'exact', head: true })
+              .from('conversation_messages')
+              .select('conversation_id, conversations!inner(conversation_type, status)')
               .eq('organization_id', organizationId)
-              .eq('conversation_type', 'campaign')
-              .neq('status', 'archived')
-              .gt('unread_count', 0) // Only count conversations with unread messages
+              .eq('direction', 'received')
+              .eq('conversations.conversation_type', 'campaign')
+              .neq('conversations.status', 'archived')
           );
 
-          if (inboxError) throw inboxError;
-          count = inboxCount || 0;
+          if (inboxMsgCountError) throw inboxMsgCountError;
+
+          // Get unique campaign conversation IDs with received messages
+          const campaignConvIdsForCount = [...new Set(inboxMessagesForCount?.map(m => m.conversation_id) || [])];
+
+          count = campaignConvIdsForCount.length;
           break;
 
         case 'sent':
