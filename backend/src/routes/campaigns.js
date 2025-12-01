@@ -2620,11 +2620,22 @@ router.put('/:id', authenticateToken, async (req, res) => {
       trackOpens,
       trackClicks,
       stopOnReply,
+      stopOnClick,
+      stopOnOpen,
       activeDays,
       sendingHours,
       enableJitter,
       jitterMinutes,
-      timezone
+      timezone,
+      // Advanced settings
+      sendPlainText,
+      companyLevelPause,
+      domainLevelPause,
+      aiEmailMatching,
+      aiLeadCategorization,
+      bounceProtection,
+      domainRateLimit,
+      includeUnsubscribe
     } = frontendConfig;
 
     // CRITICAL FIX: Merge with existing config to prevent data loss
@@ -2679,11 +2690,22 @@ router.put('/:id', authenticateToken, async (req, res) => {
       trackOpens: trackOpens !== undefined ? trackOpens : (existingConfig.trackOpens !== undefined ? existingConfig.trackOpens : false),
       trackClicks: trackClicks !== undefined ? trackClicks : (existingConfig.trackClicks !== undefined ? existingConfig.trackClicks : false),
       stopOnReply: stopOnReply !== undefined ? stopOnReply : (existingConfig.stopOnReply !== undefined ? existingConfig.stopOnReply : false),
+      stopOnClick: stopOnClick !== undefined ? stopOnClick : (existingConfig.stopOnClick !== undefined ? existingConfig.stopOnClick : false),
+      stopOnOpen: stopOnOpen !== undefined ? stopOnOpen : (existingConfig.stopOnOpen !== undefined ? existingConfig.stopOnOpen : false),
       activeDays: getValueOrExisting(activeDays, existingConfig.activeDays, ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']),
       sendingHours: sendingHours !== undefined ? sendingHours : (existingConfig.sendingHours || { start: 9, end: 17 }),
       enableJitter: enableJitter !== undefined ? enableJitter : (existingConfig.enableJitter !== undefined ? existingConfig.enableJitter : false),
       jitterMinutes: jitterMinutes !== undefined ? jitterMinutes : (existingConfig.jitterMinutes || 2),
-      timezone: getValueOrExisting(timezone, existingConfig.timezone, 'UTC')
+      timezone: getValueOrExisting(timezone, existingConfig.timezone, 'UTC'),
+      // Advanced settings
+      sendPlainText: sendPlainText !== undefined ? sendPlainText : (existingConfig.sendPlainText !== undefined ? existingConfig.sendPlainText : false),
+      companyLevelPause: companyLevelPause !== undefined ? companyLevelPause : (existingConfig.companyLevelPause !== undefined ? existingConfig.companyLevelPause : true),
+      domainLevelPause: domainLevelPause !== undefined ? domainLevelPause : (existingConfig.domainLevelPause !== undefined ? existingConfig.domainLevelPause : false),
+      aiEmailMatching: aiEmailMatching !== undefined ? aiEmailMatching : (existingConfig.aiEmailMatching !== undefined ? existingConfig.aiEmailMatching : true),
+      aiLeadCategorization: aiLeadCategorization !== undefined ? aiLeadCategorization : (existingConfig.aiLeadCategorization !== undefined ? existingConfig.aiLeadCategorization : false),
+      bounceProtection: bounceProtection !== undefined ? bounceProtection : (existingConfig.bounceProtection !== undefined ? existingConfig.bounceProtection : true),
+      domainRateLimit: domainRateLimit !== undefined ? domainRateLimit : (existingConfig.domainRateLimit !== undefined ? existingConfig.domainRateLimit : false),
+      includeUnsubscribe: includeUnsubscribe !== undefined ? includeUnsubscribe : (existingConfig.includeUnsubscribe !== undefined ? existingConfig.includeUnsubscribe : true)
     };
 
     console.log('\n' + '='.repeat(80));
