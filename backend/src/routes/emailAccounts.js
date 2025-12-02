@@ -1021,14 +1021,57 @@ router.put('/:id/settings', authenticateToken, async (req, res) => {
 
     updateData.updated_at = new Date().toISOString();
 
-    const { error } = await supabase
+    // Try updating email_accounts table first
+    const { data: emailAccountResult, error: emailAccountError } = await supabase
       .from('email_accounts')
       .update(updateData)
       .eq('id', id)
-      .eq('organization_id', req.user.organizationId);
+      .eq('organization_id', req.user.organizationId)
+      .select('id');
 
-    if (error) {
-      console.error('❌ Error updating account settings:', error);
+    // If no rows updated in email_accounts, try oauth2_tokens table
+    if (!emailAccountResult || emailAccountResult.length === 0) {
+      console.log(`📧 Account ${id} not found in email_accounts, trying oauth2_tokens...`);
+
+      // Only include fields that exist in oauth2_tokens table
+      const oauth2UpdateData = {};
+      if (display_name !== undefined) oauth2UpdateData.display_name = display_name;
+      oauth2UpdateData.updated_at = new Date().toISOString();
+
+      const { data: oauth2Result, error: oauth2Error } = await supabase
+        .from('oauth2_tokens')
+        .update(oauth2UpdateData)
+        .eq('id', id)
+        .eq('organization_id', req.user.organizationId)
+        .eq('status', 'linked_to_account')
+        .select('id');
+
+      if (oauth2Error) {
+        console.error('❌ Error updating OAuth2 account settings:', oauth2Error);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to update account settings'
+        });
+      }
+
+      if (!oauth2Result || oauth2Result.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Account not found'
+        });
+      }
+
+      console.log(`✅ OAuth2 account settings updated for ${id}`);
+      return res.json({
+        success: true,
+        message: 'Account settings updated successfully',
+        updated_fields: Object.keys(oauth2UpdateData),
+        account_type: 'oauth2'
+      });
+    }
+
+    if (emailAccountError) {
+      console.error('❌ Error updating account settings:', emailAccountError);
       return res.status(500).json({
         success: false,
         error: 'Failed to update account settings'
@@ -1039,7 +1082,8 @@ router.put('/:id/settings', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       message: 'Account settings updated successfully',
-      updated_fields: Object.keys(updateData)
+      updated_fields: Object.keys(updateData),
+      account_type: 'email_account'
     });
 
   } catch (error) {
