@@ -863,10 +863,9 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
       text: finalText,
       inReplyTo: threadingReference?.message_id_header,
       references: threadingReference?.message_references || threadingReference?.message_id_header,
-      // NOTE: Do NOT pass threadId - provider_thread_id from Gmail Live Search is a message ID, not a thread ID
-      // Gmail API will return "Requested entity was not found" if we pass an invalid thread ID
-      // The In-Reply-To and References headers will handle threading correctly
-      threadId: null,
+      // Use provider_thread_id for Gmail threading when available (from synced messages)
+      // This ensures the reply stays in the same Gmail thread
+      threadId: threadingReference?.provider_thread_id || null,
       conversationId, // Pass conversationId so sent reply is ingested into correct conversation
       attachments // Pass attachments to EmailService
     };

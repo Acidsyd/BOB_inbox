@@ -248,20 +248,16 @@ export function InboxMessageView({
       const quotedText = latestReceivedMessage.content_plain || extractPlainText(latestReceivedMessage.content_html || '')
       
       // Plain text quote format
-      quotedContent = `\n\nOn ${messageDate}, ${senderName} wrote:\n> ${quotedText.replace(/\n/g, '\n> ')}`
-      
-      // HTML quote format  
-      quotedHtml = `
-        <br><br>
-        <blockquote style="border-left: 4px solid #ccc; margin: 16px 0; padding-left: 16px; color: #666;">
-          <div style="font-size: 14px; color: #888; margin-bottom: 8px;">
-            On ${messageDate}, ${senderName} wrote:
-          </div>
-          <div style="color: #666;">
-            ${latestReceivedMessage.content_html || `<p>${quotedText.replace(/\n/g, '<br>')}</p>`}
-          </div>
-        </blockquote>
-      `
+      quotedContent = `\n\nOn ${messageDate}, ${senderName} <${latestReceivedMessage.from_email}> wrote:\n> ${quotedText.replace(/\n/g, '\n> ')}`
+
+      // Gmail-compatible HTML quote format (collapsible in Gmail)
+      quotedHtml = `<br><br>
+<div class="gmail_quote">
+  <div dir="ltr" class="gmail_attr">On ${messageDate}, ${senderName} &lt;${latestReceivedMessage.from_email}&gt; wrote:<br></div>
+  <blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex">
+    ${latestReceivedMessage.content_html || `<p>${quotedText.replace(/\n/g, '<br>')}</p>`}
+  </blockquote>
+</div>`
     }
     
     setReplyContent(quotedContent)
