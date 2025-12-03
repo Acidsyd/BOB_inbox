@@ -234,16 +234,18 @@ export function InboxMessageView({
 
   const handleStartReply = () => {
     setIsReplying(true)
-    
-    // Get the latest message to quote in reply
-    const latestMessage = messages?.length ? messages[messages.length - 1] : null
+
+    // Get the latest RECEIVED message to quote in reply (not our own sent messages)
+    const latestReceivedMessage = messages?.length
+      ? [...messages].reverse().find(m => m.direction === 'received')
+      : null
     let quotedContent = ''
     let quotedHtml = ''
-    
-    if (latestMessage) {
-      const senderName = getSenderName(latestMessage)
-      const messageDate = formatMessageDate(latestMessage)
-      const quotedText = latestMessage.content_plain || extractPlainText(latestMessage.content_html || '')
+
+    if (latestReceivedMessage) {
+      const senderName = getSenderName(latestReceivedMessage)
+      const messageDate = formatMessageDate(latestReceivedMessage)
+      const quotedText = latestReceivedMessage.content_plain || extractPlainText(latestReceivedMessage.content_html || '')
       
       // Plain text quote format
       quotedContent = `\n\nOn ${messageDate}, ${senderName} wrote:\n> ${quotedText.replace(/\n/g, '\n> ')}`
@@ -256,7 +258,7 @@ export function InboxMessageView({
             On ${messageDate}, ${senderName} wrote:
           </div>
           <div style="color: #666;">
-            ${latestMessage.content_html || `<p>${quotedText.replace(/\n/g, '<br>')}</p>`}
+            ${latestReceivedMessage.content_html || `<p>${quotedText.replace(/\n/g, '<br>')}</p>`}
           </div>
         </blockquote>
       `
