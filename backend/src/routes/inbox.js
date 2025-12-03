@@ -855,20 +855,35 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
     const finalText = (finalHtml || '').replace(/<[^>]*>/g, '');
 
     // Validate provider_thread_id before using it
-    // Gmail thread IDs are alphanumeric strings, typically 16+ characters
-    // Skip using threadId if it looks invalid or is the same as provider_message_id (common error)
+    // Gmail thread IDs are account-specific - only use threadId when:
+    // 1. The provider_thread_id is valid (alphanumeric, 16+ chars, different from message ID)
+    // 2. The sending account is the SAME account that has this thread
+    // Otherwise Gmail API returns "Requested entity was not found"
     const providerThreadId = threadingReference?.provider_thread_id;
     const providerMessageId = threadingReference?.provider_message_id;
-    const isValidThreadId = providerThreadId &&
-                            typeof providerThreadId === 'string' &&
-                            providerThreadId.length >= 10 &&
-                            providerThreadId !== providerMessageId; // Thread ID should differ from message ID
+    const messageAccountId = threadingReference?.email_account_id;
+
+    // Thread ID is only usable if:
+    // - It exists and is a proper Gmail thread ID
+    // - The thread belongs to the same account we're sending from
+    const isValidThreadIdFormat = providerThreadId &&
+                                  typeof providerThreadId === 'string' &&
+                                  providerThreadId.length >= 10 &&
+                                  providerThreadId !== providerMessageId;
+
+    // CRITICAL: Only use threadId if sending from the same account that owns the thread
+    const isSameAccount = messageAccountId && messageAccountId === fromAccountId;
+    const shouldUseThreadId = isValidThreadIdFormat && isSameAccount;
 
     console.log(`🧵 Threading info:`, {
       hasProviderThreadId: !!providerThreadId,
       providerThreadId: providerThreadId?.substring(0, 20),
       providerMessageId: providerMessageId?.substring(0, 20),
-      isValidThreadId,
+      messageAccountId: messageAccountId?.substring(0, 20),
+      fromAccountId: fromAccountId?.substring(0, 20),
+      isValidThreadIdFormat,
+      isSameAccount,
+      shouldUseThreadId,
       hasConversationId: !!threadingReference?.conversation_id,
       inReplyTo: threadingReference?.message_id_header?.substring(0, 50)
     });
@@ -882,9 +897,9 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
       text: finalText,
       inReplyTo: threadingReference?.message_id_header,
       references: threadingReference?.message_references || threadingReference?.message_id_header,
-      // Only use threadId if it's a valid Gmail thread ID
+      // Only use threadId if valid format AND sending from the same account
       // Gmail will still thread correctly using In-Reply-To and References headers as fallback
-      threadId: isValidThreadId ? providerThreadId : null,
+      threadId: shouldUseThreadId ? providerThreadId : null,
       conversationId, // Pass conversationId so sent reply is ingested into correct conversation
       attachments // Pass attachments to EmailService
     };
