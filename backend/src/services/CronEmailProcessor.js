@@ -1208,10 +1208,16 @@ class CronEmailProcessor {
           }
           
           await this.updateEmailStatus(email.id, 'bounced', null, result.error);
+
+          // 🔥 NEW: Cancel any scheduled follow-ups for this bounced email
+          await this.cancelScheduledFollowUps(email.id, email.to_email, email.campaign_id, organizationId, 'Email bounced - invalid email address');
         } else {
           await this.updateEmailStatus(email.id, 'failed', null, result.error);
+
+          // 🔥 NEW: Also cancel follow-ups for failed emails
+          await this.cancelScheduledFollowUps(email.id, email.to_email, email.campaign_id, organizationId, 'Initial email failed to send');
         }
-        
+
         console.error(`❌ Email ${email.id} failed:`, result.error);
         return false; // Email failed to send
       }
@@ -1712,22 +1718,23 @@ class CronEmailProcessor {
         }
       }
 
-      // Also check if there's a 'failed' status in scheduled_emails for this recipient
-      const { data: failedEmails, error: failedError } = await supabase
+      // Also check if there's a 'failed' or 'bounced' status in scheduled_emails for this recipient
+      const { data: failedOrBouncedEmails, error: failedError } = await supabase
         .from('scheduled_emails')
         .select('id, status, error_message')
         .eq('campaign_id', email.campaign_id)
         .eq('to_email', email.to_email)
-        .eq('status', 'failed')
+        .in('status', ['failed', 'bounced'])
         .limit(1);
 
       if (failedError) {
-        console.error(`❌ Error checking failed emails for ${email.to_email}:`, failedError);
+        console.error(`❌ Error checking failed/bounced emails for ${email.to_email}:`, failedError);
         return false;
       }
 
-      if (failedEmails && failedEmails.length > 0) {
-        console.log(`📭 Previous email to ${email.to_email} failed - skipping follow-ups`);
+      if (failedOrBouncedEmails && failedOrBouncedEmails.length > 0) {
+        const status = failedOrBouncedEmails[0].status;
+        console.log(`📭 Previous email to ${email.to_email} ${status} - skipping follow-ups`);
         return true;
       }
 
@@ -1736,6 +1743,69 @@ class CronEmailProcessor {
     } catch (error) {
       console.error(`❌ Error in shouldStopOnBounce for email ${email.id}:`, error);
       return false;
+    }
+  }
+
+  /**
+   * Cancel all scheduled follow-ups for a bounced/failed email
+   * This prevents follow-ups from being sent to invalid email addresses
+   * @param {string} parentEmailId - The bounced/failed email ID
+   * @param {string} toEmail - Recipient email address
+   * @param {string} campaignId - Campaign ID
+   * @param {string} organizationId - Organization ID
+   * @param {string} reason - Reason for cancellation
+   */
+  async cancelScheduledFollowUps(parentEmailId, toEmail, campaignId, organizationId, reason) {
+    try {
+      console.log(`🚫 Cancelling scheduled follow-ups for bounced/failed email to ${toEmail}`);
+
+      // Find all scheduled follow-ups for this email address in this campaign
+      const { data: scheduledFollowUps, error: fetchError } = await supabase
+        .from('scheduled_emails')
+        .select('id, sequence_step')
+        .eq('campaign_id', campaignId)
+        .eq('to_email', toEmail)
+        .eq('organization_id', organizationId)
+        .eq('status', 'scheduled')
+        .eq('is_follow_up', true);
+
+      if (fetchError) {
+        console.error(`❌ Error fetching scheduled follow-ups for ${toEmail}:`, fetchError);
+        return;
+      }
+
+      if (!scheduledFollowUps || scheduledFollowUps.length === 0) {
+        console.log(`ℹ️ No scheduled follow-ups found for ${toEmail}`);
+        return;
+      }
+
+      // Skip all scheduled follow-ups (use 'skipped' status per database constraint)
+      const { error: updateError } = await supabase
+        .from('scheduled_emails')
+        .update({
+          status: 'skipped',
+          error_message: reason,
+          updated_at: new Date().toISOString()
+        })
+        .eq('campaign_id', campaignId)
+        .eq('to_email', toEmail)
+        .eq('organization_id', organizationId)
+        .eq('status', 'scheduled')
+        .eq('is_follow_up', true);
+
+      if (updateError) {
+        console.error(`❌ Error skipping follow-ups for ${toEmail}:`, updateError);
+        return;
+      }
+
+      console.log(`✅ Skipped ${scheduledFollowUps.length} scheduled follow-up(s) for ${toEmail}: ${reason}`);
+      scheduledFollowUps.forEach(fu => {
+        console.log(`   - Cancelled follow-up step ${fu.sequence_step} (ID: ${fu.id})`);
+      });
+
+    } catch (error) {
+      console.error(`❌ Error in cancelScheduledFollowUps for ${toEmail}:`, error);
+      // Don't throw - this is a non-critical operation
     }
   }
 
