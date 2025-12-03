@@ -854,6 +854,18 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
     const finalHtml = html || content || '';
     const finalText = (finalHtml || '').replace(/<[^>]*>/g, '');
 
+    // Only use provider_thread_id for threading if the message is synced (has conversation_id in DB)
+    // For live search/untracked messages, provider_thread_id might not be set or could be invalid
+    const useThreadId = threadingReference?.provider_thread_id && threadingReference?.conversation_id;
+
+    console.log(`🧵 Threading info:`, {
+      hasProviderThreadId: !!threadingReference?.provider_thread_id,
+      providerThreadId: threadingReference?.provider_thread_id?.substring(0, 20),
+      hasConversationId: !!threadingReference?.conversation_id,
+      willUseThreadId: !!useThreadId,
+      inReplyTo: threadingReference?.message_id_header?.substring(0, 50)
+    });
+
     const emailData = {
       accountId: fromAccountId,
       organizationId,
@@ -863,9 +875,9 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
       text: finalText,
       inReplyTo: threadingReference?.message_id_header,
       references: threadingReference?.message_references || threadingReference?.message_id_header,
-      // Use provider_thread_id for Gmail threading when available (from synced messages)
-      // This ensures the reply stays in the same Gmail thread
-      threadId: threadingReference?.provider_thread_id || null,
+      // Only use threadId for synced messages to avoid "entity not found" errors
+      // Gmail will still thread correctly using In-Reply-To and References headers
+      threadId: useThreadId ? threadingReference.provider_thread_id : null,
       conversationId, // Pass conversationId so sent reply is ingested into correct conversation
       attachments // Pass attachments to EmailService
     };
