@@ -215,7 +215,16 @@ class OAuth2Service {
 
     } catch (error) {
       console.error('❌ Token refresh failed:', error.message);
-      
+
+      // Get the account ID before marking as invalid (needed for cleanup)
+      const { data: tokenRecord } = await supabase
+        .from('oauth2_tokens')
+        .select('id')
+        .eq('email', userEmail)
+        .eq('organization_id', organizationId)
+        .eq('provider', 'gmail')
+        .single();
+
       // Mark tokens as invalid if refresh fails
       await supabase
         .from('oauth2_tokens')
@@ -224,7 +233,80 @@ class OAuth2Service {
         .eq('organization_id', organizationId)
         .eq('provider', 'gmail');
 
+      // CASCADE CLEANUP: Clean up scheduled_emails and campaign configs
+      if (tokenRecord?.id) {
+        await this.cleanupInvalidAccount(tokenRecord.id, userEmail, organizationId);
+      }
+
       throw new Error('Token refresh failed. User needs to re-authenticate.');
+    }
+  }
+
+  /**
+   * Clean up scheduled_emails and campaign configs when an account becomes invalid
+   */
+  async cleanupInvalidAccount(accountId, email, organizationId) {
+    try {
+      console.log(`🧹 Cleaning up after invalid account: ${email} (${accountId})`);
+
+      // 1. Mark scheduled_emails using this account as skipped
+      const { count: affectedCount } = await supabase
+        .from('scheduled_emails')
+        .select('*', { count: 'exact', head: true })
+        .eq('email_account_id', accountId)
+        .eq('organization_id', organizationId)
+        .eq('status', 'scheduled');
+
+      if (affectedCount > 0) {
+        const { error: updateError } = await supabase
+          .from('scheduled_emails')
+          .update({
+            status: 'skipped',
+            error_message: `Email account invalidated: ${email}`,
+            updated_at: new Date().toISOString()
+          })
+          .eq('email_account_id', accountId)
+          .eq('organization_id', organizationId)
+          .eq('status', 'scheduled');
+
+        if (updateError) {
+          console.error('⚠️ Failed to update scheduled_emails:', updateError);
+        } else {
+          console.log(`✅ Marked ${affectedCount} scheduled email(s) as skipped`);
+        }
+      }
+
+      // 2. Remove invalid account from campaign configs
+      const { data: campaigns } = await supabase
+        .from('campaigns')
+        .select('id, name, config')
+        .eq('organization_id', organizationId);
+
+      let campaignsUpdated = 0;
+      for (const campaign of campaigns || []) {
+        const emailAccounts = campaign.config?.emailAccounts || [];
+        if (emailAccounts.includes(accountId)) {
+          const validAccounts = emailAccounts.filter(id => id !== accountId);
+
+          const { error } = await supabase
+            .from('campaigns')
+            .update({
+              config: { ...campaign.config, emailAccounts: validAccounts },
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', campaign.id);
+
+          if (!error) {
+            campaignsUpdated++;
+            console.log(`✅ Removed invalid account from campaign: ${campaign.name}`);
+          }
+        }
+      }
+
+      console.log(`🧹 Cleanup complete: ${affectedCount || 0} emails skipped, ${campaignsUpdated} campaigns updated`);
+    } catch (cleanupError) {
+      console.error('⚠️ Cleanup failed (non-fatal):', cleanupError);
+      // Don't throw - cleanup failure shouldn't block the main error
     }
   }
 
