@@ -854,15 +854,22 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
     const finalHtml = html || content || '';
     const finalText = (finalHtml || '').replace(/<[^>]*>/g, '');
 
-    // Only use provider_thread_id for threading if the message is synced (has conversation_id in DB)
-    // For live search/untracked messages, provider_thread_id might not be set or could be invalid
-    const useThreadId = threadingReference?.provider_thread_id && threadingReference?.conversation_id;
+    // Validate provider_thread_id before using it
+    // Gmail thread IDs are alphanumeric strings, typically 16+ characters
+    // Skip using threadId if it looks invalid or is the same as provider_message_id (common error)
+    const providerThreadId = threadingReference?.provider_thread_id;
+    const providerMessageId = threadingReference?.provider_message_id;
+    const isValidThreadId = providerThreadId &&
+                            typeof providerThreadId === 'string' &&
+                            providerThreadId.length >= 10 &&
+                            providerThreadId !== providerMessageId; // Thread ID should differ from message ID
 
     console.log(`🧵 Threading info:`, {
-      hasProviderThreadId: !!threadingReference?.provider_thread_id,
-      providerThreadId: threadingReference?.provider_thread_id?.substring(0, 20),
+      hasProviderThreadId: !!providerThreadId,
+      providerThreadId: providerThreadId?.substring(0, 20),
+      providerMessageId: providerMessageId?.substring(0, 20),
+      isValidThreadId,
       hasConversationId: !!threadingReference?.conversation_id,
-      willUseThreadId: !!useThreadId,
       inReplyTo: threadingReference?.message_id_header?.substring(0, 50)
     });
 
@@ -875,9 +882,9 @@ router.post('/conversations/:id/reply', authenticateToken, async (req, res) => {
       text: finalText,
       inReplyTo: threadingReference?.message_id_header,
       references: threadingReference?.message_references || threadingReference?.message_id_header,
-      // Only use threadId for synced messages to avoid "entity not found" errors
-      // Gmail will still thread correctly using In-Reply-To and References headers
-      threadId: useThreadId ? threadingReference.provider_thread_id : null,
+      // Only use threadId if it's a valid Gmail thread ID
+      // Gmail will still thread correctly using In-Reply-To and References headers as fallback
+      threadId: isValidThreadId ? providerThreadId : null,
       conversationId, // Pass conversationId so sent reply is ingested into correct conversation
       attachments // Pass attachments to EmailService
     };
