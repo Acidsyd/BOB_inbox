@@ -820,6 +820,47 @@ router.delete('/:id', authenticateToken, async (req, res) => {
             console.log(`✅ Campaign cleanup complete: Updated ${campaignsToUpdate.length} campaign(s)`);
           }
         }
+
+        // CASCADE: Clean up scheduled_emails that reference this deleted account
+        // Option 1: Cancel scheduled emails that use this account (safest - preserves data)
+        // Option 2: Reassign to other accounts (complex - may cause imbalance)
+        // We choose Option 1: Cancel and let campaign restart handle reassignment
+        console.log(`🔄 Cleaning up scheduled_emails that reference deleted account: ${id}`);
+
+        // First, count how many scheduled emails use this account
+        const { count: affectedCount, error: countError } = await supabase
+          .from('scheduled_emails')
+          .select('*', { count: 'exact', head: true })
+          .eq('email_account_id', id)
+          .eq('organization_id', organizationId)
+          .eq('status', 'scheduled');
+
+        if (countError) {
+          console.error('⚠️  Warning: Failed to count affected scheduled_emails:', countError);
+        } else if (affectedCount > 0) {
+          console.log(`📧 Found ${affectedCount} scheduled email(s) using deleted account`);
+
+          // Mark these emails as 'skipped' with a reason, so they can be rescheduled
+          // when the campaign is restarted (rescheduleExistingCampaign handles 'skipped' status)
+          const { error: updateError } = await supabase
+            .from('scheduled_emails')
+            .update({
+              status: 'skipped',
+              error_message: `Email account deleted: ${deletedEmail}`,
+              updated_at: new Date().toISOString()
+            })
+            .eq('email_account_id', id)
+            .eq('organization_id', organizationId)
+            .eq('status', 'scheduled');
+
+          if (updateError) {
+            console.error('⚠️  Warning: Failed to update scheduled_emails:', updateError);
+          } else {
+            console.log(`✅ Marked ${affectedCount} scheduled email(s) as skipped - will be reassigned on campaign restart`);
+          }
+        } else {
+          console.log(`✅ No scheduled emails using this account`);
+        }
       } catch (cleanupError) {
         console.error('⚠️  Warning: Campaign cleanup failed (non-fatal):', cleanupError);
         // Don't fail the delete operation if cleanup fails
