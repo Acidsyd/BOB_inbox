@@ -52,9 +52,10 @@ function CreateLeadListContent() {
       }
 
       const data = await response.json()
-      
+
       // Navigate to the newly created lead list
-      router.push(`/leads/lists/${data.leadList.id}`)
+      // API returns the lead list object directly, not wrapped in { leadList: ... }
+      router.push(`/leads/lists/${data.id}`)
       
     } catch (error) {
       console.error('Error creating lead list:', error)
