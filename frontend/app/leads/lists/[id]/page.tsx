@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Download, Trash2, Upload, Users } from 'lucide-react'
+import { ArrowLeft, Download, Trash2, Upload, Users, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import ProtectedRoute from '../../../../components/auth/ProtectedRoute'
@@ -244,11 +244,20 @@ function LeadListViewContent() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => router.push(`/leads/lists/${listId}/upload`)}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Upload CSV
+          </Button>
+
           <Button variant="outline" size="sm">
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
-          
+
           <AlertDialog>
             <AlertDialogTrigger>
               <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
