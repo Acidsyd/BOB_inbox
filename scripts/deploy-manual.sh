@@ -127,7 +127,7 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$DEPLOY_USER@$DROPLET_IP" << EOF
     if [ -f "ecosystem.config.js" ]; then
         pm2 restart ecosystem.config.js || pm2 start ecosystem.config.js
     else
-        pm2 start backend/src/server.js --name mailsender-backend || true
+        pm2 start backend/src/index.js --name mailsender-backend || true
         pm2 start "npm run start" --name mailsender-frontend || true
     fi
     

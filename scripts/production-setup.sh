@@ -104,7 +104,7 @@ Type=simple
 User=www-data
 Group=www-data
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/node backend/src/server.js
+ExecStart=/usr/bin/node backend/src/index.js
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
