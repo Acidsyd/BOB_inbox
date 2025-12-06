@@ -216,10 +216,11 @@ class UnifiedInboxService {
       // 3. Update conversation activity (triggers will handle this automatically)
       console.log(`✅ Email ingested into conversation ${conversation.id}`);
 
-      // 4. Reply detection - only process replies to campaign emails (not all inbox emails)
-      if (direction === 'received') {
-        await this.handleReplyDetection(enrichedEmailData, orgId);
-      }
+      // 4. Reply detection - disabled temporarily for performance investigation
+      // TODO: Re-enable after fixing CPU spike issue
+      // if (direction === 'received') {
+      //   await this.handleReplyDetection(enrichedEmailData, orgId);
+      // }
 
       return { conversation, message };
       
@@ -958,63 +959,49 @@ class UnifiedInboxService {
 
   /**
    * Handle reply detection - update lead status and cancel scheduled follow-ups
-   * OPTIMIZED: Only processes replies to CAMPAIGN emails, not all inbox emails
-   * This fixes the CPU spike by skipping non-campaign emails entirely
+   * This is called when a received email is ingested into a conversation
+   * OPTIMIZED: Uses setImmediate to not block the main sync flow
    */
   async handleReplyDetection(emailData, organizationId) {
     // Run asynchronously to not block the email ingestion flow
     setImmediate(async () => {
       try {
-        // CRITICAL: Only process emails that are replies (have In-Reply-To or References header)
-        const inReplyTo = emailData.in_reply_to || emailData.inReplyTo;
-        const references = emailData.message_references || emailData.references;
-
-        if (!inReplyTo && !references) {
-          return; // Not a reply - skip silently (most inbox emails)
+        const senderEmail = this.extractEmailAddress(emailData.from_email);
+        if (!senderEmail) {
+          return; // Silently skip - no need to log for every email
         }
 
-        // Extract the original message ID from In-Reply-To or first Reference
-        const originalMessageId = inReplyTo || (references ? references.split(/[\s,]+/)[0] : null);
-        if (!originalMessageId) {
-          return; // No valid message ID to match
-        }
-
-        // Look up the original email in scheduled_emails (campaign emails only)
-        const { data: originalEmail, error } = await supabase
-          .from('scheduled_emails')
-          .select('id, campaign_id, lead_id, to_email')
-          .eq('organization_id', organizationId)
-          .eq('message_id_header', originalMessageId)
-          .not('campaign_id', 'is', null)  // Must be a campaign email
-          .eq('status', 'sent')
-          .single();
-
-        if (error || !originalEmail) {
-          return; // Not a reply to a campaign email - skip silently
-        }
-
-        console.log(`📬 Reply detected to campaign email: ${originalEmail.to_email}`);
-
-        // Now we know this is a campaign reply - update lead and cancel follow-ups
-        const leadId = originalEmail.lead_id;
-        const leadEmail = originalEmail.to_email;
-
-        // Update lead status to 'replied'
-        const { error: updateError } = await supabase
+        // 1. Find matching lead by email - use eq instead of ilike for better performance
+        const { data: leads, error: leadError } = await supabase
           .from('leads')
-          .update({
-            status: 'replied',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', leadId)
-          .neq('status', 'replied'); // Only update if not already replied
+          .select('id, email, status')
+          .eq('organization_id', organizationId)
+          .eq('email', senderEmail)
+          .limit(10); // Limit results
 
-        if (!updateError) {
-          console.log(`✅ Updated lead ${leadEmail} status to 'replied'`);
+        if (leadError || !leads || leads.length === 0) {
+          return; // Not a lead, silently skip
         }
 
-        // Cancel scheduled follow-ups for this lead
-        await this.cancelFollowUpsForLead(leadId, organizationId, leadEmail);
+        console.log(`📬 Reply detected from lead: ${senderEmail}`);
+
+        // 2. Update lead status to 'replied' for all matching leads
+        for (const lead of leads) {
+          if (lead.status !== 'replied') {
+            await supabase
+              .from('leads')
+              .update({
+                status: 'replied',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', lead.id);
+
+            console.log(`✅ Updated lead ${lead.email} status to 'replied'`);
+          }
+
+          // 3. Find and cancel scheduled follow-ups for this lead
+          await this.cancelFollowUpsForLead(lead.id, organizationId, senderEmail);
+        }
 
       } catch (error) {
         console.error('❌ Error in handleReplyDetection:', error.message);
