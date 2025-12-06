@@ -245,8 +245,8 @@ backend/src/services/*HealthChecker.js
 archive/
 tools/
 
-# Process manager config (environment-specific)
-ecosystem.config.cjs
+# Process manager config - tracked for deployment
+# ecosystem.config.cjs
 
 # Environment config examples (keep templates, ignore filled versions)
 config/.env.example

@@ -5,8 +5,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
-    "build": "next build",
+    "build": "next build && npm run postbuild",
+    "postbuild": "cp -r .next/static .next/standalone/frontend/.next/ && cp -r public .next/standalone/frontend/",
     "start": "next start",
+    "start:standalone": "node .next/standalone/frontend/server.js",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "type-check": "tsc --noEmit",
