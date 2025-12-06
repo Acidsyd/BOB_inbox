@@ -80,8 +80,15 @@ class UnifiedInboxService {
                 recipientEmail: bounceInfo.recipientEmail,
                 provider: 'gmail'
               }, originalEmail.id, orgId);
-              
+
               console.log(`✅ Bounce recorded for ${bounceInfo.recipientEmail} (${bounceInfo.bounceType})`);
+
+              // Cancel follow-ups for this bounced lead
+              if (originalEmail.campaign_id && originalEmail.lead_id) {
+                console.log(`🚫 Bounce detected! Cancelling follow-ups for lead ${originalEmail.lead_id}`);
+                this.cancelFollowUpsForBounce(originalEmail.campaign_id, originalEmail.lead_id, orgId)
+                  .catch(err => console.error('Error cancelling follow-ups for bounce:', err.message));
+              }
             } else {
               console.log(`⚠️ Could not find original email for bounced recipient: ${bounceInfo.recipientEmail}`);
             }
@@ -209,13 +216,20 @@ class UnifiedInboxService {
 
       // 1. Find or create conversation based on Message-ID threading
       const conversation = await this.findOrCreateConversation(enrichedEmailData);
-      
+
       // 2. Store message in conversation
       const message = await this.storeConversationMessage(conversation.id, enrichedEmailData, direction);
-      
+
       // 3. Update conversation activity (triggers will handle this automatically)
       console.log(`✅ Email ingested into conversation ${conversation.id}`);
-      
+
+      // 4. If this is a RECEIVED email in a CAMPAIGN conversation, cancel follow-ups
+      if (direction === 'received' && conversation.campaign_id && conversation.lead_id) {
+        console.log(`📬 Campaign reply detected! Campaign: ${conversation.campaign_id}, Lead: ${conversation.lead_id}`);
+        this.cancelFollowUpsForCampaignReply(conversation.campaign_id, conversation.lead_id, enrichedEmailData.organization_id)
+          .catch(err => console.error('Error cancelling follow-ups:', err.message));
+      }
+
       return { conversation, message };
       
     } catch (error) {
@@ -1359,12 +1373,109 @@ class UnifiedInboxService {
         console.error('❌ Error finding original email:', error);
         return null;
       }
-      
+
       return emails && emails.length > 0 ? emails[0] : null;
-      
+
     } catch (error) {
       console.error('❌ Error in findOriginalEmailForBounce:', error.message);
       return null;
+    }
+  }
+
+  /**
+   * Cancel follow-ups when a campaign reply is detected
+   * Only called when: direction=received AND conversation has campaign_id AND lead_id
+   */
+  async cancelFollowUpsForCampaignReply(campaignId, leadId, organizationId) {
+    try {
+      // 1. Check if campaign has stopOnReply enabled (single indexed query)
+      const { data: campaign, error: campaignError } = await supabase
+        .from('campaigns')
+        .select('id, name, config')
+        .eq('id', campaignId)
+        .single();
+
+      if (campaignError || !campaign) {
+        console.log(`⚠️ Campaign ${campaignId} not found`);
+        return;
+      }
+
+      if (!campaign.config?.stopOnReply) {
+        console.log(`ℹ️ Campaign "${campaign.name}" has stopOnReply disabled`);
+        return;
+      }
+
+      // 2. Update lead status to 'replied'
+      const { error: leadError } = await supabase
+        .from('leads')
+        .update({ status: 'replied', updated_at: new Date().toISOString() })
+        .eq('id', leadId)
+        .neq('status', 'replied');
+
+      if (!leadError) {
+        console.log(`✅ Updated lead ${leadId} status to 'replied'`);
+      }
+
+      // 3. Skip all scheduled follow-ups for this lead in this campaign
+      const { data: skipped, error: skipError } = await supabase
+        .from('scheduled_emails')
+        .update({ status: 'skipped', updated_at: new Date().toISOString() })
+        .eq('campaign_id', campaignId)
+        .eq('lead_id', leadId)
+        .eq('status', 'scheduled')
+        .gt('sequence_step', 0)
+        .select('id');
+
+      if (!skipError && skipped && skipped.length > 0) {
+        console.log(`✅ Skipped ${skipped.length} follow-up(s) for lead ${leadId} in campaign "${campaign.name}"`);
+      } else if (skipped && skipped.length === 0) {
+        console.log(`ℹ️ No pending follow-ups to skip for lead ${leadId}`);
+      }
+
+    } catch (error) {
+      console.error('❌ Error in cancelFollowUpsForCampaignReply:', error.message);
+      // Don't throw - this is non-blocking enhancement
+    }
+  }
+
+  /**
+   * Cancel follow-ups when a bounce is detected
+   * Called when: originalEmail is found for a bounce AND has campaign_id AND lead_id
+   */
+  async cancelFollowUpsForBounce(campaignId, leadId, organizationId) {
+    try {
+      // 1. Get campaign name for logging
+      const { data: campaign, error: campaignError } = await supabase
+        .from('campaigns')
+        .select('id, name')
+        .eq('id', campaignId)
+        .single();
+
+      const campaignName = campaign?.name || campaignId;
+
+      // 2. Skip all scheduled follow-ups for this lead in this campaign
+      const { data: skipped, error: skipError } = await supabase
+        .from('scheduled_emails')
+        .update({
+          status: 'skipped',
+          updated_at: new Date().toISOString(),
+          error_message: 'Skipped due to bounce on initial email'
+        })
+        .eq('campaign_id', campaignId)
+        .eq('lead_id', leadId)
+        .eq('status', 'scheduled')
+        .gt('sequence_step', 0)
+        .select('id');
+
+      if (!skipError && skipped && skipped.length > 0) {
+        console.log(`✅ Skipped ${skipped.length} follow-up(s) for bounced lead ${leadId} in campaign "${campaignName}"`);
+      } else if (skipped && skipped.length === 0) {
+        console.log(`ℹ️ No pending follow-ups to skip for bounced lead ${leadId}`);
+      }
+
+    } catch (error) {
+      console.error('❌ Error in cancelFollowUpsForBounce:', error.message);
+      // Don't throw - this is non-blocking enhancement
     }
   }
 }
