@@ -216,10 +216,11 @@ class UnifiedInboxService {
       // 3. Update conversation activity (triggers will handle this automatically)
       console.log(`✅ Email ingested into conversation ${conversation.id}`);
 
-      // 4. CRITICAL: If this is a received email (reply), update lead status and cancel follow-ups
-      if (direction === 'received') {
-        await this.handleReplyDetection(enrichedEmailData, orgId);
-      }
+      // 4. Reply detection - disabled temporarily for performance investigation
+      // TODO: Re-enable after fixing CPU spike issue
+      // if (direction === 'received') {
+      //   await this.handleReplyDetection(enrichedEmailData, orgId);
+      // }
 
       return { conversation, message };
       
