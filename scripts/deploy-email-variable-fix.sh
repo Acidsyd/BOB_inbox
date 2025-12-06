@@ -147,7 +147,7 @@ ssh -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
         echo "🔄 Restarting with PM2..."
 
         # Restart backend - this is where the email variable fix is
-        pm2 restart backend || pm2 start backend/src/index.js --name backend
+        pm2 restart backend || pm2 start backend/src/server.js --name backend
 
         # Also restart cron processor if it exists
         pm2 restart cron-processor || pm2 start "npm run cron:dev" --name cron-processor --cwd backend

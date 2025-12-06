@@ -93,7 +93,7 @@ ssh -i $SSH_KEY $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
     # Restart backend service (where the fix is)
     if command -v pm2 >/dev/null 2>&1; then
         echo "🔄 Restarting with PM2..."
-        pm2 restart backend || pm2 start backend/src/index.js --name backend
+        pm2 restart backend || pm2 start backend/src/server.js --name backend
         pm2 restart frontend || pm2 start "npm run start" --name frontend
 
         # Show PM2 status

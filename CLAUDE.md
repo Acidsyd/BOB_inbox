@@ -336,10 +336,6 @@ RESCHEDULE_MINUTE=0  # Minute (0-59, default: 0)
 
 ## Key Files
 
-### Root Configuration
-- `ecosystem.config.cjs` - **PM2 production config** (defines backend, frontend, cron services)
-- `package.json` - Root scripts for monorepo management
-
 ### Backend Services
 - `src/services/CronEmailProcessor.js` - **Production scheduler** (4-phase enhanced, exact interval compliance)
 - `src/services/NightlyRescheduleService.js` - **Automatic campaign reschedule** (daily at 3am, picks up new leads)
@@ -586,61 +582,6 @@ const { success, failed } = await batchUpdate(supabase, tableName, [
 | Database storage exceeded | Run `npm run db:size:analyze` to check usage, then `npm run db:cleanup:emergency --confirm` |
 | Database size too large | Use emergency cleanup to delete old tracking events, failed emails, and redundant configs |
 | Out of space on free tier | Cleanup frees 150-250MB; tracking events and failed emails consume most space |
-
-## Production Deployment
-
-### PM2 Configuration
-The project uses PM2 for production process management. Config file: `ecosystem.config.cjs`
-
-```bash
-# On production server (/var/www/mailsender)
-pm2 start ecosystem.config.cjs     # Start all services
-pm2 restart ecosystem.config.cjs   # Restart all services
-pm2 stop all                       # Stop all services
-pm2 delete all                     # Remove all processes
-pm2 save                           # Save current process list
-pm2 status                         # Check service status
-pm2 logs                           # View all logs
-pm2 logs mailsender-backend        # View backend logs only
-pm2 logs --err                     # View error logs only
-```
-
-### Production Services (3 processes)
-| Service | Port | Entry Point |
-|---------|------|-------------|
-| mailsender-backend | 4000 | `backend/src/index.js` |
-| mailsender-frontend | 3001 | `npm start` in frontend/ |
-| mailsender-cron | N/A | `backend/src/cron.js` |
-
-### Common Production Issues
-
-```bash
-# Port already in use (EADDRINUSE)
-sudo fuser -k 4000/tcp
-sudo fuser -k 3001/tcp
-pm2 kill
-pm2 start ecosystem.config.cjs
-
-# Check what's using a port
-sudo lsof -i :4000
-
-# View recent errors
-pm2 logs mailsender-backend --lines 50 --err
-
-# Full restart sequence
-pm2 delete all && pm2 start ecosystem.config.cjs && pm2 save
-```
-
-### Deployment Script
-```bash
-# From local machine
-git push origin main
-
-# On server
-cd /var/www/mailsender
-git pull origin main
-pm2 restart ecosystem.config.cjs
-```
 
 ## Debug Commands
 
