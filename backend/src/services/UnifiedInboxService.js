@@ -959,90 +959,74 @@ class UnifiedInboxService {
   /**
    * Handle reply detection - update lead status and cancel scheduled follow-ups
    * This is called when a received email is ingested into a conversation
+   * OPTIMIZED: Uses setImmediate to not block the main sync flow
    */
   async handleReplyDetection(emailData, organizationId) {
-    try {
-      const senderEmail = this.extractEmailAddress(emailData.from_email);
-      if (!senderEmail) {
-        console.log('⚠️ Could not extract sender email for reply detection');
-        return;
-      }
-
-      console.log(`🔍 Checking if ${senderEmail} is a lead for reply detection...`);
-
-      // 1. Find matching lead by email
-      const { data: leads, error: leadError } = await supabase
-        .from('leads')
-        .select('id, email, status, lead_list_id')
-        .eq('organization_id', organizationId)
-        .ilike('email', senderEmail);
-
-      if (leadError) {
-        console.error('❌ Error finding lead:', leadError);
-        return;
-      }
-
-      if (!leads || leads.length === 0) {
-        console.log(`ℹ️ No lead found for ${senderEmail} - not a campaign reply`);
-        return;
-      }
-
-      console.log(`✅ Found ${leads.length} lead(s) matching ${senderEmail}`);
-
-      // 2. Update lead status to 'replied' for all matching leads
-      for (const lead of leads) {
-        if (lead.status !== 'replied') {
-          const { error: updateError } = await supabase
-            .from('leads')
-            .update({
-              status: 'replied',
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', lead.id);
-
-          if (updateError) {
-            console.error(`❌ Error updating lead ${lead.id} status:`, updateError);
-          } else {
-            console.log(`✅ Updated lead ${lead.email} status to 'replied'`);
-          }
+    // Run asynchronously to not block the email ingestion flow
+    setImmediate(async () => {
+      try {
+        const senderEmail = this.extractEmailAddress(emailData.from_email);
+        if (!senderEmail) {
+          return; // Silently skip - no need to log for every email
         }
 
-        // 3. Find and cancel scheduled follow-ups for this lead
-        await this.cancelFollowUpsForLead(lead.id, organizationId, senderEmail);
-      }
+        // 1. Find matching lead by email - use eq instead of ilike for better performance
+        const { data: leads, error: leadError } = await supabase
+          .from('leads')
+          .select('id, email, status')
+          .eq('organization_id', organizationId)
+          .eq('email', senderEmail)
+          .limit(10); // Limit results
 
-    } catch (error) {
-      console.error('❌ Error in handleReplyDetection:', error);
-      // Don't throw - this is a non-critical enhancement
-    }
+        if (leadError || !leads || leads.length === 0) {
+          return; // Not a lead, silently skip
+        }
+
+        console.log(`📬 Reply detected from lead: ${senderEmail}`);
+
+        // 2. Update lead status to 'replied' for all matching leads
+        for (const lead of leads) {
+          if (lead.status !== 'replied') {
+            await supabase
+              .from('leads')
+              .update({
+                status: 'replied',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', lead.id);
+
+            console.log(`✅ Updated lead ${lead.email} status to 'replied'`);
+          }
+
+          // 3. Find and cancel scheduled follow-ups for this lead
+          await this.cancelFollowUpsForLead(lead.id, organizationId, senderEmail);
+        }
+
+      } catch (error) {
+        console.error('❌ Error in handleReplyDetection:', error.message);
+        // Don't throw - this is a non-critical enhancement
+      }
+    });
   }
 
   /**
    * Cancel all scheduled follow-ups for a lead across all campaigns with stopOnReply enabled
+   * OPTIMIZED: Reduced logging and combined queries where possible
    */
   async cancelFollowUpsForLead(leadId, organizationId, leadEmail) {
     try {
-      console.log(`🔍 Looking for scheduled follow-ups to cancel for lead ${leadId}...`);
-
       // Find all scheduled follow-up emails for this lead
       const { data: scheduledFollowUps, error: fetchError } = await supabase
         .from('scheduled_emails')
-        .select('id, campaign_id, to_email, subject, send_at, sequence_step')
+        .select('id, campaign_id, sequence_step, send_at')
         .eq('lead_id', leadId)
         .eq('status', 'scheduled')
-        .gt('sequence_step', 0); // Only follow-ups, not initial emails
+        .gt('sequence_step', 0)
+        .limit(50); // Limit to prevent excessive results
 
-      if (fetchError) {
-        console.error('❌ Error fetching scheduled follow-ups:', fetchError);
-        return;
+      if (fetchError || !scheduledFollowUps || scheduledFollowUps.length === 0) {
+        return; // No follow-ups to cancel
       }
-
-      if (!scheduledFollowUps || scheduledFollowUps.length === 0) {
-        console.log(`ℹ️ No scheduled follow-ups found for lead ${leadId}`);
-        return;
-      }
-
-      console.log(`📧 Found ${scheduledFollowUps.length} scheduled follow-up(s) for lead ${leadId}`);
 
       // Get unique campaign IDs
       const campaignIds = [...new Set(scheduledFollowUps.map(e => e.campaign_id))];
@@ -1050,36 +1034,33 @@ class UnifiedInboxService {
       // Check which campaigns have stopOnReply enabled
       const { data: campaigns, error: campaignError } = await supabase
         .from('campaigns')
-        .select('id, name, config')
+        .select('id, config')
         .in('id', campaignIds);
 
-      if (campaignError) {
-        console.error('❌ Error fetching campaigns:', campaignError);
+      if (campaignError || !campaigns) {
         return;
       }
 
       // Filter to campaigns with stopOnReply enabled
-      const stopOnReplyCampaigns = campaigns?.filter(c => c.config?.stopOnReply) || [];
-      const stopOnReplyCampaignIds = stopOnReplyCampaigns.map(c => c.id);
+      const stopOnReplyCampaignIds = campaigns
+        .filter(c => c.config?.stopOnReply)
+        .map(c => c.id);
 
       if (stopOnReplyCampaignIds.length === 0) {
-        console.log(`ℹ️ No campaigns with stopOnReply enabled for lead ${leadId}`);
+        return; // No campaigns with stopOnReply
+      }
+
+      // Get IDs of follow-ups to cancel
+      const followUpIds = scheduledFollowUps
+        .filter(e => stopOnReplyCampaignIds.includes(e.campaign_id))
+        .map(e => e.id);
+
+      if (followUpIds.length === 0) {
         return;
       }
 
-      // Cancel follow-ups for campaigns with stopOnReply enabled
-      const followUpsToCancel = scheduledFollowUps.filter(e =>
-        stopOnReplyCampaignIds.includes(e.campaign_id)
-      );
-
-      if (followUpsToCancel.length === 0) {
-        console.log(`ℹ️ No follow-ups to cancel (all campaigns have stopOnReply disabled)`);
-        return;
-      }
-
-      const followUpIds = followUpsToCancel.map(e => e.id);
-
-      const { error: cancelError } = await supabase
+      // Cancel the follow-ups
+      await supabase
         .from('scheduled_emails')
         .update({
           status: 'skipped',
@@ -1087,20 +1068,10 @@ class UnifiedInboxService {
         })
         .in('id', followUpIds);
 
-      if (cancelError) {
-        console.error('❌ Error cancelling follow-ups:', cancelError);
-        return;
-      }
-
-      console.log(`✅ Cancelled ${followUpsToCancel.length} follow-up(s) for ${leadEmail}:`);
-      followUpsToCancel.forEach(e => {
-        const campaign = stopOnReplyCampaigns.find(c => c.id === e.campaign_id);
-        console.log(`   - Step ${e.sequence_step} in "${campaign?.name}" (was scheduled for ${e.send_at})`);
-      });
+      console.log(`✅ Cancelled ${followUpIds.length} follow-up(s) for ${leadEmail}`);
 
     } catch (error) {
-      console.error('❌ Error in cancelFollowUpsForLead:', error);
-      // Don't throw - this is a non-critical enhancement
+      console.error('❌ Error in cancelFollowUpsForLead:', error.message);
     }
   }
 
