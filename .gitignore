@@ -246,7 +246,6 @@ archive/
 tools/
 
 # Process manager config (environment-specific)
-ecosystem.config.cjs
 
 # Environment config examples (keep templates, ignore filled versions)
 config/.env.example
