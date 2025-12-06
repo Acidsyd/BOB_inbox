@@ -34,9 +34,6 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
 
-  // Output for production deployment - REQUIRED for Docker
-  output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
-
   // Fix monorepo workspace root detection
   outputFileTracingRoot: require('path').join(__dirname, '../'),
 
