@@ -285,13 +285,6 @@ class UnifiedInboxService {
         if (existingMessages && existingMessages.length > 0) {
           conversation = existingMessages[0].conversations;
           console.log(`✅ Found existing conversation by In-Reply-To: ${conversation.id}`);
-
-          // If this is a reply to a campaign conversation, cancel follow-ups
-          if (conversation.campaign_id && conversation.lead_id) {
-            console.log(`📬 Campaign reply detected! Campaign: ${conversation.campaign_id}, Lead: ${conversation.lead_id}`);
-            this.cancelFollowUpsForCampaignReply(conversation.campaign_id, conversation.lead_id, organization_id)
-              .catch(err => console.error('Error cancelling follow-ups:', err.message));
-          }
         }
       }
 
@@ -1080,49 +1073,6 @@ class UnifiedInboxService {
 
     } catch (error) {
       console.error('❌ Error in cancelFollowUpsForLead:', error.message);
-    }
-  }
-
-  /**
-   * Cancel follow-ups when a campaign reply is detected
-   * Called from findOrCreateConversation when a reply matches a campaign conversation
-   * Simple and efficient - only 2 database queries
-   */
-  async cancelFollowUpsForCampaignReply(campaignId, leadId, organizationId) {
-    try {
-      // Check if campaign has stopOnReply enabled
-      const { data: campaign } = await supabase
-        .from('campaigns')
-        .select('config')
-        .eq('id', campaignId)
-        .single();
-
-      if (!campaign?.config?.stopOnReply) {
-        return; // Campaign doesn't have stopOnReply enabled
-      }
-
-      // Update lead status to 'replied'
-      await supabase
-        .from('leads')
-        .update({ status: 'replied', updated_at: new Date().toISOString() })
-        .eq('id', leadId)
-        .neq('status', 'replied');
-
-      // Skip all scheduled follow-ups for this lead in this campaign
-      const { data: skipped } = await supabase
-        .from('scheduled_emails')
-        .update({ status: 'skipped', updated_at: new Date().toISOString() })
-        .eq('campaign_id', campaignId)
-        .eq('lead_id', leadId)
-        .eq('status', 'scheduled')
-        .gt('sequence_step', 0)
-        .select('id');
-
-      if (skipped && skipped.length > 0) {
-        console.log(`✅ Cancelled ${skipped.length} follow-up(s) for lead ${leadId} in campaign ${campaignId}`);
-      }
-    } catch (error) {
-      console.error('❌ Error in cancelFollowUpsForCampaignReply:', error.message);
     }
   }
 
